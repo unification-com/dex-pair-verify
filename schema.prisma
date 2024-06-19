@@ -1,0 +1,60 @@
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url = env("POSTGRES_PRISMA_URL") // uses connection pooling
+  directUrl = env("POSTGRES_URL_NON_POOLING") // uses a direct connection
+}
+
+model Pair {
+  id                 String     @default(cuid()) @id
+  chain              String
+  dex                String
+  contractAddress    String
+  token0             Token      @relation("Token0", fields: [token0Id], references: [id])
+  token0Id           String
+  token1             Token      @relation("Token1", fields: [token1Id], references: [id])
+  token1Id           String
+  pair               String
+  reserveUsd         Float
+  volumeUsd          Float
+  txCount            Int
+  status             Int
+  verificationMethod String
+  @@index([contractAddress(sort: Desc), chain, dex])
+  @@index([dex, chain])
+  @@index([dex, pair])
+  @@index([dex])
+  @@index([token0Id])
+  @@index([token1Id])
+}
+
+model Token {
+  id                 String       @default(cuid()) @id
+  chain              String
+  contractAddress    String
+  symbol             String
+  name               String
+  status             Int
+  verificationMethod String
+  pairsToken0        Pair[]      @relation("Token0")
+  pairsToken1        Pair[]      @relation("Token1")
+  @@index([contractAddress(sort: Desc), chain])
+  @@index([chain])
+  @@index([symbol])
+  @@index([chain, symbol])
+}
+
+model PairStaging {
+  id              String     @default(cuid()) @id
+  chain           String
+  dex             String
+  contractAddress String
+  token0Address   String
+  token1Address   String
+  @@index([dex, chain])
+}
