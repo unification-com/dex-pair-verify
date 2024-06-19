@@ -53,7 +53,7 @@ const Token: React.FC<TokenProps> = (props) => {
     const explorerUrls = {
         eth: "https://etherscan.io",
         bsc: "https://bscscan.com",
-        polygon: "https://polygonscan.com",
+        polygon_pos: "https://polygonscan.com",
         gnosis: "https://gnosis.blockscout.com",
         xdai: "https://gnosis.blockscout.com",
     }
@@ -61,7 +61,8 @@ const Token: React.FC<TokenProps> = (props) => {
     const chainNames = {
         eth: "Ethereum",
         bsc: "BSC",
-        polygon: "Polygon",
+        polygon_pos: "Polygon",
+        gnosis: "Gnosis",
         xdai: "Gnosis"
     }
 
@@ -117,12 +118,18 @@ const Token: React.FC<TokenProps> = (props) => {
                 <ul>
                     {props.pairsToken0 && props.pairsToken0.map((pairToken0) => (
                         <li key={pairToken0.id}>
-                            {pairToken0.pair}
+                            <a
+                                href={`/p/${pairToken0.id}`}>
+                                {pairToken0.pair}
+                            </a>
                         </li>
                     ))}
                     {props.pairsToken1 && props.pairsToken1.map((pairToken1) => (
                         <li key={pairToken1.id}>
-                            {pairToken1.pair}
+                            <Link
+                                href={`/p/${pairToken1.id}`}>
+                                {pairToken1.pair}
+                            </Link>
                         </li>
                     ))}
                 </ul>

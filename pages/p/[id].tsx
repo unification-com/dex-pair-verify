@@ -92,7 +92,7 @@ const Pair: React.FC<PairProps> = (props) => {
   const explorerUrls = {
     eth: "https://etherscan.io",
     bsc: "https://bscscan.com",
-    polygon: "https://polygonscan.com",
+    polygon_pos: "https://polygonscan.com",
     gnosis: "https://gnosis.blockscout.com",
     xdai: "https://gnosis.blockscout.com",
   }
