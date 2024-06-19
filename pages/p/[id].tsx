@@ -86,6 +86,7 @@ const Pair: React.FC<PairProps> = (props) => {
     ethuniswap_v3: "https://app.uniswap.org/explore/pools/ethereum/",
     polygon_posquickswap: "https://info.quickswap.exchange/#/pair/",
     gnosishoneyswap: "https://info.honeyswap.org/#/pair/",
+    xdaihoneyswap: "https://info.honeyswap.org/#/pair/",
   }
 
   const explorerUrls = {
@@ -93,12 +94,14 @@ const Pair: React.FC<PairProps> = (props) => {
     bsc: "https://bscscan.com",
     polygon: "https://polygonscan.com",
     gnosis: "https://gnosis.blockscout.com",
+    xdai: "https://gnosis.blockscout.com",
   }
 
   const chainNames = {
     eth: "Ethereum",
     bsc: "BSC",
     polygon_pos: "Polygon",
+    gnosis: "Gnosis (xdai)",
     xdai: "Gnosis (xdai)"
   }
 
