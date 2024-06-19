@@ -39,7 +39,7 @@ const ListTokens: React.FC<Props> = (props) => {
         <Layout>
             <div className="page">
                 <h1><Status status={props.status} /> Tokens</h1>
-                <h2>{props.chain}</h2>
+                <h2>Chain: {props.chain}</h2>
                 <h3>
                     <Link
                         href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=0`}>
