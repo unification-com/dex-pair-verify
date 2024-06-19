@@ -31,6 +31,7 @@ const Blog: React.FC<Props> = (props) => {
               <th>Dex</th>
               <th></th>
               <th></th>
+              <th></th>
             </tr>
             </thead>
             <tbody>
@@ -52,6 +53,12 @@ const Blog: React.FC<Props> = (props) => {
                   <Link
                       href={`/list-pairs?chain=${encodeURIComponent(pair.chain)}&dex=${encodeURIComponent(pair.dex)}`}>
                     <a>View Pairs</a>
+                  </Link>
+                </td>
+                <td>
+                  <Link
+                      href={`/api/export?chain=${encodeURIComponent(pair.chain)}&dex=${encodeURIComponent(pair.dex)}&download=1`}>
+                    <a>Export Verified</a>
                   </Link>
                 </td>
               </tr>
