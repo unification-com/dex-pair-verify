@@ -55,13 +55,14 @@ const Token: React.FC<TokenProps> = (props) => {
         bsc: "https://bscscan.com",
         polygon: "https://polygonscan.com",
         gnosis: "https://gnosis.blockscout.com",
+        xdai: "https://gnosis.blockscout.com",
     }
 
     const chainNames = {
         eth: "Ethereum",
         bsc: "BSC",
         polygon: "Polygon",
-        gnosis: "Gnosis"
+        xdai: "Gnosis"
     }
 
     async function onSubmit(event: FormEvent<HTMLFormElement>) {
