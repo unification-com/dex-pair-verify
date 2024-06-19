@@ -62,6 +62,7 @@ const ListTokens: React.FC<Props> = (props) => {
                         <tr>
                             <th>Symbol</th>
                             <th>Name</th>
+                            <th>Contract</th>
                             <th>Verification Method</th>
                             <th></th>
                         </tr>
@@ -71,6 +72,7 @@ const ListTokens: React.FC<Props> = (props) => {
                             <tr key={token.id} className="token">
                                 <td><strong>{token.symbol}</strong></td>
                                 <td>{token.name}</td>
+                                <td>{token.contractAddress}</td>
                                 <td>{token.verificationMethod}</td>
                                 <td>
                                     <button onClick={() => Router.push("/t/[id]", `/t/${token.id}`)}>

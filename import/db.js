@@ -4,7 +4,10 @@ const getOrAddStagingPair = async (chain, dex, contractAddress, token0Address, t
     let created = false
     let pairDb = await prisma.pairStaging.findFirst({
         where: {
-            contractAddress,
+            contractAddress: {
+                equals: contractAddress,
+                mode: 'insensitive'
+            },
             chain,
             dex,
         },
@@ -31,7 +34,10 @@ const getOrAddToken = async (chain, contractAddress, name, symbol, status, verif
     let token = await prisma.token.findFirst({
         where: {
             chain,
-            contractAddress,
+            contractAddress: {
+                equals: contractAddress,
+                mode: 'insensitive'
+            },
         },
     })
 
@@ -56,7 +62,10 @@ const getOrAddPair = async (chain, dex, contractAddress, pair, t0Id, t1Id, reser
     let created = false
     let pairDb = await prisma.pair.findFirst({
         where: {
-            contractAddress,
+            contractAddress: {
+                equals: contractAddress,
+                mode: 'insensitive'
+            },
             chain,
             dex,
         },
@@ -114,9 +123,18 @@ const getStagingPair = async (chain, dex, contractAddress, token0Address, token1
         where: {
             chain,
             dex,
-            contractAddress,
-            token0Address,
-            token1Address,
+            contractAddress: {
+                equals: contractAddress,
+                mode: 'insensitive'
+            },
+            token0Address: {
+                equals: token0Address,
+                mode: 'insensitive'
+            },
+            token1Address: {
+                equals: token1Address,
+                mode: 'insensitive'
+            },
         },
     })
 }
