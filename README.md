@@ -9,7 +9,7 @@ nvm use
 yarn install
 npx prisma db push
 npx prisma generate
-node data/geckoterminal.js
-node data/graphql.js
+node import/geckoterminal.js
+node import/graphql.js
 yarn run dev
 ```
