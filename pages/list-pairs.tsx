@@ -48,8 +48,11 @@ const ListPairs: React.FC<Props> = (props) => {
     return (
         <Layout>
             <div className="page">
-                <h1><Status status={props.status} /> Pairs</h1>
-                <h2>{props.chain} - {props.dex}</h2>
+                <h1><Status status={props.status}/> Pairs</h1>
+                <h2>
+                    Chain: {props.chain}<br />
+                    DEX: {props.dex}
+                </h2>
                 <h3>
                     <Link
                         href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=0`}>
