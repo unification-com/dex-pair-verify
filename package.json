@@ -1,0 +1,33 @@
+{
+  "name": "dex-pair-verify",
+  "version": "0.0.1",
+  "description": "",
+  "scripts": {
+    "dev": "next",
+    "build": "next build",
+    "start": "next start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@apollo/client": "^3.10.5",
+    "@prisma-extensions/find-or-create": "^0.1.0-canary.20230204011658",
+    "@prisma/client": "^5.15.0",
+    "dotenv": "^16.4.5",
+    "formidable": "^3.5.1",
+    "graphql": "^16.8.2",
+    "next": "12.0.10",
+    "react": "17.0.2",
+    "react-dom": "17.0.2",
+    "react-markdown": "8.0.0",
+    "react-notifications": "^1.7.4",
+    "web3": "^4.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "17.0.14",
+    "@types/react": "17.0.38",
+    "prisma": "^5.15.0",
+    "typescript": "4.5.5"
+  }
+}
