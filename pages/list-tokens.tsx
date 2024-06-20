@@ -67,12 +67,12 @@ const ListTokens: React.FC<Props> = (props) => {
                     &nbsp;|&nbsp;
                     <Link
                         href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=1`}>
-                        <a>Good</a>
+                        <a>VERIFIED</a>
                     </Link>
                     &nbsp;|&nbsp;
                     <Link
                         href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=2`}>
-                        <a>Bad</a>
+                        <a>Fake/Dupe</a>
                     </Link>
                 </h3>
                 <main>
