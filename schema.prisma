@@ -11,23 +11,31 @@ datasource db {
 }
 
 model Pair {
-  id                    String     @default(cuid()) @id
-  chain                 String
-  dex                   String
-  contractAddress       String
-  token0                Token      @relation("Token0", fields: [token0Id], references: [id])
-  token0Id              String
-  token1                Token      @relation("Token1", fields: [token1Id], references: [id])
-  token1Id              String
-  pair                  String
-  reserve0              Float
-  reserve1              Float
-  reserveNativeCurrency Float
-  reserveUsd            Float
-  volumeUsd             Float
-  txCount               Int
-  status                Int
-  verificationMethod String
+  id                       String     @default(cuid()) @id
+  chain                    String
+  dex                      String
+  contractAddress          String
+  token0                   Token      @relation("Token0", fields: [token0Id], references: [id])
+  token0Id                 String
+  token1                   Token      @relation("Token1", fields: [token1Id], references: [id])
+  token1Id                 String
+  pair                     String
+  reserve0                 Float
+  reserve1                 Float
+  reserveNativeCurrency    Float
+  reserveUsd               Float
+  volumeUsd                Float
+  marketCapUsd             Float
+  priceChangePercentage24h Float
+  buys24h                  Int
+  sells24h                 Int
+  buyers24h                Int
+  sellers24h               Int
+  volumeUsd24h             Float
+  txCount                  Int
+  status                   Int
+  verificationMethod       String
+  lastChecked              Int
   @@index([contractAddress(sort: Desc), chain, dex])
   @@index([dex, chain])
   @@index([dex, pair])
@@ -45,6 +53,12 @@ model Token {
   status             Int
   verificationMethod String
   txCount            Int
+  coingeckoCoinId    String
+  totalSupply        Float
+  volume24hUsd       Float
+  marketCapUsd       Float
+  decimals           Int
+  lastChecked        Int
   pairsToken0        Pair[]      @relation("Token0")
   pairsToken1        Pair[]      @relation("Token1")
   @@index([contractAddress(sort: Desc), chain])

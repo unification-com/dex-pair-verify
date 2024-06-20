@@ -1,13 +1,11 @@
 const {PrismaClient} = require('@prisma/client');
+const Web3 = require("web3");
 const prisma = new PrismaClient();
 const getOrAddStagingPair = async (chain, dex, contractAddress, token0Address, token1Address) => {
     let created = false
     let pairDb = await prisma.pairStaging.findFirst({
         where: {
-            contractAddress: {
-                equals: contractAddress,
-                mode: 'insensitive'
-            },
+            contractAddress: Web3.utils.toChecksumAddress(contractAddress),
             chain,
             dex,
         },
@@ -18,9 +16,9 @@ const getOrAddStagingPair = async (chain, dex, contractAddress, token0Address, t
             data: {
                 chain,
                 dex,
-                contractAddress,
-                token0Address,
-                token1Address,
+                contractAddress: Web3.utils.toChecksumAddress(contractAddress),
+                token0Address: Web3.utils.toChecksumAddress(token0Address),
+                token1Address: Web3.utils.toChecksumAddress(token1Address),
             },
         })
         created = true
@@ -34,10 +32,7 @@ const getOrAddToken = async (chain, contractAddress, name, symbol, txCount, stat
     let token = await prisma.token.findFirst({
         where: {
             chain,
-            contractAddress: {
-                equals: contractAddress,
-                mode: 'insensitive'
-            },
+            contractAddress: Web3.utils.toChecksumAddress(contractAddress),
         },
     })
 
@@ -45,12 +40,18 @@ const getOrAddToken = async (chain, contractAddress, name, symbol, txCount, stat
         token = await prisma.token.create({
             data: {
                 chain,
-                contractAddress,
+                contractAddress: Web3.utils.toChecksumAddress(contractAddress),
                 name,
                 symbol,
                 txCount: parseInt(txCount),
                 status,
                 verificationMethod,
+                coingeckoCoinId: "",
+                totalSupply: 0,
+                volume24hUsd: 0,
+                marketCapUsd: 0,
+                lastChecked: 0,
+                decimals: 0,
             },
         })
         created = true
@@ -78,10 +79,7 @@ const getOrAddPair = async (
     let created = false
     let pairDb = await prisma.pair.findFirst({
         where: {
-            contractAddress: {
-                equals: contractAddress,
-                mode: 'insensitive'
-            },
+            contractAddress: Web3.utils.toChecksumAddress(contractAddress),
             chain,
             dex,
         },
@@ -92,7 +90,7 @@ const getOrAddPair = async (
             data: {
                 chain,
                 dex,
-                contractAddress,
+                contractAddress: Web3.utils.toChecksumAddress(contractAddress),
                 reserveUsd: parseFloat(reserveUsd),
                 volumeUsd: parseFloat(volumeUsd),
                 txCount: parseInt(txCount),
@@ -102,6 +100,14 @@ const getOrAddPair = async (
                 status,
                 pair,
                 verificationMethod,
+                marketCapUsd: 0,
+                priceChangePercentage24h: 0,
+                buys24h: 0,
+                sells24h: 0,
+                buyers24h: 0,
+                sellers24h: 0,
+                volumeUsd24h: 0,
+                lastChecked: 0,
                 token0: {
                     connect: {
                         id: t0Id,
@@ -131,7 +137,7 @@ const getQueryContractAddresses = async (chain, dex) => {
     })
 
     for (let j = 0; j < stagingPairs.length; j += 1) {
-        addresses.push(stagingPairs[j].contractAddress)
+        addresses.push(Web3.utils.toChecksumAddress(stagingPairs[j].contractAddress))
     }
 
     return addresses
@@ -142,18 +148,85 @@ const getStagingPair = async (chain, dex, contractAddress, token0Address, token1
         where: {
             chain,
             dex,
-            contractAddress: {
-                equals: contractAddress,
-                mode: 'insensitive'
-            },
-            token0Address: {
-                equals: token0Address,
-                mode: 'insensitive'
-            },
-            token1Address: {
-                equals: token1Address,
-                mode: 'insensitive'
-            },
+            contractAddress: Web3.utils.toChecksumAddress(contractAddress),
+            token0Address: Web3.utils.toChecksumAddress(token0Address),
+            token1Address: Web3.utils.toChecksumAddress(token1Address),
+        },
+    })
+}
+
+const getTokensToFetchFromCoingecko = async (chain) => {
+    const now = Math.floor(Date.now() / 1000)
+    const yesterday = now - 86400
+    return prisma.token.findMany({
+        where: {
+            chain,
+            lastChecked: {
+                lt: yesterday,
+            }
+        },
+    })
+}
+
+const getPairsToFetchFromCoingecko = async (chain, dex) => {
+    const now = Math.floor(Date.now() / 1000)
+    const yesterday = now - 86400
+    return prisma.pair.findMany({
+        where: {
+            chain,
+            dex,
+            lastChecked: {
+                lt: yesterday,
+            }
+        },
+    })
+}
+
+const updateTokenWithCoingeckoData = async (tId, coingeckoCoinId, totalSupply, decimals, volume24hUsd, marketCapUsd) => {
+
+    const now = Math.floor(Date.now() / 1000)
+
+    return await prisma.token.update({
+        where: {
+            id: tId,
+        },
+        data: {
+            coingeckoCoinId,
+            totalSupply: parseFloat(totalSupply),
+            volume24hUsd: parseFloat(volume24hUsd),
+            marketCapUsd: parseFloat(marketCapUsd),
+            decimals: parseInt(decimals),
+            lastChecked: now,
+        },
+    })
+}
+
+const updatePairWithCoingeckoData = async (
+    pId,
+    marketCapUsd,
+    priceChangePercentage24h,
+    buys24h,
+    sells24h,
+    buyers24h,
+    sellers24h,
+    volumeUsd24h,
+    ) => {
+
+    const now = Math.floor(Date.now() / 1000)
+
+    return await prisma.pair.update({
+        where: {
+            id: pId,
+        },
+        data: {
+            marketCapUsd: parseFloat(marketCapUsd),
+            priceChangePercentage24h: parseFloat(priceChangePercentage24h),
+            buys24h: parseInt(buys24h),
+            sells24h: parseInt(sells24h),
+            buyers24h: parseInt(buyers24h),
+            sellers24h: parseInt(sellers24h),
+            volumeUsd24h: parseFloat(volumeUsd24h),
+            lastChecked: now,
         },
     })
 }
@@ -164,4 +237,8 @@ module.exports = {
     getOrAddPair,
     getQueryContractAddresses,
     getStagingPair,
+    getTokensToFetchFromCoingecko,
+    updateTokenWithCoingeckoData,
+    getPairsToFetchFromCoingecko,
+    updatePairWithCoingeckoData,
 }

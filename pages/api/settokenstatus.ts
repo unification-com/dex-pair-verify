@@ -31,8 +31,8 @@ export default async function handler(
         data: { status: newStatus, verificationMethod: "manual" },
     })
 
-    // also update pairs, if the status is "bad"
-    if(newStatus === 2) {
+    // also update pairs, if the status is set to unverified, duplicate or fake/bad
+    if(newStatus !== 1) {
         const updatedPairCountRes = await prisma.pair.updateMany({
             where: {
                 OR: [
@@ -44,7 +44,7 @@ export default async function handler(
                     },
                 ],
             },
-            data: { status: 2, verificationMethod: "manual" },
+            data: { status: newStatus, verificationMethod: "manual" },
         })
 
         updatedPairCount = updatedPairCountRes.count

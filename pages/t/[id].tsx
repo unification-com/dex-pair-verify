@@ -10,7 +10,7 @@ import {TokenProps} from "../../types/props";
 import ChainName from "../../components/ChainName";
 import ExplorerUrl from "../../components/ExplorerUrl";
 import {NumericFormat} from "react-number-format";
-
+import CoinGeckoCoinLink from "../../components/CoinGeckoCoinLink";
 
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
 
@@ -20,10 +20,32 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
         },
         include: {
             pairsToken0: {
-                select: { pair: true, id: true, contractAddress: true, status: true },
+                select: {
+                    pair: true,
+                    id: true,
+                    contractAddress: true,
+                    reserveUsd: true,
+                    reserve0: true,
+                    reserve1: true,
+                    reserveNativeCurrency: true,
+                    volumeUsd: true,
+                    txCount: true,
+                    status: true,
+                },
             },
             pairsToken1: {
-                select: { pair: true, id: true, contractAddress: true, status: true },
+                select: {
+                    pair: true,
+                    id: true,
+                    contractAddress: true,
+                    reserveUsd: true,
+                    reserve0: true,
+                    reserve1: true,
+                    reserveNativeCurrency: true,
+                    volumeUsd: true,
+                    txCount: true,
+                    status: true,
+                },
             },
         },
     });
@@ -76,27 +98,58 @@ const Token: React.FC<Props> = (props) => {
         <Layout>
             <div>
                 <h1>Token</h1>
-                <h2>{props.token.symbol} (<ChainName chain={props.token.chain}/>)</h2>
+                <h3>Chain: <ChainName chain={props.token.chain}/></h3>
+                <h2>Symbol: {props.token.symbol}</h2>
                 <p>Name: {props.token.name}</p>
                 <p>Explorer: &nbsp;
                     <ExplorerUrl chain={props.token.chain} contractAddress={props.token.contractAddress} linkType={"token"}/>
                 </p>
                 <p>
-                    Tx Count: <NumericFormat displayType="text" thousandSeparator="," value={props.token.txCount}/>
+                    CoinGecko: <CoinGeckoCoinLink coingeckoId={props.token.coingeckoCoinId} />
                 </p>
+
+                <h4>Stats</h4>
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Tx Count</th>
+                        <th>Market Cap</th>
+                        <th>Total Supply</th>
+                        <th>24h Volume</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        <td>
+                            <NumericFormat displayType="text" thousandSeparator="," value={props.token.txCount}/>
+                        </td>
+                        <td>
+                            $<NumericFormat displayType="text" thousandSeparator="," value={props.token.marketCapUsd}/>
+                        </td>
+                        <td>
+                            <NumericFormat displayType="text" thousandSeparator="," value={props.token.totalSupply / (10 ** props.token.decimals)}/>
+                        </td>
+                        <td>
+                            $<NumericFormat displayType="text" thousandSeparator="," value={props.token.volume24hUsd}/>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+
                 <p>Status: <Status status={currentStatus}/></p>
                 Change Status: <form onSubmit={onSubmit}>
                 <select name="status" id="tokenstatus">
                     <option value="0">Unverified</option>
-                    <option value="1">Good</option>
-                    <option value="2">Bad</option>
+                    <option value="1">VERIFIED</option>
+                    <option value="2">Duplicate</option>
+                    <option value="3">Fake/Bad</option>
                 </select>
                 <input type={"hidden"} value={props.token.id} name={"tokenid"}/>
                 <button type="submit">Submit</button>
             </form>
 
-                <p><strong>Note:</strong> Setting the token status to "BAD" will automatically set the status of ALL
-                    associated pairs to BAD</p>
+                <p><strong>Note:</strong> Setting the token status to "Fake/Dupe" will automatically set the status of ALL
+                    associated pairs to Fake/Dupe</p>
 
                 {
                     (props.duplicates.length) > 0 &&
@@ -118,24 +171,75 @@ const Token: React.FC<Props> = (props) => {
                 }
 
                 <h4>Associated Pairs</h4>
-                <ul>
+
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Pair</th>
+                        <th>Reserve USD</th>
+                        <th>Reserve Native</th>
+                        <th>Tx Count</th>
+                        <th>Total Volume USD</th>
+                        <th>Status</th>
+                    </tr>
+                    </thead>
+                    <tbody>
                     {props.token.pairsToken0 && props.token.pairsToken0.map((pairToken0) => (
-                        <li key={pairToken0.id}>
-                            <a
-                                href={`/p/${pairToken0.id}`}>
-                                {pairToken0.pair}
-                            </a>
-                        </li>
+                        <tr key={pairToken0.id}>
+                            <td>
+                                <Link
+                                    href={`/p/${pairToken0.id}`}>
+                                    {pairToken0.pair}
+                                </Link>
+                            </td>
+                            <td>
+                                $<NumericFormat displayType="text" thousandSeparator="," value={pairToken0.reserveUsd}/>
+                            </td>
+                            <td>
+                                <NumericFormat displayType="text" thousandSeparator=","
+                                               value={pairToken0.reserveNativeCurrency}/>
+                            </td>
+                            <td>
+                                <NumericFormat displayType="text" thousandSeparator=","
+                                               value={pairToken0.txCount}/>
+                            </td>
+                            <td>
+                                $<NumericFormat displayType="text" thousandSeparator="," value={pairToken0.volumeUsd}/>
+                            </td>
+                            <td>
+                                <Status status={pairToken0.status} />
+                            </td>
+                        </tr>
                     ))}
                     {props.token.pairsToken1 && props.token.pairsToken1.map((pairToken1) => (
-                        <li key={pairToken1.id}>
-                            <Link
-                                href={`/p/${pairToken1.id}`}>
-                                {pairToken1.pair}
-                            </Link>
-                        </li>
+                        <tr key={pairToken1.id}>
+                            <td>
+                                <Link
+                                    href={`/p/${pairToken1.id}`}>
+                                    {pairToken1.pair}
+                                </Link>
+                            </td>
+                            <td>
+                                $<NumericFormat displayType="text" thousandSeparator="," value={pairToken1.reserveUsd}/>
+                            </td>
+                            <td>
+                                <NumericFormat displayType="text" thousandSeparator=","
+                                               value={pairToken1.reserveNativeCurrency}/>
+                            </td>
+                            <td>
+                                <NumericFormat displayType="text" thousandSeparator=","
+                                               value={pairToken1.txCount}/>
+                            </td>
+                            <td>
+                                $<NumericFormat displayType="text" thousandSeparator="," value={pairToken1.volumeUsd}/>
+                            </td>
+                            <td>
+                                <Status status={pairToken1.status}/>
+                            </td>
+                        </tr>
                     ))}
-                </ul>
+                    </tbody>
+                </table>
 
             </div>
         </Layout>

@@ -10,7 +10,7 @@ const {
     getStagingPair,
 } = require('./db')
 
-const CG_WAIT = 20000; // coin gecko API limited to 30 calls/minute, so wait 2.5 seconds between calls.
+const CG_WAIT = 20000; // coin gecko API limited to 30 calls/minute, so wait between calls.
 
 const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 
@@ -38,11 +38,11 @@ const fetchFromCg = async () => {
             const pairs = await response.json()
             for (let k = 0; k < pairs.data.length; k += 1) {
                 const p = pairs.data[k]
-                const pairContractAddress = (pool.toChecksumAddress) ? Web3.utils.toChecksumAddress(p.attributes.address) : p.attributes.address
+                const pairContractAddress = Web3.utils.toChecksumAddress(p.attributes.address)
                 const t0Arr = p.relationships.base_token.data.id.split("_")
-                const t0ContractAddress = (pool.toChecksumAddress) ? Web3.utils.toChecksumAddress(t0Arr[t0Arr.length - 1]) : t0Arr[t0Arr.length - 1]
+                const t0ContractAddress = Web3.utils.toChecksumAddress(t0Arr[t0Arr.length - 1])
                 const t1Arr = p.relationships.quote_token.data.id.split("_")
-                const t1ContractAddress = (pool.toChecksumAddress) ? Web3.utils.toChecksumAddress(t1Arr[t1Arr.length - 1]) : t1Arr[t1Arr.length - 1]
+                const t1ContractAddress = Web3.utils.toChecksumAddress(t1Arr[t1Arr.length - 1])
                 const [staging, stCreated] = await getOrAddStagingPair(chain, dex, pairContractAddress, t0ContractAddress, t1ContractAddress)
                 if(stCreated) {
                     results[chain][dex].new += 1
@@ -94,6 +94,8 @@ const fetchFromSubgraph = async () => {
         const poolRes1 = result1.data[poolMeta.graphql.poolName]
         const poolRes2 = result2.data[poolMeta.graphql.poolName]
 
+        console.log(poolRes1.length, poolRes2.length)
+
         const poolResArray = poolRes1.concat(poolRes2)
 
         for (let j = 0; j < poolResArray.length; j += 1) {
@@ -106,12 +108,12 @@ const fetchFromSubgraph = async () => {
             const txCount = (poolMeta.graphql.txCount !== null) ? pRes[poolMeta.graphql.txCount] : 0
             const volumeUSD = pRes[poolMeta.graphql.volumeUSD]
             const token0 = pRes.token0
-            const token0Address = (poolMeta.toChecksumAddress) ? Web3.utils.toChecksumAddress(token0.id) : token0.id
+            const token0Address = Web3.utils.toChecksumAddress(token0.id)
             const token0TxCount = (poolMeta.graphql.txCount !== null) ? token0[poolMeta.graphql.txCount] : 0
             const token1 = pRes.token1
-            const token1Address = (poolMeta.toChecksumAddress) ? Web3.utils.toChecksumAddress(token1.id) : token1.id
+            const token1Address = Web3.utils.toChecksumAddress(token1.id)
             const token1TxCount = (poolMeta.graphql.txCount !== null) ? token1[poolMeta.graphql.txCount] : 0
-            const pairAddress = (poolMeta.toChecksumAddress) ? Web3.utils.toChecksumAddress(pRes.id) : pRes.id
+            const pairAddress = Web3.utils.toChecksumAddress(pRes.id)
 
             let stRes = await getStagingPair(chain, dex, pairAddress, token0Address, token1Address)
             if (stRes === null) {
