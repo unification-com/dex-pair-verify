@@ -141,7 +141,7 @@ const fetchFromSubgraph = async () => {
 
 const run = async () => {
     // 1. first stage pool data into a staging table - pair contract address, and token addresses
-    // await fetchFromCg()
+    await fetchFromCg()
 
     // 2. For each chain/dex pair, query pools from respective graphql
     await fetchFromSubgraph()
