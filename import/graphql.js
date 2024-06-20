@@ -47,12 +47,12 @@ const fetchFromSubgraph = async () => {
             const txCount = (poolMeta.graphql.txCount !== null) ? pRes[poolMeta.graphql.txCount] : 0
             const volumeUSD = pRes[poolMeta.graphql.volumeUSD]
             const token0 = pRes.token0
-            const token0Address = (poolMeta.toChecksumAddress) ? Web3.utils.toChecksumAddress(token0.id) : token0.id
+            const token0Address = Web3.utils.toChecksumAddress(token0.id)
             const token0TxCount = (poolMeta.graphql.txCount !== null) ? token0[poolMeta.graphql.txCount] : 0
             const token1 = pRes.token1
-            const token1Address = (poolMeta.toChecksumAddress) ? Web3.utils.toChecksumAddress(token1.id) : token1.id
+            const token1Address = Web3.utils.toChecksumAddress(token1.id)
             const token1TxCount = (poolMeta.graphql.txCount !== null) ? token1[poolMeta.graphql.txCount] : 0
-            const pairAddress = (poolMeta.toChecksumAddress) ? Web3.utils.toChecksumAddress(pRes.id) : pRes.id
+            const pairAddress = Web3.utils.toChecksumAddress(pRes.id)
 
             // token0
             const [t0, t0Created] = await getOrAddToken(chain, token0Address, token0.name, token0.symbol, token0TxCount, 0, "")

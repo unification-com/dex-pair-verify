@@ -5,7 +5,6 @@ const dataSources = [
         chain: "eth",
         dex: "uniswap_v2",
         last_page: 10,
-        toChecksumAddress: false,
         graphql: {
             poolName: "pairs",
             reserveUSD: "reserveUSD",
@@ -17,7 +16,7 @@ const dataSources = [
             url: `https://gateway-arbitrum.network.thegraph.com/api/${process.env.THEGRAPH_API_KEY}/subgraphs/id/EYCKATKGBKLWvSfwvBjzfCBmGwYNdVkduYXVivCsLRFu`,
             funcQueryWithAddressList: function (addresses) {
                 return gql`{
-                    pairs(where: {id_in: [${addresses}]}) {
+                    pairs(where: {id_in: [${addresses.toLowerCase()}]}) {
                         id
                         reserveUSD
                         reserveETH
@@ -48,7 +47,7 @@ const dataSources = [
                         orderDirection: desc,
                         where : {
                             reserveUSD_gt: "100000",
-                            txCount_gt: "1000"
+                            txCount_gt: "10000"
                         }
                     ) {
                         id
@@ -79,7 +78,6 @@ const dataSources = [
         chain: "eth",
         dex: "uniswap_v3",
         last_page: 10,
-        toChecksumAddress: false,
         graphql: {
             poolName: "pools",
             reserveUSD: "totalValueLockedUSD",
@@ -92,7 +90,7 @@ const dataSources = [
             funcQueryWithAddressList: function (addresses) {
                 return gql`{
                     pools(
-                        where: {id_in: [${addresses}]}
+                        where: {id_in: [${addresses.toLowerCase()}]}
                     ) {
                         id
                         token1 {
@@ -125,7 +123,7 @@ const dataSources = [
                         orderDirection: desc,
                         where : {
                             totalValueLockedUSD_gt: "100000",
-                            txCount_gt: "1000"
+                            txCount_gt: "10000"
                         }
                     ) {
                         id
@@ -156,7 +154,6 @@ const dataSources = [
         chain: "eth",
         dex: "sushiswap",
         last_page: 10,
-        toChecksumAddress: false,
         graphql: {
             poolName: "pairs",
             reserveUSD: "reserveUSD",
@@ -168,7 +165,7 @@ const dataSources = [
             url: `https://gateway-arbitrum.network.thegraph.com/api/${process.env.THEGRAPH_API_KEY}/subgraphs/id/6NUtT5mGjZ1tSshKLf5Q3uEEJtjBZJo1TpL5MXsUBqrT`,
             funcQueryWithAddressList: function (addresses) {
                 return gql`{
-                    pairs(where: {id_in: [${addresses}]}) {
+                    pairs(where: {id_in: [${addresses.toLowerCase()}]}) {
                         id
                         reserveUSD
                         reserveETH
@@ -199,7 +196,7 @@ const dataSources = [
                         orderDirection: desc,
                         where : {
                             reserveUSD_gt: "100000",
-                            txCount_gt: "1000"
+                            txCount_gt: "10000"
                         }
                     ) {
                         id
@@ -230,7 +227,6 @@ const dataSources = [
         chain: "eth",
         dex: "shibaswap",
         last_page: 10,
-        toChecksumAddress: false,
         graphql: {
             poolName: "pairs",
             reserveUSD: "reserveUSD",
@@ -242,7 +238,7 @@ const dataSources = [
             url: `https://gateway-arbitrum.network.thegraph.com/api/${process.env.THEGRAPH_API_KEY}/subgraphs/id/61LXXvGA1KXkJZbCceYqw9APcwTGefK5MytwnVsdAQpw`,
             funcQueryWithAddressList: function (addresses) {
                 return gql`{
-                    pairs(where: {id_in: [${addresses}]}) {
+                    pairs(where: {id_in: [${addresses.toLowerCase()}]}) {
                         id
                         reserveUSD
                         reserveETH
@@ -272,8 +268,8 @@ const dataSources = [
                         orderBy: reserveETH,
                         orderDirection: desc,
                         where : {
-                            reserveUSD_gt: "50000",
-                            txCount_gt: "250"
+                            reserveUSD_gt: "100000",
+                            txCount_gt: "10000"
                         }
                     ) {
                         id
@@ -304,7 +300,6 @@ const dataSources = [
         chain: "bsc",
         dex: "pancakeswap_v2",
         last_page: 10,
-        toChecksumAddress: true,
         graphql: {
             poolName: "pairs",
             reserveUSD: "reserveUSD",
@@ -316,7 +311,7 @@ const dataSources = [
             url: `https://open-platform.nodereal.io/${process.env.NODEREAL_API_KEY}/pancakeswap-free/graphql`,
             funcQueryWithAddressList: function (addresses) {
                 return gql`{
-                    pairs(where: {id_in: [${addresses}]}) {
+                    pairs(where: {id_in: [${addresses.toLowerCase()}]}) {
                         id
                         reserveUSD
                         reserveBNB
@@ -346,7 +341,7 @@ const dataSources = [
                         orderBy: trackedReserveBNB,
                         orderDirection: desc,
                         where : {
-                            totalTransactions_gt: "5000"
+                            totalTransactions_gt: "10000"
                         }
                     ) {
                         id
@@ -377,7 +372,6 @@ const dataSources = [
         chain: "polygon_pos",
         dex: "quickswap_v3",
         last_page: 10,
-        toChecksumAddress: false,
         graphql: {
             poolName: "pools",
             reserveUSD: "totalValueLockedUSD",
@@ -390,7 +384,7 @@ const dataSources = [
             funcQueryWithAddressList: function (addresses) {
                 return gql`{
                     pools(
-                        where: {id_in: [${addresses}]}
+                        where: {id_in: [${addresses.toLowerCase()}]}
                     ) {
                         id
                         token1 {
@@ -422,7 +416,7 @@ const dataSources = [
                         orderDirection: desc,
                         where : {
                             totalValueLockedUSD_gt: "100000",
-                            txCount_gt: "1000"
+                            txCount_gt: "10000"
                         }
                     ) {
                         id
@@ -453,7 +447,6 @@ const dataSources = [
         chain: "xdai",
         dex: "honeyswap",
         last_page: 10,
-        toChecksumAddress: false,
         graphql: {
             poolName: "pairs",
             reserveUSD: "reserveUSD",
@@ -465,7 +458,7 @@ const dataSources = [
             url: `https://gateway-arbitrum.network.thegraph.com/api/${process.env.THEGRAPH_API_KEY}/subgraphs/id/HTxWvPGcZ5oqWLYEVtWnVJDfnai2Ud1WaABiAR72JaSJ`,
             funcQueryWithAddressList: function (addresses) {
                 return gql`{
-                    pairs(where: {id_in: [${addresses}]}) {
+                    pairs(where: {id_in: [${addresses.toLowerCase()}]}) {
                         id
                         reserveUSD
                         reserveNativeCurrency
@@ -495,8 +488,8 @@ const dataSources = [
                         orderBy: reserveNativeCurrency,
                         orderDirection: desc,
                         where : {
-                            reserveUSD_gt: "10000",
-                            txCount_gt: "1000"
+                            reserveUSD_gt: "100000",
+                            txCount_gt: "10000"
                         }
                     ) {
                         id

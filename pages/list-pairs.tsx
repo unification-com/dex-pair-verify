@@ -68,10 +68,22 @@ const ListPairs: React.FC<Props> = (props) => {
                     &nbsp;|&nbsp;
                     <Link
                         href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=2`}>
-                        <a>Fake/Dupe</a>
+                        <a>Duplicate</a>
+                    </Link>
+                    &nbsp;|&nbsp;
+                    <Link
+                        href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=3`}>
+                        <a>Fake/Bad</a>
                     </Link>
                 </h3>
                 <main>
+                    {
+                        (props.status === 2) && <>
+                        <p>
+                            <strong>Note:</strong> Duplicate includes both duplicate pairs and pairs that may contain duplicate token symbols
+                        </p>
+                        </>
+                    }
                     <table>
                         <thead>
                         <tr>

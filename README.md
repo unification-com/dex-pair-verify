@@ -11,5 +11,6 @@ yarn prisma db push --force-reset
 yarn prisma generate
 node import/geckoterminal.js
 node import/graphql.js
+node import/check_gecko.js
 yarn run dev
 ```

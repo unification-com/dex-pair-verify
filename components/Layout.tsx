@@ -43,6 +43,15 @@ const Layout: React.FC<Props> = (props) => (
       button {
         cursor: pointer;
       }
+      
+      table {
+          border: 1px solid #333;
+          border-collapse: collapse;
+      }
+      td, th {
+          border: 1px solid #333;
+          padding: 5px;
+      }
     `}</style>
     <style jsx>{`
       .layout {

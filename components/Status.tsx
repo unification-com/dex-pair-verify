@@ -13,10 +13,14 @@ const Status: React.FC<{ status: number }> = ({ status }) => {
             break
         case 1:
             statusStr = "VERIFIED";
-            statusClass = "status-good"
+            statusClass = "status-verified"
             break;
         case 2:
-            statusStr = "Fake/Dupe";
+            statusStr = "Duplicate";
+            statusClass = "status-dupe"
+            break;
+        case 3:
+            statusStr = "Fake/Bad";
             statusClass = "status-bad"
             break;
     }
@@ -25,9 +29,14 @@ const Status: React.FC<{ status: number }> = ({ status }) => {
             <span className={statusClass}>{statusStr}</span>
             <style jsx>{`
 
-                .status-good {
+                .status-verified {
                     font-weight: bold;
                     color: green;
+                }
+
+                .status-dupe {
+                    font-weight: bold;
+                    color: orange;
                 }
 
                 .status-bad {
