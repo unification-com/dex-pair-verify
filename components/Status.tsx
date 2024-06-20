@@ -12,11 +12,11 @@ const Status: React.FC<{ status: number }> = ({ status }) => {
             statusClass = "status-unverified"
             break
         case 1:
-            statusStr = "GOOD";
+            statusStr = "VERIFIED";
             statusClass = "status-good"
             break;
         case 2:
-            statusStr = "BAD";
+            statusStr = "Fake/Dupe";
             statusClass = "status-bad"
             break;
     }
