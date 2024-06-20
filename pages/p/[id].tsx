@@ -86,33 +86,31 @@ const Pair: React.FC<Props> = (props) => {
   }
 
   let verifyPair = null;
-
-  if(props.pair.token0.status !== 0 && props.pair.token1.status !== 0) {
-
-    let verifyOpts = null
-    if(props.pair.token0.status === 1 && props.pair.token1.status === 1) {
-      verifyOpts = <>
-        <option value="0">Unverified</option>
-        <option value="1">VERIFIED</option>
-        <option value="2">Duplicate</option>
-        <option value="3">Fake/Bad</option>
-      </>
-    } else {
-      verifyOpts = <>
-        <option value="0">Unverified</option>
-        <option value="2">Duplicate</option>
-        <option value="3">Fake/Bad</option>
-      </>
-    }
-
-    verifyPair = <form onSubmit={onSubmit}>
-      <select name="status" id="pairstatus">
-        {verifyOpts}
-      </select>
-      <input type={"hidden"} value={props.pair.id} name={"pairid"}/>
-      <button type="submit">Submit</button>
-    </form>
+  let verifyOpts = null
+  if(props.pair.token0.status === 1 && props.pair.token1.status === 1) {
+    verifyOpts = <>
+      <option value="0">Unverified</option>
+      <option value="1">VERIFIED</option>
+      <option value="2">Duplicate</option>
+      <option value="3">Fake/Bad</option>
+    </>
+  } else {
+    verifyOpts = <>
+      <option value="0">Unverified</option>
+      <option value="1" disabled={true}>VERIFIED</option>
+      <option value="2">Duplicate</option>
+      <option value="3">Fake/Bad</option>
+    </>
   }
+
+  verifyPair = <form onSubmit={onSubmit}>
+    <select name="status" id="pairstatus">
+      {verifyOpts}
+    </select>
+    <input type={"hidden"} value={props.pair.id} name={"pairid"}/>
+    <button type="submit">Submit</button>
+  </form>
+
 
   return (
       <Layout>
