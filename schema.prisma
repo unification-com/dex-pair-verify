@@ -11,19 +11,22 @@ datasource db {
 }
 
 model Pair {
-  id                 String     @default(cuid()) @id
-  chain              String
-  dex                String
-  contractAddress    String
-  token0             Token      @relation("Token0", fields: [token0Id], references: [id])
-  token0Id           String
-  token1             Token      @relation("Token1", fields: [token1Id], references: [id])
-  token1Id           String
-  pair               String
-  reserveUsd         Float
-  volumeUsd          Float
-  txCount            Int
-  status             Int
+  id                    String     @default(cuid()) @id
+  chain                 String
+  dex                   String
+  contractAddress       String
+  token0                Token      @relation("Token0", fields: [token0Id], references: [id])
+  token0Id              String
+  token1                Token      @relation("Token1", fields: [token1Id], references: [id])
+  token1Id              String
+  pair                  String
+  reserve0              Float
+  reserve1              Float
+  reserveNativeCurrency Float
+  reserveUsd            Float
+  volumeUsd             Float
+  txCount               Int
+  status                Int
   verificationMethod String
   @@index([contractAddress(sort: Desc), chain, dex])
   @@index([dex, chain])
@@ -41,6 +44,7 @@ model Token {
   name               String
   status             Int
   verificationMethod String
+  txCount            Int
   pairsToken0        Pair[]      @relation("Token0")
   pairsToken1        Pair[]      @relation("Token1")
   @@index([contractAddress(sort: Desc), chain])
@@ -57,4 +61,6 @@ model PairStaging {
   token0Address   String
   token1Address   String
   @@index([dex, chain])
+  @@index([dex, chain, contractAddress])
+  @@index([dex, chain, contractAddress, token0Address, token1Address])
 }

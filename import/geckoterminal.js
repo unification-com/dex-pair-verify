@@ -10,13 +10,17 @@ const {
     getStagingPair,
 } = require('./db')
 
-const CG_WAIT = 2500; // coin gecko API limited to 30 calls/minute, so wait 2.5 seconds between calls.
+const CG_WAIT = 20000; // coin gecko API limited to 30 calls/minute, so wait 2.5 seconds between calls.
 
 const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 
 const fetchFromCg = async () => {
     const results = {}
     for (let i = 0; i < dataSources.length; i += 1) {
+        if(i > 0) {
+            console.log("wait 20s...")
+            await sleep(CG_WAIT)
+        }
         const pool = dataSources[i]
         const chain = pool.chain
         const dex = pool.dex
@@ -46,7 +50,6 @@ const fetchFromCg = async () => {
                     results[chain][dex].existing += 1
                 }
             }
-            await sleep(CG_WAIT)
         }
     }
     console.log(results)
@@ -96,13 +99,18 @@ const fetchFromSubgraph = async () => {
         for (let j = 0; j < poolResArray.length; j += 1) {
             const pRes = poolResArray[j]
 
-            const totalValueLockedUSD = pRes[poolMeta.graphql.totalValueLockedUSD]
+            const reserveUSD = pRes[poolMeta.graphql.reserveUSD]
+            const reserveNativeCurrency = pRes[poolMeta.graphql.reserveNativeCurrency]
+            const reserve0 = pRes[poolMeta.graphql.reserve0]
+            const reserve1 = pRes[poolMeta.graphql.reserve1]
             const txCount = (poolMeta.graphql.txCount !== null) ? pRes[poolMeta.graphql.txCount] : 0
             const volumeUSD = pRes[poolMeta.graphql.volumeUSD]
             const token0 = pRes.token0
             const token0Address = (poolMeta.toChecksumAddress) ? Web3.utils.toChecksumAddress(token0.id) : token0.id
+            const token0TxCount = (poolMeta.graphql.txCount !== null) ? token0[poolMeta.graphql.txCount] : 0
             const token1 = pRes.token1
             const token1Address = (poolMeta.toChecksumAddress) ? Web3.utils.toChecksumAddress(token1.id) : token1.id
+            const token1TxCount = (poolMeta.graphql.txCount !== null) ? token1[poolMeta.graphql.txCount] : 0
             const pairAddress = (poolMeta.toChecksumAddress) ? Web3.utils.toChecksumAddress(pRes.id) : pRes.id
 
             let stRes = await getStagingPair(chain, dex, pairAddress, token0Address, token1Address)
@@ -112,13 +120,13 @@ const fetchFromSubgraph = async () => {
 
             if (stRes) {
                 // token0
-                const [t0, t0Created] = await getOrAddToken(chain, token0Address, token0.name, token0.symbol, 1, "geckoterminal.com")
+                const [t0, t0Created] = await getOrAddToken(chain, token0Address, token0.name, token0.symbol, token0TxCount, 1, "geckoterminal.com")
                 // token1
-                const [t1, t1Created] = await getOrAddToken(chain, token1Address, token1.name, token1.symbol, 1, "geckoterminal.com")
+                const [t1, t1Created] = await getOrAddToken(chain, token1Address, token1.name, token1.symbol, token1TxCount, 1, "geckoterminal.com")
 
                 const pSym = `${t0.symbol}-${t1.symbol}`
 
-                const [p, pCreated] = await getOrAddPair(chain, dex, pairAddress, pSym, t0.id, t1.id, totalValueLockedUSD, volumeUSD, txCount, 1, "geckoterminal.com")
+                const [p, pCreated] = await getOrAddPair(chain, dex, pairAddress, pSym, t0.id, t1.id, reserveUSD, reserveNativeCurrency, reserve0, reserve1, volumeUSD, txCount, 1, "geckoterminal.com")
 
                 if(pCreated) {
                     results[chain][dex].new += 1
@@ -133,7 +141,7 @@ const fetchFromSubgraph = async () => {
 
 const run = async () => {
     // 1. first stage pool data into a staging table - pair contract address, and token addresses
-    await fetchFromCg()
+    // await fetchFromCg()
 
     // 2. For each chain/dex pair, query pools from respective graphql
     await fetchFromSubgraph()

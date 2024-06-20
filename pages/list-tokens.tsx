@@ -5,8 +5,13 @@ import prisma from '../lib/prisma';
 import Status from "../components/Status";
 import Link from "next/link";
 import Router from "next/router";
+import ChainName from "../components/ChainName";
+import {TokenProps} from "../types/props";
 
 export const getServerSideProps: GetServerSideProps = async ({ params, query }) => {
+
+    const duplicates = {}
+
     const tokens = await prisma.token.findMany({
         where: {
             chain: String(query?.chain),
@@ -18,20 +23,34 @@ export const getServerSideProps: GetServerSideProps = async ({ params, query }) 
             },
         ],
     });
+
+    for(let i = 0; i < tokens.length; i += 1) {
+        const t = tokens[i]
+        if(duplicates[t.symbol] === undefined) {
+            duplicates[t.symbol] = 0
+        } else {
+            duplicates[t.symbol] += 1
+        }
+    }
+
+    console.log(duplicates)
+
     return {
         props: {
             tokens,
             chain: String(query?.chain),
             dex: String(query?.dex),
-            status: Number(query?.status || 0)
+            status: Number(query?.status || 0),
+            duplicates,
         },
     };
 }
 
 type Props = {
-    tokens: any,
+    tokens: TokenProps[],
     chain: string,
     status: number,
+    duplicates: any,
 }
 
 const ListTokens: React.FC<Props> = (props) => {
@@ -39,7 +58,7 @@ const ListTokens: React.FC<Props> = (props) => {
         <Layout>
             <div className="page">
                 <h1><Status status={props.status} /> Tokens</h1>
-                <h2>Chain: {props.chain}</h2>
+                <h2>Chain: <ChainName chain={props.chain}/></h2>
                 <h3>
                     <Link
                         href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=0`}>
@@ -62,6 +81,7 @@ const ListTokens: React.FC<Props> = (props) => {
                         <tr>
                             <th>Symbol</th>
                             <th>Name</th>
+                            <th>Duplicates</th>
                             <th>Contract</th>
                             <th>Verification Method</th>
                             <th></th>
@@ -72,6 +92,7 @@ const ListTokens: React.FC<Props> = (props) => {
                             <tr key={token.id} className="token">
                                 <td><strong>{token.symbol}</strong></td>
                                 <td>{token.name}</td>
+                                <td>{(props.duplicates[token.symbol] > 0 ) ? props.duplicates[token.symbol] : ""}</td>
                                 <td>{token.contractAddress}</td>
                                 <td>{token.verificationMethod}</td>
                                 <td>

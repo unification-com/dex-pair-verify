@@ -6,6 +6,10 @@ import Link from "next/link";
 
 import {NotificationManager} from 'react-notifications';
 import Status from "../../components/Status";
+import {TokenProps} from "../../types/props";
+import ChainName from "../../components/ChainName";
+import ExplorerUrl from "../../components/ExplorerUrl";
+import {NumericFormat} from "react-number-format";
 
 
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
@@ -23,48 +27,30 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
             },
         },
     });
+
+    const duplicates = await prisma.token.findMany({
+        where: {
+            chain: token.chain,
+            symbol: token.symbol,
+            id: {
+                not: token.id,
+            }
+        },
+    });
+
     return {
-        props: token,
+        props: {token, duplicates},
     }
 }
 
-type AssociatedPairProps = {
-    id: string;
-    pair: string;
-    contractAddress: string;
-    status: number;
+type Props = {
+    token: TokenProps;
+    duplicates: TokenProps[];
 }
 
-type TokenProps = {
-    id: string;
-    chain: string;
-    contractAddress: string;
-    symbol: string;
-    name: string;
-    status: number;
-    pairsToken0: AssociatedPairProps[] | null;
-    pairsToken1: AssociatedPairProps[] | null;
-};
+const Token: React.FC<Props> = (props) => {
 
-const Token: React.FC<TokenProps> = (props) => {
-
-    const [currentStatus, setCurrentStatus] = useState(props.status)
-
-    const explorerUrls = {
-        eth: "https://etherscan.io",
-        bsc: "https://bscscan.com",
-        polygon_pos: "https://polygonscan.com",
-        gnosis: "https://gnosis.blockscout.com",
-        xdai: "https://gnosis.blockscout.com",
-    }
-
-    const chainNames = {
-        eth: "Ethereum",
-        bsc: "BSC",
-        polygon_pos: "Polygon",
-        gnosis: "Gnosis",
-        xdai: "Gnosis"
-    }
+    const [currentStatus, setCurrentStatus] = useState(props.token.status)
 
     async function onSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
@@ -86,37 +72,54 @@ const Token: React.FC<TokenProps> = (props) => {
 
     }
 
-    const explorer = explorerUrls[props.chain]
-    const chainName = chainNames[props.chain]
-
     return (
         <Layout>
             <div>
                 <h1>Token</h1>
-                <h2>{props.symbol} ({chainName})</h2>
-                <p>Name: {props.name}</p>
-                <p>Contract: &nbsp;
-                    <Link href={`${explorer}/token/${props.contractAddress}`}>
-                        <a target="_blank">{props.contractAddress}</a>
-                    </Link>
+                <h2>{props.token.symbol} (<ChainName chain={props.token.chain}/>)</h2>
+                <p>Name: {props.token.name}</p>
+                <p>Explorer: &nbsp;
+                    <ExplorerUrl chain={props.token.chain} contractAddress={props.token.contractAddress} linkType={"token"}/>
                 </p>
-                <p>Status: <Status status={currentStatus} /></p>
+                <p>
+                    Tx Count: <NumericFormat displayType="text" thousandSeparator="," value={props.token.txCount}/>
+                </p>
+                <p>Status: <Status status={currentStatus}/></p>
                 Change Status: <form onSubmit={onSubmit}>
-                    <select name="status" id="tokenstatus">
-                        <option value="0">Unverified</option>
-                        <option value="1">Good</option>
-                        <option value="2">Bad</option>
-                    </select>
-                    <input type={"hidden"} value={props.id} name={"tokenid"}/>
-                    <button type="submit">Submit</button>
-                </form>
+                <select name="status" id="tokenstatus">
+                    <option value="0">Unverified</option>
+                    <option value="1">Good</option>
+                    <option value="2">Bad</option>
+                </select>
+                <input type={"hidden"} value={props.token.id} name={"tokenid"}/>
+                <button type="submit">Submit</button>
+            </form>
 
                 <p><strong>Note:</strong> Setting the token status to "BAD" will automatically set the status of ALL
-                associated pairs to BAD</p>
+                    associated pairs to BAD</p>
+
+                {
+                    (props.duplicates.length) > 0 &&
+                    <>
+                      <h4>Possible Duplicates</h4>
+                        <ul>
+                        {props.duplicates.map((dupe) => (
+                            <>
+                                <li key={dupe.id}>
+                                    <Link
+                                        href={`/t/${dupe.id}`}>
+                                        {dupe.symbol}
+                                    </Link>
+                                </li>
+                            </>
+                        ))}
+                        </ul>
+                    </>
+                }
 
                 <h4>Associated Pairs</h4>
                 <ul>
-                    {props.pairsToken0 && props.pairsToken0.map((pairToken0) => (
+                    {props.token.pairsToken0 && props.token.pairsToken0.map((pairToken0) => (
                         <li key={pairToken0.id}>
                             <a
                                 href={`/p/${pairToken0.id}`}>
@@ -124,7 +127,7 @@ const Token: React.FC<TokenProps> = (props) => {
                             </a>
                         </li>
                     ))}
-                    {props.pairsToken1 && props.pairsToken1.map((pairToken1) => (
+                    {props.token.pairsToken1 && props.token.pairsToken1.map((pairToken1) => (
                         <li key={pairToken1.id}>
                             <Link
                                 href={`/p/${pairToken1.id}`}>
