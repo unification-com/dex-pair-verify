@@ -3,6 +3,8 @@ import { GetStaticProps } from "next"
 import Layout from "../components/Layout"
 import prisma from '../lib/prisma';
 import Link from "next/link";
+import ChainName from "../components/ChainName";
+import DexName from "../components/DexName";
 
 export const getStaticProps: GetStaticProps = async () => {
   const feed = await prisma.pair.findMany({
@@ -38,10 +40,10 @@ const Blog: React.FC<Props> = (props) => {
           {props.feed.map((pair) => (
               <tr key={pair.id}>
                 <td>
-                  {pair.chain}
+                  <ChainName chain={pair.chain}/>
                 </td>
                 <td>
-                  {pair.dex}
+                  <DexName dex={pair.dex}/>
                 </td>
                 <td>
                   <Link

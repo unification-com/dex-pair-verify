@@ -2,10 +2,17 @@ import React, {FormEvent, useState} from "react"
 import { GetServerSideProps } from "next"
 import Layout from "../../components/Layout"
 import prisma from '../../lib/prisma';
-import Link from "next/link";
 import Router from "next/router";
 import {NotificationManager} from 'react-notifications';
+import { NumericFormat } from 'react-number-format';
 import Status from "../../components/Status";
+import {PairProps, PairPropsNoToken} from "../../types/props";
+import PoolUrl from "../../components/PoolUrl";
+import ExplorerUrl from "../../components/ExplorerUrl";
+import ChainName from "../../components/ChainName";
+import DexName from "../../components/DexName";
+import NativeToken from "../../components/NativeToken";
+import Link from "next/link";
 
 
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
@@ -16,46 +23,45 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
     },
     include: {
       token0: {
-        select: { symbol: true, id: true, contractAddress: true, status: true },
+        select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true },
       },
       token1: {
-        select: { symbol: true, id: true, contractAddress: true, status: true },
+        select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true },
       },
     },
   });
+
+  const duplicates = await prisma.pair.findMany({
+    where: {
+      chain: pair.chain,
+      dex: pair.dex,
+      id: {
+        not: pair.id,
+      },
+      OR: [
+        {
+          pair: `${pair.token0.symbol}-${pair.token1.symbol}`,
+        },
+        {
+          pair: `${pair.token1.symbol}-${pair.token0.symbol}`,
+        },
+      ],
+    },
+  });
+
   return {
-    props: pair,
+    props: {pair, duplicates},
   }
 }
 
-type PairProps = {
-  id: string;
-  chain: string;
-  dex: string;
-  contractAddress: string;
-  pair: string;
-  token0: {
-    id: string;
-    symbol: string;
-    contractAddress: string;
-    status: number;
-  } | null;
-  token1: {
-    id: string;
-    symbol: string;
-    contractAddress: string;
-    status: number;
-  } | null;
-  reserveUsd: number;
-  volumeUsd: number
-  txCount: number;
-  status: number;
-  verificationMethod: string;
-};
+type Props = {
+  pair: PairProps;
+  duplicates: PairPropsNoToken[];
+}
 
-const Pair: React.FC<PairProps> = (props) => {
+const Pair: React.FC<Props> = (props) => {
 
-  const [currentStatus, setCurrentStatus] = useState(props.status)
+  const [currentStatus, setCurrentStatus] = useState(props.pair.status)
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -78,54 +84,12 @@ const Pair: React.FC<PairProps> = (props) => {
 
   }
 
-  const poolUrls = {
-    bscpancakeswap_v2: "https://pancakeswap.finance/info/v2/pairs/",
-    ethshibaswap: "https://analytics.shibaswap.com/pairs/",
-    ethsushiswap: "https://www.sushi.com/pool/1%3A",
-    ethuniswap_v2: "https://app.uniswap.org/explore/pools/ethereum/",
-    ethuniswap_v3: "https://app.uniswap.org/explore/pools/ethereum/",
-    polygon_posquickswap: "https://info.quickswap.exchange/#/pair/",
-    gnosishoneyswap: "https://info.honeyswap.org/#/pair/",
-    xdaihoneyswap: "https://info.honeyswap.org/#/pair/",
-  }
-
-  const explorerUrls = {
-    eth: "https://etherscan.io",
-    bsc: "https://bscscan.com",
-    polygon_pos: "https://polygonscan.com",
-    gnosis: "https://gnosis.blockscout.com",
-    xdai: "https://gnosis.blockscout.com",
-  }
-
-  const chainNames = {
-    eth: "Ethereum",
-    bsc: "BSC",
-    polygon_pos: "Polygon",
-    gnosis: "Gnosis (xdai)",
-    xdai: "Gnosis (xdai)"
-  }
-
-  const dexNames = {
-    pancakeswap_v2: "Pancakeswap V2",
-    shibaswap: "ShibaSwap",
-    sushiswap: "SushiSwap",
-    uniswap_v2: "Uniswap V2",
-    uniswap_v3: "Uniswap V3",
-    quickswap: "Quickswap",
-    honeyswap: "Honeyswap",
-  }
-
-  const explorer = explorerUrls[props.chain]
-  const pool = poolUrls[`${props.chain}${props.dex}`]
-  const chainName = chainNames[props.chain]
-  const dexName = dexNames[props.dex]
-
   let verifyPair = null;
 
-  if(props.token0.status !== 0 && props.token1.status !== 0) {
+  if(props.pair.token0.status !== 0 && props.pair.token1.status !== 0) {
 
     let verifyOpts = null
-    if(props.token0.status === 1 && props.token1.status === 1) {
+    if(props.pair.token0.status === 1 && props.pair.token1.status === 1) {
       verifyOpts = <>
         <option value="0">Unverified</option>
         <option value="1">Good</option>
@@ -142,7 +106,7 @@ const Pair: React.FC<PairProps> = (props) => {
       <select name="status" id="pairstatus">
         {verifyOpts}
       </select>
-      <input type={"hidden"} value={props.id} name={"pairid"}/>
+      <input type={"hidden"} value={props.pair.id} name={"pairid"}/>
       <button type="submit">Submit</button>
     </form>
   }
@@ -151,12 +115,11 @@ const Pair: React.FC<PairProps> = (props) => {
       <Layout>
         <div>
           <h1>Pair</h1>
-          <h2>{dexName} ({chainName})</h2>
+          <h2><DexName dex={props.pair.dex}/> (<ChainName chain={props.pair.chain}/>)</h2>
           <h3>
-            {props.pair} &nbsp;
-            <Link href={`${pool}${props.contractAddress}`}>
-              <a target="_blank">{props.contractAddress}</a>
-            </Link>
+            {props.pair.pair} <br/>
+            Pool Analytics: <PoolUrl chain={props.pair.chain} dex={props.pair.dex} contractAddress={props.pair.contractAddress}/><br/>
+            Explorer: <ExplorerUrl chain={props.pair.chain} contractAddress={props.pair.contractAddress} linkType={"address"}/>
           </h3>
 
           <h4>Pair Status: <Status status={currentStatus}/>
@@ -164,42 +127,75 @@ const Pair: React.FC<PairProps> = (props) => {
           </h4>
 
           <p>
-            Reserve USD: {props.reserveUsd}
+            Reserve USD: $<NumericFormat displayType="text" thousandSeparator="," value={props.pair.reserveUsd}/>
           </p>
           <p>
-            Volume USD: {props.volumeUsd}
+            Reserve Native: <NumericFormat displayType="text" thousandSeparator=","
+                                           value={props.pair.reserveNativeCurrency}/> <NativeToken chain={props.pair.chain}/>
           </p>
           <p>
-            Tx Count: {props.txCount}
+            Reserve Token 0: <NumericFormat displayType="text" thousandSeparator=","
+                                            value={props.pair.reserve0}/> {props.pair.token0.symbol}
+          </p>
+          <p>
+            Reserve Token 1: <NumericFormat displayType="text" thousandSeparator=","
+                                            value={props.pair.reserve1}/> {props.pair.token1.symbol}
+          </p>
+          <p>
+            Volume USD: <NumericFormat displayType="text" thousandSeparator="," value={props.pair.volumeUsd}/>
+          </p>
+          <p>
+            Tx Count: <NumericFormat displayType="text" thousandSeparator="," value={props.pair.txCount}/>
           </p>
 
           <h4>Token 0</h4>
-          <p>Symbol: {props.token0.symbol}</p>
-          <p>Contract: &nbsp;
-            <Link href={`${explorer}/token/${props.token0.contractAddress}`}>
-              <a target="_blank">{props.token0.contractAddress}</a>
-            </Link>
+          <p>Symbol: {props.pair.token0.symbol}</p>
+          <p>Explorer: &nbsp;
+            <ExplorerUrl chain={props.pair.chain} contractAddress={props.pair.token0.contractAddress} linkType={"token"}/>
+          </p>
+          <p>
+            Tx Count: <NumericFormat displayType="text" thousandSeparator="," value={props.pair.token0.txCount}/>
           </p>
 
-          <p>Status: <Status status={props.token0.status}/>&nbsp;
-            <button onClick={() => Router.push("/t/[id]", `/t/${props.token0.id}`)}>
+          <p>Status: <Status status={props.pair.token0.status}/>&nbsp;
+            <button onClick={() => Router.push("/t/[id]", `/t/${props.pair.token0.id}`)}>
               <strong>Edit Token</strong>
             </button>
           </p>
 
           <h4>Token 1</h4>
-          <p>Symbol: {props.token1.symbol}</p>
-          <p>Contract: &nbsp;
-            <Link href={`${explorer}/token/${props.token1.contractAddress}`}>
-              <a target="_blank">{props.token1.contractAddress}</a>
-            </Link>
+          <p>Symbol: {props.pair.token1.symbol}</p>
+          <p>Explorer: &nbsp;
+            <ExplorerUrl chain={props.pair.chain} contractAddress={props.pair.token0.contractAddress} linkType={"token"}/>
+          </p>
+          <p>
+            Tx Count: <NumericFormat displayType="text" thousandSeparator="," value={props.pair.token1.txCount}/>
           </p>
 
-          <p>Status: <Status status={props.token1.status}/>&nbsp;
-            <button onClick={() => Router.push("/t/[id]", `/t/${props.token1.id}`)}>
+          <p>Status: <Status status={props.pair.token1.status}/>&nbsp;
+            <button onClick={() => Router.push("/t/[id]", `/t/${props.pair.token1.id}`)}>
               <strong>Edit Token</strong>
             </button>
           </p>
+
+          {
+              (props.duplicates.length) > 0 &&
+              <>
+                <h4>Possible Duplicates</h4>
+                <ul>
+                  {props.duplicates.map((dupe) => (
+                      <>
+                        <li key={dupe.id}>
+                          <Link
+                              href={`/p/${dupe.id}`}>
+                            {dupe.pair}
+                          </Link>
+                        </li>
+                      </>
+                  ))}
+                </ul>
+              </>
+          }
 
         </div>
 

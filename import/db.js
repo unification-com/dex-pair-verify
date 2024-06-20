@@ -29,7 +29,7 @@ const getOrAddStagingPair = async (chain, dex, contractAddress, token0Address, t
     return [pairDb, created]
 }
 
-const getOrAddToken = async (chain, contractAddress, name, symbol, status, verificationMethod) => {
+const getOrAddToken = async (chain, contractAddress, name, symbol, txCount, status, verificationMethod) => {
     let created = false
     let token = await prisma.token.findFirst({
         where: {
@@ -48,6 +48,7 @@ const getOrAddToken = async (chain, contractAddress, name, symbol, status, verif
                 contractAddress,
                 name,
                 symbol,
+                txCount: parseInt(txCount),
                 status,
                 verificationMethod,
             },
@@ -58,7 +59,22 @@ const getOrAddToken = async (chain, contractAddress, name, symbol, status, verif
     return [token, created]
 }
 
-const getOrAddPair = async (chain, dex, contractAddress, pair, t0Id, t1Id, reserveUsd, volumeUsd, txCount, status, verificationMethod) => {
+const getOrAddPair = async (
+    chain,
+    dex,
+    contractAddress,
+    pair,
+    t0Id,
+    t1Id,
+    reserveUsd,
+    reserveNativeCurrency,
+    reserve0,
+    reserve1,
+    volumeUsd,
+    txCount,
+    status,
+    verificationMethod
+) => {
     let created = false
     let pairDb = await prisma.pair.findFirst({
         where: {
@@ -80,6 +96,9 @@ const getOrAddPair = async (chain, dex, contractAddress, pair, t0Id, t1Id, reser
                 reserveUsd: parseFloat(reserveUsd),
                 volumeUsd: parseFloat(volumeUsd),
                 txCount: parseInt(txCount),
+                reserveNativeCurrency: parseFloat(reserveNativeCurrency),
+                reserve0: parseFloat(reserve0),
+                reserve1: parseFloat(reserve1),
                 status,
                 pair,
                 verificationMethod,

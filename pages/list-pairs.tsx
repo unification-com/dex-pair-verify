@@ -5,6 +5,8 @@ import prisma from '../lib/prisma';
 import Status from "../components/Status";
 import Link from "next/link";
 import Router from "next/router";
+import ChainName from "../components/ChainName";
+import DexName from "../components/DexName";
 
 export const getServerSideProps: GetServerSideProps = async ({ params, query }) => {
     const pairs = await prisma.pair.findMany({
@@ -23,7 +25,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params, query }) 
         },
         orderBy: [
             {
-                reserveUsd: 'desc',
+                reserveNativeCurrency: 'desc',
             },
         ],
     });
@@ -50,8 +52,8 @@ const ListPairs: React.FC<Props> = (props) => {
             <div className="page">
                 <h1><Status status={props.status}/> Pairs</h1>
                 <h2>
-                    Chain: {props.chain}<br />
-                    DEX: {props.dex}
+                    Chain: <ChainName chain={props.chain}/><br />
+                    DEX: <DexName dex={props.dex}/>
                 </h2>
                 <h3>
                     <Link

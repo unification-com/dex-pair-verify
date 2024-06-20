@@ -8,7 +8,10 @@ const dataSources = [
         toChecksumAddress: false,
         graphql: {
             poolName: "pairs",
-            totalValueLockedUSD: "reserveUSD",
+            reserveUSD: "reserveUSD",
+            reserveNativeCurrency: "reserveETH",
+            reserve0: "reserve0",
+            reserve1: "reserve1",
             txCount: "txCount",
             volumeUSD: "volumeUSD",
             url: `https://gateway-arbitrum.network.thegraph.com/api/${process.env.THEGRAPH_API_KEY}/subgraphs/id/EYCKATKGBKLWvSfwvBjzfCBmGwYNdVkduYXVivCsLRFu`,
@@ -17,15 +20,20 @@ const dataSources = [
                     pairs(where: {id_in: [${addresses}]}) {
                         id
                         reserveUSD
+                        reserveETH
+                        reserve0
+                        reserve1
                         token0 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         token1 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         txCount
                         volumeUSD
@@ -36,7 +44,7 @@ const dataSources = [
                 return gql`{
                     pairs(
                         first: 1000,
-                        orderBy: reserveUSD,
+                        orderBy: reserveETH,
                         orderDirection: desc,
                         where : {
                             reserveUSD_gt: "100000",
@@ -45,15 +53,20 @@ const dataSources = [
                     ) {
                         id
                         reserveUSD
+                        reserveETH
+                        reserve0
+                        reserve1
                         token0 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         token1 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         txCount
                         volumeUSD
@@ -69,7 +82,10 @@ const dataSources = [
         toChecksumAddress: false,
         graphql: {
             poolName: "pools",
-            totalValueLockedUSD: "totalValueLockedUSD",
+            reserveUSD: "totalValueLockedUSD",
+            reserveNativeCurrency: "totalValueLockedETH",
+            reserve0: "totalValueLockedToken0",
+            reserve1: "totalValueLockedToken1",
             txCount: "txCount",
             volumeUSD: "volumeUSD",
             url: `https://gateway-arbitrum.network.thegraph.com/api/${process.env.THEGRAPH_API_KEY}/subgraphs/id/5zvR82QoaXYFyDEKLZ9t6v9adgnptxYpKpSbxtgVENFV`,
@@ -79,19 +95,24 @@ const dataSources = [
                         where: {id_in: [${addresses}]}
                     ) {
                         id
-                        totalValueLockedUSD
-                        txCount
-                        volumeUSD
                         token1 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         token0 {
                             id
                             name
                             symbol
+                            txCount
                         }
+                        totalValueLockedUSD
+                        totalValueLockedETH
+                        totalValueLockedToken0
+                        totalValueLockedToken1
+                        txCount
+                        volumeUSD
                     }
                 }
                 `
@@ -100,7 +121,7 @@ const dataSources = [
                 return gql`{
                     pools(
                         first: 1000,
-                        orderBy: totalValueLockedUSD,
+                        orderBy: totalValueLockedETH,
                         orderDirection: desc,
                         where : {
                             totalValueLockedUSD_gt: "100000",
@@ -108,17 +129,22 @@ const dataSources = [
                         }
                     ) {
                         id
-                        totalValueLockedUSD
                         token0 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         token1 {
                             id
                             name
                             symbol
+                            txCount
                         }
+                        totalValueLockedUSD
+                        totalValueLockedETH
+                        totalValueLockedToken0
+                        totalValueLockedToken1
                         txCount
                         volumeUSD
                     }
@@ -133,7 +159,10 @@ const dataSources = [
         toChecksumAddress: false,
         graphql: {
             poolName: "pairs",
-            totalValueLockedUSD: "reserveUSD",
+            reserveUSD: "reserveUSD",
+            reserveNativeCurrency: "reserveETH",
+            reserve0: "reserve0",
+            reserve1: "reserve1",
             txCount: "txCount",
             volumeUSD: "volumeUSD",
             url: `https://gateway-arbitrum.network.thegraph.com/api/${process.env.THEGRAPH_API_KEY}/subgraphs/id/6NUtT5mGjZ1tSshKLf5Q3uEEJtjBZJo1TpL5MXsUBqrT`,
@@ -142,15 +171,20 @@ const dataSources = [
                     pairs(where: {id_in: [${addresses}]}) {
                         id
                         reserveUSD
+                        reserveETH
+                        reserve0
+                        reserve1
                         token0 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         token1 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         txCount
                         volumeUSD
@@ -161,7 +195,7 @@ const dataSources = [
                 return gql`{
                     pairs(
                         first: 1000,
-                        orderBy: reserveUSD,
+                        orderBy: reserveETH,
                         orderDirection: desc,
                         where : {
                             reserveUSD_gt: "100000",
@@ -170,15 +204,20 @@ const dataSources = [
                     ) {
                         id
                         reserveUSD
+                        reserveETH
+                        reserve0
+                        reserve1
                         token0 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         token1 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         txCount
                         volumeUSD
@@ -194,7 +233,10 @@ const dataSources = [
         toChecksumAddress: false,
         graphql: {
             poolName: "pairs",
-            totalValueLockedUSD: "reserveUSD",
+            reserveUSD: "reserveUSD",
+            reserveNativeCurrency: "reserveETH",
+            reserve0: "reserve0",
+            reserve1: "reserve1",
             txCount: "txCount",
             volumeUSD: "volumeUSD",
             url: `https://gateway-arbitrum.network.thegraph.com/api/${process.env.THEGRAPH_API_KEY}/subgraphs/id/61LXXvGA1KXkJZbCceYqw9APcwTGefK5MytwnVsdAQpw`,
@@ -203,15 +245,20 @@ const dataSources = [
                     pairs(where: {id_in: [${addresses}]}) {
                         id
                         reserveUSD
+                        reserveETH
+                        reserve0
+                        reserve1
                         token0 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         token1 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         txCount
                         volumeUSD
@@ -222,7 +269,7 @@ const dataSources = [
                 return gql`{
                     pairs(
                         first: 1000,
-                        orderBy: reserveUSD,
+                        orderBy: reserveETH,
                         orderDirection: desc,
                         where : {
                             reserveUSD_gt: "50000",
@@ -231,15 +278,20 @@ const dataSources = [
                     ) {
                         id
                         reserveUSD
+                        reserveETH
+                        reserve0
+                        reserve1
                         token0 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         token1 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         txCount
                         volumeUSD
@@ -255,7 +307,10 @@ const dataSources = [
         toChecksumAddress: true,
         graphql: {
             poolName: "pairs",
-            totalValueLockedUSD: "reserveUSD",
+            reserveUSD: "reserveUSD",
+            reserveNativeCurrency: "reserveBNB",
+            reserve0: "reserve0",
+            reserve1: "reserve1",
             txCount: "totalTransactions",
             volumeUSD: "volumeUSD",
             url: `https://open-platform.nodereal.io/${process.env.NODEREAL_API_KEY}/pancakeswap-free/graphql`,
@@ -264,15 +319,20 @@ const dataSources = [
                     pairs(where: {id_in: [${addresses}]}) {
                         id
                         reserveUSD
+                        reserveBNB
+                        reserve0
+                        reserve1
                         token0 {
                             id
                             name
                             symbol
+                            totalTransactions
                         }
                         token1 {
                             id
                             name
                             symbol
+                            totalTransactions
                         }
                         volumeUSD
                         totalTransactions
@@ -291,15 +351,20 @@ const dataSources = [
                     ) {
                         id
                         reserveUSD
+                        reserveBNB
+                        reserve0
+                        reserve1
                         token0 {
                             id
                             name
                             symbol
+                            totalTransactions
                         }
                         token1 {
                             id
                             name
                             symbol
+                            totalTransactions
                         }
                         volumeUSD
                         totalTransactions
@@ -310,56 +375,74 @@ const dataSources = [
     },
     {
         chain: "polygon_pos",
-        dex: "quickswap",
+        dex: "quickswap_v3",
         last_page: 10,
         toChecksumAddress: false,
         graphql: {
-            poolName: "pairs",
-            totalValueLockedUSD: "reserveUSD",
-            txCount: null,
+            poolName: "pools",
+            reserveUSD: "totalValueLockedUSD",
+            reserveNativeCurrency: "totalValueLockedMatic",
+            reserve0: "totalValueLockedToken0",
+            reserve1: "totalValueLockedToken1",
+            txCount: "txCount",
             volumeUSD: "volumeUSD",
-            url: `https://gateway-arbitrum.network.thegraph.com/api/${process.env.THEGRAPH_API_KEY}/subgraphs/id/FUWdkXWpi8JyhAnhKL5pZcVshpxuaUQG8JHMDqNCxjPd`,
+            url: `https://gateway-arbitrum.network.thegraph.com/api/${process.env.THEGRAPH_API_KEY}/subgraphs/id/FqsRcH1XqSjqVx9GRTvEJe959aCbKrcyGgDWBrUkG24g`,
             funcQueryWithAddressList: function (addresses) {
                 return gql`{
-                    pairs(where: {id_in: [${addresses}]}) {
+                    pools(
+                        where: {id_in: [${addresses}]}
+                    ) {
                         id
-                        reserveUSD
-                        token0 {
-                            id
-                            name
-                            symbol
-                        }
                         token1 {
                             id
                             name
                             symbol
+                            txCount
                         }
+                        token0 {
+                            id
+                            name
+                            symbol
+                            txCount
+                        }
+                        totalValueLockedUSD
+                        totalValueLockedMatic
+                        totalValueLockedToken0
+                        totalValueLockedToken1
+                        txCount
                         volumeUSD
                     }
                 }`
             },
             funcQueryTop1000: function () {
                 return gql`{
-                    pairs(
+                    pools(
                         first: 1000,
-                        orderBy: reserveUSD,
+                        orderBy: totalValueLockedMatic,
                         orderDirection: desc,
                         where : {
-                            reserveUSD_gt: "100000"
+                            totalValueLockedUSD_gt: "100000",
+                            txCount_gt: "1000"
                         }
                     ) {
                         id
-                        reserveUSD
                         token0 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         token1 {
                             id
                             name
                             symbol
+                            txCount
                         }
+                        totalValueLockedUSD
+                        totalValueLockedMatic
+                        totalValueLockedToken0
+                        totalValueLockedToken1
+                        txCount
                         volumeUSD
                     }
                 }`
@@ -373,7 +456,10 @@ const dataSources = [
         toChecksumAddress: false,
         graphql: {
             poolName: "pairs",
-            totalValueLockedUSD: "reserveUSD",
+            reserveUSD: "reserveUSD",
+            reserveNativeCurrency: "reserveNativeCurrency",
+            reserve0: "reserve0",
+            reserve1: "reserve1",
             txCount: "txCount",
             volumeUSD: "volumeUSD",
             url: `https://gateway-arbitrum.network.thegraph.com/api/${process.env.THEGRAPH_API_KEY}/subgraphs/id/HTxWvPGcZ5oqWLYEVtWnVJDfnai2Ud1WaABiAR72JaSJ`,
@@ -382,15 +468,20 @@ const dataSources = [
                     pairs(where: {id_in: [${addresses}]}) {
                         id
                         reserveUSD
+                        reserveNativeCurrency
+                        reserve0
+                        reserve1
                         token0 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         token1 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         txCount
                         volumeUSD
@@ -401,7 +492,7 @@ const dataSources = [
                 return gql`{
                     pairs(
                         first: 1000,
-                        orderBy: reserveUSD,
+                        orderBy: reserveNativeCurrency,
                         orderDirection: desc,
                         where : {
                             reserveUSD_gt: "10000",
@@ -410,15 +501,20 @@ const dataSources = [
                     ) {
                         id
                         reserveUSD
+                        reserveNativeCurrency
+                        reserve0
+                        reserve1
                         token0 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         token1 {
                             id
                             name
                             symbol
+                            txCount
                         }
                         txCount
                         volumeUSD

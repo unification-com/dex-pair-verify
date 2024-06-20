@@ -7,8 +7,8 @@ Verified pairs are exported and used by OoO clients for AdHoc queries
 ```bash
 nvm use
 yarn install
-npx prisma db push
-npx prisma generate
+yarn prisma db push --force-reset
+yarn prisma generate
 node import/geckoterminal.js
 node import/graphql.js
 yarn run dev
