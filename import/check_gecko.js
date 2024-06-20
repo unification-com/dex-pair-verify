@@ -110,13 +110,33 @@ const processPairsForChain = async(chain, dex) => {
             for(let k = 0; k < pDataJson.data.length; k += 1) {
                 const pData = pDataJson.data[k].attributes
 
+                let pcp24h = 0
+                let buys = 0
+                let sells = 0
+                let buyers = 0
+                let sellers = 0
+                let vol24h = 0
+                
                 const mc = (pData.market_cap_usd === null) ? 0 : pData.market_cap_usd
-                const pcp24h = (pData.price_change_percentage.h24 === null) ? 0 : pData.price_change_percentage.h24
-                const buys = (pData.transactions.h24.buys === null) ? 0 : pData.transactions.h24.buys
-                const sells = (pData.transactions.h24.sells === null) ? 0 : pData.transactions.h24.sells
-                const buyers = (pData.transactions.h24.buyers === null) ? 0 : pData.transactions.h24.buyers
-                const sellers = (pData.transactions.h24.sellers === null) ? 0 : pData.transactions.h24.sellers
-                const vol24h = (pData.volume_usd.h24 === null) ? 0 : pData.volume_usd.h24
+
+                if(pData?.price_change_percentage !== null) {
+                    pcp24h = (pData.price_change_percentage?.h24 === null) ? 0 : pData.price_change_percentage.h24
+                }
+                if(pData.transactions !== null) {
+                    buys = (pData.transactions.h24?.buys === null) ? 0 : pData.transactions.h24?.buys
+                }
+                if(pData.transactions !== null) {
+                    sells = (pData.transactions.h24?.sells === null) ? 0 : pData.transactions.h24?.sells
+                }
+                if(pData.transactions !== null) {
+                    buyers = (pData.transactions.h24?.buyers === null) ? 0 : pData.transactions.h24?.buyers
+                }
+                if(pData.transactions !== null) {
+                    sellers = (pData.transactions.h24?.sellers === null) ? 0 : pData.transactions.h24?.sellers
+                }
+                if(pData?.volume_usd !== null) {
+                    vol24h = (pData.volume_usd?.h24 === null) ? 0 : pData.volume_usd.h24
+                }
 
                 let tId = null
                 for(let t = 0; t < pairList.length; t += 1) {
