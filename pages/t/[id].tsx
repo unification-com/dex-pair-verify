@@ -12,6 +12,7 @@ import ExplorerUrl from "../../components/ExplorerUrl";
 import {NumericFormat} from "react-number-format";
 import CoinGeckoCoinLink from "../../components/CoinGeckoCoinLink";
 import SortableTable from "../../components/SortableTable/SortableTable";
+import Router from "next/router";
 
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
 
@@ -80,7 +81,7 @@ const Token: React.FC<Props> = (props) => {
 
         // Handle response if necessary
         const res = await response.json()
-        if(res.success) {
+        if (res.success) {
             NotificationManager.success("Success!", `Status changed to ${res.data.new_status}`, 5000);
             setCurrentStatus(res.data.new_status)
         } else {
@@ -90,22 +91,46 @@ const Token: React.FC<Props> = (props) => {
     }
 
     const columns = [
-        { label: "Symbol", accessor: "symbol", sortable: true, sortbyOrder: "asc", cellType: "display" },
-        { label: "Name", accessor: "name", sortable: true, cellType: "display" },
-        { label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number" },
-        { label: "Market Cap USD", accessor: "marketCapUsd", sortable: true, cellType: "usd" },
-        { label: "24h Volume", accessor: "volume24hUsd", sortable: true, cellType: "usd" },
-        { label: "Status", accessor: "status", sortable: true, cellType: "status" },
-        { label: "Edit", accessor: "id", sortable: false, cellType: "edit_button", router: {url: "/t/[id]", as: "/t/__ID__"} },
+        {label: "Symbol", accessor: "symbol", sortable: true, sortbyOrder: "asc", cellType: "display"},
+        {label: "Name", accessor: "name", sortable: true, cellType: "display"},
+        {label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number"},
+        {label: "Market Cap USD", accessor: "marketCapUsd", sortable: true, cellType: "usd"},
+        {label: "24h Volume", accessor: "volume24hUsd", sortable: true, cellType: "usd"},
+        {label: "Status", accessor: "status", sortable: true, cellType: "status"},
+        {
+            label: "Edit",
+            accessor: "id",
+            sortable: false,
+            cellType: "edit_button",
+            router: {url: "/t/[id]", as: "/t/__ID__"}
+        },
     ];
 
     const duplicateTokens = []
 
-    if(props.token.duplicateTokenSymbols.length > 0) {
-        for(let i = 0; i < props.token.duplicateTokenSymbols.length; i += 1) {
+    if (props.token.duplicateTokenSymbols.length > 0) {
+        for (let i = 0; i < props.token.duplicateTokenSymbols.length; i += 1) {
             duplicateTokens.push(props.token.duplicateTokenSymbols[i].duplicateToken)
         }
     }
+
+    const associatedPairs = props.token.pairsToken1.concat(props.token.pairsToken0)
+
+    const assocPairColumns = [
+        {label: "Pair", accessor: "pair", sortable: true, sortbyOrder: "asc", cellType: "display"},
+        {label: "Reserve USD", accessor: "reserveUsd", sortable: true, cellType: "usd"},
+        {label: "Reserve Native", accessor: "reserveNativeCurrency", sortable: true, cellType: "number"},
+        {label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number"},
+        {label: "Total Volume USD (DEX)", accessor: "volumeUsd", sortable: true, cellType: "usd"},
+        {label: "Status", accessor: "status", sortable: true, cellType: "status"},
+        {
+            label: "Edit",
+            accessor: "id",
+            sortable: false,
+            cellType: "edit_button",
+            router: {url: "/p/[id]", as: "/p/__ID__"}
+        },
+    ]
 
     return (
         <Layout>
@@ -133,6 +158,10 @@ const Token: React.FC<Props> = (props) => {
                 <input type={"hidden"} value={props.token.id} name={"tokenid"}/>
                 <button type="submit">Submit</button>
             </form>
+
+                <p><strong>Note:</strong> Setting the token status to "Fake/Dupe" will automatically set the status of
+                    ALL
+                    associated pairs to Fake/Dupe</p>
 
                 <h4>Stats</h4>
                 <table>
@@ -163,10 +192,6 @@ const Token: React.FC<Props> = (props) => {
                     </tbody>
                 </table>
 
-                <p><strong>Note:</strong> Setting the token status to "Fake/Dupe" will automatically set the status of
-                    ALL
-                    associated pairs to Fake/Dupe</p>
-
                 {
                     (duplicateTokens.length) > 0 &&
                     <>
@@ -182,75 +207,12 @@ const Token: React.FC<Props> = (props) => {
 
                 <h4>Associated Pairs</h4>
 
-                <table>
-                    <thead>
-                    <tr>
-                        <th>Pair</th>
-                        <th>Reserve USD</th>
-                        <th>Reserve Native</th>
-                        <th>Tx Count</th>
-                        <th>Total Volume USD</th>
-                        <th>Status</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {props.token.pairsToken0 && props.token.pairsToken0.map((pairToken0) => (
-                        <tr key={pairToken0.id}>
-                            <td>
-                                <Link
-                                    href={`/p/${pairToken0.id}`}>
-                                    {pairToken0.pair}
-                                </Link>
-                            </td>
-                            <td>
-                                $<NumericFormat displayType="text" thousandSeparator="," value={pairToken0.reserveUsd}/>
-                            </td>
-                            <td>
-                                <NumericFormat displayType="text" thousandSeparator=","
-                                               value={pairToken0.reserveNativeCurrency}/>
-                            </td>
-                            <td>
-                                <NumericFormat displayType="text" thousandSeparator=","
-                                               value={pairToken0.txCount}/>
-                            </td>
-                            <td>
-                                $<NumericFormat displayType="text" thousandSeparator="," value={pairToken0.volumeUsd}/>
-                            </td>
-                            <td>
-                                <Status status={pairToken0.status} method={""}/>
-                            </td>
-                        </tr>
-                    ))}
-                    {props.token.pairsToken1 && props.token.pairsToken1.map((pairToken1) => (
-                        <tr key={pairToken1.id}>
-                            <td>
-                                <Link
-                                    href={`/p/${pairToken1.id}`}>
-                                    {pairToken1.pair}
-                                </Link>
-                            </td>
-                            <td>
-                                $<NumericFormat displayType="text" thousandSeparator="," value={pairToken1.reserveUsd}/>
-                            </td>
-                            <td>
-                                <NumericFormat displayType="text" thousandSeparator=","
-                                               value={pairToken1.reserveNativeCurrency}/>
-                            </td>
-                            <td>
-                                <NumericFormat displayType="text" thousandSeparator=","
-                                               value={pairToken1.txCount}/>
-                            </td>
-                            <td>
-                                $<NumericFormat displayType="text" thousandSeparator="," value={pairToken1.volumeUsd}/>
-                            </td>
-                            <td>
-                                <Status status={pairToken1.status} method={""}/>
-                            </td>
-                        </tr>
-                    ))}
-                    </tbody>
-                </table>
-
+                <SortableTable
+                    key={`associated_pairs_list_${props.token.id}`}
+                    caption=""
+                    data={associatedPairs}
+                    columns={assocPairColumns}
+                />
             </div>
         </Layout>
     )
