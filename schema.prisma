@@ -5,19 +5,19 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url = env("POSTGRES_PRISMA_URL") // uses connection pooling
+  provider  = "postgresql"
+  url       = env("POSTGRES_PRISMA_URL") // uses connection pooling
   directUrl = env("POSTGRES_URL_NON_POOLING") // uses a direct connection
 }
 
 model Pair {
-  id                       String     @default(cuid()) @id
+  id                       String @id @default(cuid())
   chain                    String
   dex                      String
   contractAddress          String
-  token0                   Token      @relation("Token0", fields: [token0Id], references: [id])
+  token0                   Token  @relation("Token0", fields: [token0Id], references: [id])
   token0Id                 String
-  token1                   Token      @relation("Token1", fields: [token1Id], references: [id])
+  token1                   Token  @relation("Token1", fields: [token1Id], references: [id])
   token1Id                 String
   pair                     String
   reserve0                 Float
@@ -36,6 +36,9 @@ model Pair {
   status                   Int
   verificationMethod       String
   lastChecked              Int
+  duplicatePairs           DuplicatePairs[] @relation("OriginalPair")
+  dp2                      DuplicatePairs[] @relation("DuplicatePair")
+
   @@index([contractAddress(sort: Desc), chain, dex])
   @@index([dex, chain])
   @@index([dex, pair])
@@ -45,22 +48,25 @@ model Pair {
 }
 
 model Token {
-  id                 String       @default(cuid()) @id
-  chain              String
-  contractAddress    String
-  symbol             String
-  name               String
-  status             Int
-  verificationMethod String
-  txCount            Int
-  coingeckoCoinId    String
-  totalSupply        Float
-  volume24hUsd       Float
-  marketCapUsd       Float
-  decimals           Int
-  lastChecked        Int
-  pairsToken0        Pair[]      @relation("Token0")
-  pairsToken1        Pair[]      @relation("Token1")
+  id                    String                  @id @default(cuid())
+  chain                 String
+  contractAddress       String
+  symbol                String
+  name                  String
+  status                Int
+  verificationMethod    String
+  txCount               Int
+  coingeckoCoinId       String
+  totalSupply           Float
+  volume24hUsd          Float
+  marketCapUsd          Float
+  decimals              Int
+  lastChecked           Int
+  pairsToken0           Pair[]                  @relation("Token0")
+  pairsToken1           Pair[]                  @relation("Token1")
+  duplicateTokenSymbols DuplicateTokenSymbols[] @relation("OriginalToken")
+  dt2                   DuplicateTokenSymbols[] @relation("DuplicateToken")
+
   @@index([contractAddress(sort: Desc), chain])
   @@index([chain])
   @@index([symbol])
@@ -68,13 +74,43 @@ model Token {
 }
 
 model PairStaging {
-  id              String     @default(cuid()) @id
+  id              String @id @default(cuid())
   chain           String
   dex             String
   contractAddress String
   token0Address   String
   token1Address   String
+
   @@index([dex, chain])
   @@index([dex, chain, contractAddress])
   @@index([dex, chain, contractAddress, token0Address, token1Address])
+}
+
+model DuplicateTokenSymbols {
+  id               Int    @id @default(autoincrement())
+  originalToken    Token  @relation("OriginalToken", fields: [originalTokenId], references: [id])
+  originalTokenId  String
+  duplicateToken   Token  @relation("DuplicateToken", fields: [duplicateTokenId], references: [id])
+  duplicateTokenId String
+  chain            String
+
+  @@index([chain])
+  @@index([originalTokenId])
+  @@index([duplicateTokenId])
+}
+
+model DuplicatePairs {
+  id              Int    @id @default(autoincrement())
+  originalPair    Pair   @relation("OriginalPair", fields: [originalPairId], references: [id])
+  originalPairId  String
+  duplicatePair   Pair   @relation("DuplicatePair", fields: [duplicatePairId], references: [id])
+  duplicatePairId String
+  chain           String
+  dex             String
+
+  @@index([chain])
+  @@index([dex])
+  @@index([chain, dex])
+  @@index([originalPairId])
+  @@index([duplicatePairId])
 }

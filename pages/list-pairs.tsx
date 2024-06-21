@@ -7,6 +7,7 @@ import Link from "next/link";
 import Router from "next/router";
 import ChainName from "../components/ChainName";
 import DexName from "../components/DexName";
+import SortableTable from "../components/SortableTable/SortableTable";
 
 export const getServerSideProps: GetServerSideProps = async ({ params, query }) => {
     const pairs = await prisma.pair.findMany({
@@ -21,6 +22,9 @@ export const getServerSideProps: GetServerSideProps = async ({ params, query }) 
             },
             token1: {
                 select: { symbol: true, id: true, contractAddress: true, status: true },
+            },
+            _count: {
+                select: { duplicatePairs: true },
             },
         },
         orderBy: [
@@ -47,12 +51,31 @@ type Props = {
 }
 
 const ListPairs: React.FC<Props> = (props) => {
+    const columns = [
+        {label: "Pair", accessor: "pair", sortable: true, sortbyOrder: "asc", cellType: "display"},
+        // {label: "Token 0", accessor: "token0.symbol", sortable: true, cellType: "display"},
+        {label: "(Token 0 Status)", accessor: "token0.status", sortable: true, cellType: "status"},
+        // {label: "Token 1", accessor: "token1.symbol", sortable: true, cellType: "display"},
+        {label: "(Token 1 Status)", accessor: "token1.status", sortable: true, cellType: "status"},
+        { label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number" },
+        { label: "Market Cap USD", accessor: "marketCapUsd", sortable: true, cellType: "usd" },
+        { label: "24h Volume", accessor: "volumeUsd24h", sortable: true, cellType: "usd" },
+        {label: "Possible Duplicates", accessor: "_count.duplicatePairs", sortable: true, cellType: "number"},
+        {
+            label: "Edit",
+            accessor: "id",
+            sortable: false,
+            cellType: "edit_button",
+            router: {url: "/p/[id]", as: "/p/__ID__"}
+        },
+    ];
+
     return (
         <Layout>
             <div className="page">
-                <h1><Status status={props.status}/> Pairs</h1>
+                <h1><Status status={props.status} method={""} /> Pairs</h1>
                 <h2>
-                    Chain: <ChainName chain={props.chain}/><br />
+                    Chain: <ChainName chain={props.chain}/><br/>
                     DEX: <DexName dex={props.dex}/>
                 </h2>
                 <h3>
@@ -73,48 +96,24 @@ const ListPairs: React.FC<Props> = (props) => {
                     &nbsp;|&nbsp;
                     <Link
                         href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=3`}>
-                        <a>Fake/Bad</a>
+                        <a>Fake/Bad/Not Usable</a>
                     </Link>
                 </h3>
                 <main>
                     {
                         (props.status === 2) && <>
-                        <p>
-                            <strong>Note:</strong> Duplicate includes both duplicate pairs and pairs that may contain duplicate token symbols
-                        </p>
+                            <p>
+                                <strong>Note:</strong> Duplicate includes both duplicate pairs and pairs that may contain
+                                duplicate token symbols
+                            </p>
                         </>
                     }
-                    <table>
-                        <thead>
-                        <tr>
-                            <th>Pair</th>
-                            <th>Token 0</th>
-                            <th>(Token 0 Status)</th>
-                            <th>Token 1</th>
-                            <th>(Token 1 Status)</th>
-                            <th>Verification Method</th>
-                            <th></th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {props.pairs.map((pair) => (
-                            <tr key={pair.id} className="pair">
-                                <td>{pair.pair}</td>
-                                <td><strong>{pair.token0.symbol}</strong></td>
-                                <td><Status status={pair.token0.status}/></td>
-                                <td><strong>{pair.token1.symbol}</strong></td>
-                                <td><Status status={pair.token1.status}/></td>
-                                <td>{pair.verificationMethod}</td>
-                                <td>
-                                    <button onClick={() => Router.push("/p/[id]", `/p/${pair.id}`)}>
-                                        <strong>Edit Pair</strong>
-                                    </button>
-                                </td>
-                            </tr>
-                        ))}
-                        </tbody>
-                    </table>
-
+                    <SortableTable
+                        key={`pair_list_${props.chain}_${props.dex}_${props.status}`}
+                        caption=""
+                        data={props.pairs}
+                        columns={columns}
+                    />
                 </main>
             </div>
             <style jsx>{`

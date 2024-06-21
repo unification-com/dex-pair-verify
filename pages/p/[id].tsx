@@ -14,6 +14,7 @@ import DexName from "../../components/DexName";
 import NativeToken from "../../components/NativeToken";
 import Link from "next/link";
 import CoinGeckoPoolLink from "../../components/CoinGeckoPoolLink";
+import SortableTable from "../../components/SortableTable/SortableTable";
 
 
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
@@ -29,35 +30,22 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
       token1: {
         select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true },
       },
+      duplicatePairs: {
+        select: {
+          duplicatePair: true,
+        }
+      },
     },
   });
 
-  const duplicates = await prisma.pair.findMany({
-    where: {
-      chain: pair.chain,
-      dex: pair.dex,
-      id: {
-        not: pair.id,
-      },
-      OR: [
-        {
-          pair: `${pair.token0.symbol}-${pair.token1.symbol}`,
-        },
-        {
-          pair: `${pair.token1.symbol}-${pair.token0.symbol}`,
-        },
-      ],
-    },
-  });
 
   return {
-    props: {pair, duplicates},
+    props: {pair},
   }
 }
 
 type Props = {
   pair: PairProps;
-  duplicates: PairPropsNoToken[];
 }
 
 const Pair: React.FC<Props> = (props) => {
@@ -85,6 +73,29 @@ const Pair: React.FC<Props> = (props) => {
 
   }
 
+  const columns = [
+    { label: "Pair", accessor: "pair", sortable: true, sortbyOrder: "asc", cellType: "display" },
+    { label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number" },
+    { label: "Market Cap USD", accessor: "marketCapUsd", sortable: true, cellType: "usd" },
+    { label: "24h Volume", accessor: "volumeUsd24h", sortable: true, cellType: "usd" },
+    { label: "24h Price Change", accessor: "priceChangePercentage24h", sortable: true, cellType: "percent" },
+    { label: "# Buys (24h)", accessor: "buys24h", sortable: true, cellType: "number" },
+    { label: "# Buyers (24h)", accessor: "buys24h", sortable: true, cellType: "number" },
+    { label: "# Sells (24h)", accessor: "sells24h", sortable: true, cellType: "number" },
+    { label: "# Sellers (24h)", accessor: "sellers24h", sortable: true, cellType: "number" },
+    { label: "Status", accessor: "status", sortable: true, cellType: "status" },
+    { label: "Edit", accessor: "id", sortable: false, cellType: "edit_button", router: {url: "/p/[id]", as: "/p/__ID__"} },
+  ];
+
+  const duplicatePairs = []
+
+  if(props.pair.duplicatePairs.length > 0) {
+    for(let i = 0; i < props.pair.duplicatePairs.length; i += 1) {
+      duplicatePairs.push(props.pair.duplicatePairs[i].duplicatePair)
+    }
+  }
+
+
   let verifyPair = null;
   let verifyOpts = null
   if(props.pair.token0.status === 1 && props.pair.token1.status === 1) {
@@ -92,14 +103,14 @@ const Pair: React.FC<Props> = (props) => {
       <option value="0">Unverified</option>
       <option value="1">VERIFIED</option>
       <option value="2">Duplicate</option>
-      <option value="3">Fake/Bad</option>
+      <option value="3">Fake/Bad/Not Usable</option>
     </>
   } else {
     verifyOpts = <>
       <option value="0">Unverified</option>
       <option value="1" disabled={true}>VERIFIED</option>
       <option value="2">Duplicate</option>
-      <option value="3">Fake/Bad</option>
+      <option value="3">Fake/Bad/Not Usable</option>
     </>
   }
 
@@ -126,7 +137,7 @@ const Pair: React.FC<Props> = (props) => {
                                    linkType={"address"}/>
           </h3>
 
-          <h4>Pair Status: <Status status={currentStatus}/>
+          <h4>Pair Status: <Status status={currentStatus} method={props.pair.verificationMethod}/>
             {verifyPair}
           </h4>
 
@@ -138,10 +149,10 @@ const Pair: React.FC<Props> = (props) => {
             <tr>
               <th>Market Cap</th>
               <th>24h Change</th>
-              <th># Buys</th>
-              <th># Buyers</th>
-              <th># Sells</th>
-              <th># Sellers</th>
+              <th># Buys (24h)</th>
+              <th># Buyers (24h)</th>
+              <th># Sells (24h)</th>
+              <th># Sellers (24h)</th>
               <th>24h Volume</th>
             </tr>
             </thead>
@@ -249,21 +260,15 @@ const Pair: React.FC<Props> = (props) => {
           </p>
 
           {
-              (props.duplicates.length) > 0 &&
+              (duplicatePairs.length) > 0 &&
               <>
                 <h4>Possible Duplicates</h4>
-                <ul>
-                  {props.duplicates.map((dupe) => (
-                      <>
-                        <li key={dupe.id}>
-                          <Link
-                              href={`/p/${dupe.id}`}>
-                            {dupe.pair}
-                          </Link>
-                        </li>
-                      </>
-                  ))}
-                </ul>
+                <SortableTable
+                    key={`duplicatepair_list_${props.pair.id}`}
+                    caption=""
+                    data={duplicatePairs}
+                    columns={columns}
+                />
               </>
           }
 

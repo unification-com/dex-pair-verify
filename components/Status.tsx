@@ -1,6 +1,6 @@
 import React from "react";
 
-const Status: React.FC<{ status: number }> = ({ status }) => {
+const Status: React.FC<{ status: number, method: string }> = ({ status, method }) => {
 
     let statusStr = "Unverified"
     let statusClass = "status-unverified"
@@ -20,13 +20,14 @@ const Status: React.FC<{ status: number }> = ({ status }) => {
             statusClass = "status-dupe"
             break;
         case 3:
-            statusStr = "Fake/Bad";
+            statusStr = "Fake/Bad/Not Usable";
             statusClass = "status-bad"
             break;
     }
     return (
         <>
             <span className={statusClass}>{statusStr}</span>
+            {method && <> ({method})</>}
             <style jsx>{`
 
                 .status-verified {

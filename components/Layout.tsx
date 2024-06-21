@@ -14,6 +14,7 @@ const Layout: React.FC<Props> = (props) => (
     <Header />
     <div className="layout">{props.children}</div>
     <NotificationContainer/>
+      <br />
     <style jsx global>{`
       html {
         box-sizing: border-box;
@@ -52,6 +53,24 @@ const Layout: React.FC<Props> = (props) => (
           border: 1px solid #333;
           padding: 5px;
       }
+
+      .table th.up {
+          background-image: url("/images/up_arrow.png");
+      }
+      .table th.down {
+          background-image: url("/images/down_arrow.png");
+      }
+      .table th.default {
+          background-image: url("/images/default.png");
+      }
+      th.up,
+      th.default,
+      th.down {
+          cursor: pointer;
+          background-repeat: no-repeat;
+          background-position: center right;
+      }
+      
     `}</style>
     <style jsx>{`
       .layout {
