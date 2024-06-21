@@ -217,7 +217,7 @@ const Token: React.FC<Props> = (props) => {
                                 $<NumericFormat displayType="text" thousandSeparator="," value={pairToken0.volumeUsd}/>
                             </td>
                             <td>
-                                <Status status={pairToken0.status}/>
+                                <Status status={pairToken0.status} method={""}/>
                             </td>
                         </tr>
                     ))}
@@ -244,7 +244,7 @@ const Token: React.FC<Props> = (props) => {
                                 $<NumericFormat displayType="text" thousandSeparator="," value={pairToken1.volumeUsd}/>
                             </td>
                             <td>
-                                <Status status={pairToken1.status}/>
+                                <Status status={pairToken1.status} method={""}/>
                             </td>
                         </tr>
                     ))}
