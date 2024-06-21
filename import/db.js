@@ -168,6 +168,43 @@ const getTokensToFetchFromCoingecko = async (chain) => {
     })
 }
 
+const getAllTokenSymbolsForChain = async (chain) => {
+    return prisma.token.findMany({
+        select: {
+          id: true,
+          symbol: true,
+          chain: true,
+        },
+        where: {
+            chain,
+        },
+    })
+}
+
+const getOrAddDuplicateTokenSymbol = async (chain, originalTokenId, duplicateTokenId) => {
+    let created = false
+    let duplicate = await prisma.duplicateTokenSymbols.findFirst({
+        where: {
+            chain,
+            originalTokenId,
+            duplicateTokenId,
+        },
+    })
+
+    if (duplicate === null) {
+        duplicate = await prisma.duplicateTokenSymbols.create({
+            data: {
+                chain,
+                originalTokenId,
+                duplicateTokenId,
+            },
+        })
+        created = true
+    }
+
+    return [duplicate, created]
+}
+
 const getPairsToFetchFromCoingecko = async (chain, dex) => {
     const now = Math.floor(Date.now() / 1000)
     const yesterday = now - 86400
@@ -200,6 +237,50 @@ const updateTokenWithCoingeckoData = async (tId, coingeckoCoinId, totalSupply, d
         },
     })
 }
+
+const getAllPairsForChainDex = async (chain, dex) => {
+    return prisma.pair.findMany({
+        where: {
+            chain,
+            dex,
+        },
+        include: {
+            token0: {
+                select: {symbol: true},
+            },
+            token1: {
+                select: {symbol: true},
+            },
+        }
+    })
+}
+
+const getOrAddDuplicatePair = async (chain, dex, originalPairId, duplicatePairId) => {
+    let created = false
+    let duplicate = await prisma.duplicatePairs.findFirst({
+        where: {
+            chain,
+            dex,
+            originalPairId,
+            duplicatePairId,
+        },
+    })
+
+    if (duplicate === null) {
+        duplicate = await prisma.duplicatePairs.create({
+            data: {
+                chain,
+                dex,
+                originalPairId,
+                duplicatePairId,
+            },
+        })
+        created = true
+    }
+
+    return [duplicate, created]
+}
+
 
 const updatePairWithCoingeckoData = async (
     pId,
@@ -241,4 +322,8 @@ module.exports = {
     updateTokenWithCoingeckoData,
     getPairsToFetchFromCoingecko,
     updatePairWithCoingeckoData,
+    getAllTokenSymbolsForChain,
+    getOrAddDuplicateTokenSymbol,
+    getAllPairsForChainDex,
+    getOrAddDuplicatePair,
 }

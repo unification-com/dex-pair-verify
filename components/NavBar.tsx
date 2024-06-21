@@ -22,32 +22,34 @@ function Navbar() {
 
     return (
         <>
-            <Link href="/">
+            <span key={"navbar_home"}>
+                <Link href="/">
                 <a className="bold" data-active={isActive("/")}>
                     Home
                 </a>
-            </Link>
+                </Link>
+            </span>
             &nbsp;|&nbsp;
             Tokens:
             &nbsp;
             {nav.chains.map((chain) => (
-                <>
+                <span key={`navbar_token_${chain}`}>
                     <Link
                         href={`/list-tokens?chain=${encodeURIComponent(chain)}`}>
                         <a>{chain}</a>
                     </Link>&nbsp;&nbsp;&nbsp;
-                </>
+                </span>
             ))}
             &nbsp;|&nbsp;
             Pairs:
             &nbsp;
             {nav.dexs.map((dex) => (
-                <>
+                <span key={`navbar_token_${dex.c}_${dex.d}`}>
                     <Link
                         href={`/list-pairs?chain=${encodeURIComponent(dex.c)}&dex=${encodeURIComponent(dex.d)}`}>
                         <a>{dex.c}_{dex.d}</a>
                     </Link>&nbsp;&nbsp;&nbsp;
-                </>
+                </span>
             ))}
         </>
     );

@@ -34,6 +34,7 @@ export type PairProps = {
     volumeUsd24h: number,
     status: number;
     verificationMethod: string;
+    duplicatePairs: any | null
 };
 
 export type PairPropsNoToken = {
@@ -57,6 +58,7 @@ export type PairPropsNoToken = {
     volumeUsd24h: number,
     status: number;
     verificationMethod: string;
+    duplicatePairs: any | null
 };
 
 export type AssociatedPairProps = {
@@ -77,6 +79,7 @@ export type AssociatedPairProps = {
     sellers24h: number,
     volumeUsd24h: number,
     status: number;
+    duplicatePairs: any | null
 }
 
 export type TokenProps = {
@@ -96,4 +99,5 @@ export type TokenProps = {
     verificationMethod: string;
     pairsToken0: AssociatedPairProps[] | null;
     pairsToken1: AssociatedPairProps[] | null;
+    duplicateTokenSymbols: any | null;
 };

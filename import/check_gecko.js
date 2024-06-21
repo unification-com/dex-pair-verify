@@ -116,7 +116,7 @@ const processPairsForChain = async(chain, dex) => {
                 let buyers = 0
                 let sellers = 0
                 let vol24h = 0
-                
+
                 const mc = (pData.market_cap_usd === null) ? 0 : pData.market_cap_usd
 
                 if(pData?.price_change_percentage !== null) {
