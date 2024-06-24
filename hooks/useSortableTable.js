@@ -27,8 +27,20 @@ function getDefaultSorting(defaultTableData, columns) {
 export const useSortableTable = (data, columns) => {
     const [tableData, setTableData] = useState(getDefaultSorting(data, columns));
 
+    const handleFiltering = (filter) => {
+        if (filter) {
+            setTableData([ ...data.filter(row => {
+                return Object.values(row)
+                    .join('')
+                    .toLowerCase()
+                    .includes(filter.toLowerCase())
+            }) ])
+        } else {
+            setTableData(data)
+        }
+    }
+
     const handleSorting = (sortField, sortOrder) => {
-        console.log(sortField)
         if (sortField) {
             const sfArr = sortField.split(".")
             const sorted = [...tableData].sort((a, b) => {
@@ -51,5 +63,5 @@ export const useSortableTable = (data, columns) => {
         }
     };
 
-    return [tableData, handleSorting];
+    return [tableData, handleSorting, handleFiltering];
 };
