@@ -53,7 +53,8 @@ const ListTokens: React.FC<Props> = (props) => {
         { label: "24h Volume", accessor: "volume24hUsd", sortable: true, cellType: "usd" },
         { label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number" },
         { label: "Possible Duplicates", accessor: "_count.duplicateTokenSymbols", sortable: true, cellType: "display" },
-        { label: "Edit", accessor: "id", sortable: false, cellType: "edit_button", router: {url: "/t/[id]", as: "/t/__ID__"} },
+        // { label: "Edit", accessor: "id", sortable: false, cellType: "edit_button", router: {url: "/t/[id]", as: "/t/__ID__"} },
+        { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/t/__ID__", text: "View/Edit"} },
     ];
 
     return (

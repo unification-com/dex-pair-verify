@@ -61,13 +61,14 @@ const ListPairs: React.FC<Props> = (props) => {
         { label: "Market Cap USD", accessor: "marketCapUsd", sortable: true, cellType: "usd" },
         { label: "24h Volume", accessor: "volumeUsd24h", sortable: true, cellType: "usd" },
         {label: "Possible Duplicates", accessor: "_count.duplicatePairs", sortable: true, cellType: "number"},
-        {
-            label: "Edit",
-            accessor: "id",
-            sortable: false,
-            cellType: "edit_button",
-            router: {url: "/p/[id]", as: "/p/__ID__"}
-        },
+        // {
+        //     label: "Edit",
+        //     accessor: "id",
+        //     sortable: false,
+        //     cellType: "edit_button",
+        //     router: {url: "/p/[id]", as: "/p/__ID__"}
+        // },
+        { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/p/__ID__", text: "View/Edit"} },
     ];
 
     return (

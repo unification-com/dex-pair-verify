@@ -90,20 +90,14 @@ const Token: React.FC<Props> = (props) => {
 
     }
 
-    const columns = [
+    const duplicateColumns = [
         {label: "Symbol", accessor: "symbol", sortable: true, sortbyOrder: "asc", cellType: "display"},
         {label: "Name", accessor: "name", sortable: true, cellType: "display"},
         {label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number"},
         {label: "Market Cap USD", accessor: "marketCapUsd", sortable: true, cellType: "usd"},
         {label: "24h Volume", accessor: "volume24hUsd", sortable: true, cellType: "usd"},
         {label: "Status", accessor: "status", sortable: true, cellType: "status"},
-        {
-            label: "Edit",
-            accessor: "id",
-            sortable: false,
-            cellType: "edit_button",
-            router: {url: "/t/[id]", as: "/t/__ID__"}
-        },
+        { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/t/__ID__", text: "View/Edit"} },
     ];
 
     const duplicateTokens = []
@@ -123,13 +117,7 @@ const Token: React.FC<Props> = (props) => {
         {label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number"},
         {label: "Total Volume USD (DEX)", accessor: "volumeUsd", sortable: true, cellType: "usd"},
         {label: "Status", accessor: "status", sortable: true, cellType: "status"},
-        {
-            label: "Edit",
-            accessor: "id",
-            sortable: false,
-            cellType: "edit_button",
-            router: {url: "/p/[id]", as: "/p/__ID__"}
-        },
+        { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/p/__ID__", text: "View/Edit"} },
     ]
 
     return (
@@ -200,7 +188,7 @@ const Token: React.FC<Props> = (props) => {
                             key={`duplicatetoken_list_${props.token.id}`}
                             caption=""
                             data={duplicateTokens}
-                            columns={columns}
+                            columns={duplicateColumns}
                         />
                     </>
                 }

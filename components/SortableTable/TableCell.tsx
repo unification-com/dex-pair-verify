@@ -2,6 +2,7 @@ import Router from "next/router";
 import React from "react";
 import {NumericFormat} from "react-number-format";
 import Status from "../Status";
+import Link from "next/link";
 
 const TableCell = ({ data, column, id }) => {
 
@@ -34,6 +35,12 @@ const TableCell = ({ data, column, id }) => {
             cellData = <button onClick={() => Router.push(column.router.url, column.router.as.replace("__ID__", d))}>
                 <strong>Edit</strong>
             </button>
+            break
+        case "edit_link":
+            cellData = <Link
+                href={column.meta.url.replace("__ID__", d)}>
+                <a>{column.meta.text}</a>
+            </Link>
             break
     }
 
