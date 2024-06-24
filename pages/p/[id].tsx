@@ -84,7 +84,7 @@ const Pair: React.FC<Props> = (props) => {
     { label: "# Sells (24h)", accessor: "sells24h", sortable: true, cellType: "number" },
     { label: "# Sellers (24h)", accessor: "sellers24h", sortable: true, cellType: "number" },
     { label: "Status", accessor: "status", sortable: true, cellType: "status" },
-    { label: "Edit", accessor: "id", sortable: false, cellType: "edit_button", router: {url: "/p/[id]", as: "/p/__ID__"} },
+    { label: "Edit", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/p/__ID__", text: "View/Edit"} },
   ];
 
   const duplicatePairs = []
