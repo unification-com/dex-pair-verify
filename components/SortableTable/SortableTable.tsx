@@ -9,6 +9,7 @@ const SortableTable = ({ caption, data, columns }) => {
 
     const filter = (event: React.ChangeEvent<HTMLInputElement>) => {
         const value = event.target.value
+        // @ts-ignore
         handleFiltering(value)
     }
 
