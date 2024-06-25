@@ -115,7 +115,7 @@ const Pair: React.FC<Props> = (props) => {
   }
 
   verifyPair = <form onSubmit={onSubmit}>
-    <select name="status" id="pairstatus">
+    <select name="status" id="pairstatus" defaultValue={currentStatus}>
       {verifyOpts}
     </select>
     <input type={"hidden"} value={props.pair.id} name={"pairid"}/>

@@ -137,7 +137,7 @@ const Token: React.FC<Props> = (props) => {
 
                 <p>Status: <Status status={currentStatus} method={props.token.verificationMethod}/></p>
                 Change Status: <form onSubmit={onSubmit}>
-                <select name="status" id="tokenstatus">
+                <select name="status" id="tokenstatus" defaultValue={currentStatus}>
                     <option value="0">Unverified</option>
                     <option value="1">VERIFIED</option>
                     <option value="2">Duplicate</option>
