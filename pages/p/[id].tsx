@@ -238,9 +238,10 @@ const Pair: React.FC<Props> = (props) => {
           </p>
 
           <p>Status: <Status status={props.pair.token0.status} method={""}/>&nbsp;
-            <button onClick={() => Router.push("/t/[id]", `/t/${props.pair.token0.id}`)}>
-              <strong>Edit Token</strong>
-            </button>
+            <Link
+                href={`/t/${props.pair.token0.id}`}>
+              <a>View/Edit</a>
+            </Link>
           </p>
 
           <h4>Token 1</h4>
@@ -254,9 +255,10 @@ const Pair: React.FC<Props> = (props) => {
           </p>
 
           <p>Status: <Status status={props.pair.token1.status} method={""}/>&nbsp;
-            <button onClick={() => Router.push("/t/[id]", `/t/${props.pair.token1.id}`)}>
-              <strong>Edit Token</strong>
-            </button>
+            <Link
+                href={`/t/${props.pair.token1.id}`}>
+              <a>View/Edit</a>
+            </Link>
           </p>
 
           {
