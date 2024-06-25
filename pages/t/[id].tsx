@@ -164,17 +164,17 @@ const Token: React.FC<Props> = (props) => {
                     <tbody>
                     <tr>
                         <td>
-                            <NumericFormat displayType="text" thousandSeparator="," value={props.token.txCount}/>
+                            <NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.token.txCount}/>
                         </td>
                         <td>
-                            $<NumericFormat displayType="text" thousandSeparator="," value={props.token.marketCapUsd}/>
+                            $<NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.token.marketCapUsd}/>
                         </td>
                         <td>
-                            <NumericFormat displayType="text" thousandSeparator=","
+                            <NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
                                            value={props.token.totalSupply / (10 ** props.token.decimals)}/>
                         </td>
                         <td>
-                            $<NumericFormat displayType="text" thousandSeparator="," value={props.token.volume24hUsd}/>
+                            $<NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.token.volume24hUsd}/>
                         </td>
                     </tr>
                     </tbody>
