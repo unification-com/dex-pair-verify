@@ -67,8 +67,11 @@ type Props = {
 }
 
 const Token: React.FC<Props> = (props) => {
-
     const [currentStatus, setCurrentStatus] = useState(props.token.status)
+
+    if(currentStatus !== props.token.status) {
+        setCurrentStatus(props.token.status)
+    }
 
     async function onSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
@@ -122,7 +125,7 @@ const Token: React.FC<Props> = (props) => {
 
     return (
         <Layout>
-            <div>
+            <div key={`token_page_${props.token.id}`}>
                 <h1>Token</h1>
                 <h3>Chain: <ChainName chain={props.token.chain}/></h3>
                 <h2>Symbol: {props.token.symbol}</h2>

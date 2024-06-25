@@ -73,7 +73,7 @@ const ListPairs: React.FC<Props> = (props) => {
 
     return (
         <Layout>
-            <div className="page">
+            <div className="page" key={`pair_list_${props.chain}_${props.dex}_${props.status}`}>
                 <h1><Status status={props.status} method={""} /> Pairs</h1>
                 <h2>
                     Chain: <ChainName chain={props.chain}/><br/>

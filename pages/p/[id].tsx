@@ -52,6 +52,10 @@ const Pair: React.FC<Props> = (props) => {
 
   const [currentStatus, setCurrentStatus] = useState(props.pair.status)
 
+  if(currentStatus !== props.pair.status) {
+    setCurrentStatus(props.pair.status)
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -125,7 +129,7 @@ const Pair: React.FC<Props> = (props) => {
 
   return (
       <Layout>
-        <div>
+        <div key={`token_page_${props.pair.id}`}>
           <h1>Pair</h1>
           <h2><DexName dex={props.pair.dex}/> (<ChainName chain={props.pair.chain}/>)</h2>
           <h3>
