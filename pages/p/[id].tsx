@@ -159,28 +159,28 @@ const Pair: React.FC<Props> = (props) => {
             <tbody>
             <tr>
               <td>
-                $<NumericFormat displayType="text" thousandSeparator="," value={props.pair.marketCapUsd}/>
+                $<NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.pair.marketCapUsd}/>
               </td>
               <td>
-                <NumericFormat displayType="text" thousandSeparator=","
+                <NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
                                value={props.pair.priceChangePercentage24h}/>%
               </td>
               <td>
-                <NumericFormat displayType="text" thousandSeparator=","
+                <NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
                                value={props.pair.buys24h}/>
               </td>
               <td>
-                <NumericFormat displayType="text" thousandSeparator="," value={props.pair.buyers24h}/>
+                <NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.pair.buyers24h}/>
               </td>
               <td>
-                <NumericFormat displayType="text" thousandSeparator=","
+                <NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
                                value={props.pair.sells24h}/>
               </td>
               <td>
-                <NumericFormat displayType="text" thousandSeparator="," value={props.pair.sellers24h}/>
+                <NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.pair.sellers24h}/>
               </td>
               <td>
-                $<NumericFormat displayType="text" thousandSeparator="," value={props.pair.volumeUsd24h}/>
+                $<NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.pair.volumeUsd24h}/>
               </td>
             </tr>
             </tbody>
@@ -202,26 +202,26 @@ const Pair: React.FC<Props> = (props) => {
             <tbody>
             <tr>
               <td>
-                 $<NumericFormat displayType="text" thousandSeparator="," value={props.pair.reserveUsd}/>
+                 $<NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.pair.reserveUsd}/>
               </td>
               <td>
-                <NumericFormat displayType="text" thousandSeparator=","
+                <NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
                                                value={props.pair.reserveNativeCurrency}/> <NativeToken
                   chain={props.pair.chain}/>
               </td>
               <td>
-                <NumericFormat displayType="text" thousandSeparator=","
+                <NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
                                                 value={props.pair.reserve0}/> {props.pair.token0.symbol}
               </td>
               <td>
-                <NumericFormat displayType="text" thousandSeparator=","
+                <NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
                                                 value={props.pair.reserve1}/> {props.pair.token1.symbol}
               </td>
               <td>
-                <NumericFormat displayType="text" thousandSeparator="," value={props.pair.volumeUsd}/>
+                <NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.pair.volumeUsd}/>
               </td>
               <td>
-                <NumericFormat displayType="text" thousandSeparator="," value={props.pair.txCount}/>
+                <NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.pair.txCount}/>
               </td>
             </tr>
             </tbody>
@@ -234,7 +234,7 @@ const Pair: React.FC<Props> = (props) => {
                          linkType={"token"}/>
           </p>
           <p>
-            Tx Count: <NumericFormat displayType="text" thousandSeparator="," value={props.pair.token0.txCount}/>
+            Tx Count: <NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.pair.token0.txCount}/>
           </p>
 
           <p>Status: <Status status={props.pair.token0.status} method={""}/>&nbsp;
@@ -250,7 +250,7 @@ const Pair: React.FC<Props> = (props) => {
                          linkType={"token"}/>
           </p>
           <p>
-            Tx Count: <NumericFormat displayType="text" thousandSeparator="," value={props.pair.token1.txCount}/>
+            Tx Count: <NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.pair.token1.txCount}/>
           </p>
 
           <p>Status: <Status status={props.pair.token1.status} method={""}/>&nbsp;
