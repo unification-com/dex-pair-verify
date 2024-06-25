@@ -59,7 +59,7 @@ const ListTokens: React.FC<Props> = (props) => {
 
     return (
         <Layout>
-            <div className="page">
+            <div className="page" key={`token_list_${props.chain}_${props.status}`}>
                 <h1><Status status={props.status} method={""} /> Tokens</h1>
                 <h2>Chain: <ChainName chain={props.chain}/></h2>
                 <h3>
