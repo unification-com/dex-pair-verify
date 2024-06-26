@@ -38,6 +38,8 @@ export type PairProps = {
     buyers24h: number,
     sellers24h: number,
     volumeUsd24h: number,
+    token0PriceCg: number | string | null;
+    token1PriceCg: number | string | null;
     status: number;
     verificationMethod: string;
     duplicatePairs: any | null

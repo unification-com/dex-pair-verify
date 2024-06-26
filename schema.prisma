@@ -101,6 +101,10 @@ model Pair {
   sellers24h               Int
   volumeUsd24h             Float
   txCount                  Int
+  token0PriceCg            Float @default(0)
+  token0PriceDex           Float @default(0)
+  token1PriceCg            Float @default(0)
+  token1PriceDex           Float @default(0)
   status                   Int
   verificationMethod       String
   lastChecked              Int

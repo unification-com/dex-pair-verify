@@ -194,6 +194,8 @@ const Pair: React.FC<Props> = (props) => {
             <thead>
             <tr>
               <th>Market Cap</th>
+              <th>{props.pair.token0.symbol} Price</th>
+              <th>{props.pair.token1.symbol} Price</th>
               <th>24h Change</th>
               <th># Buys (24h)</th>
               <th># Buyers (24h)</th>
@@ -207,6 +209,18 @@ const Pair: React.FC<Props> = (props) => {
               <td>
                 $<NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
                                 value={props.pair.marketCapUsd}/>
+              </td>
+              <td>
+                <NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
+                               value={props.pair.token0PriceCg}/>
+                &nbsp;
+                {props.pair.token1.symbol}
+              </td>
+              <td>
+                <NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
+                               value={props.pair.token1PriceCg}/>
+                &nbsp;
+                {props.pair.token0.symbol}
               </td>
               <td>
                 <NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
@@ -250,7 +264,7 @@ const Pair: React.FC<Props> = (props) => {
             <tbody>
             <tr>
               <td>
-                $<NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
+              $<NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
                                 value={props.pair.reserveUsd}/>
               </td>
               <td>
