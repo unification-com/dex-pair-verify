@@ -110,5 +110,6 @@ export type TokenProps = {
     duplicateCount: number
     pairsToken0: AssociatedPairProps[] | null;
     pairsToken1: AssociatedPairProps[] | null;
+    duplicateTokenSymbols: any | null;
     _count: DuplicateTokenCounter | null;
 };
