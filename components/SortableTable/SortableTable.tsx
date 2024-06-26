@@ -21,9 +21,9 @@ const SortableTable = ({ caption, data, columns }) => {
                 onChange={filter}
             />
             <table className="table">
-                {caption && <caption>
-                    {caption}
-                </caption>}
+                {
+                    caption ? (<caption>{caption}</caption>) : null
+                }
                 <TableHead columns={columns} handleSorting={handleSorting}/>
                 <TableBody columns={columns} tableData={tableData}/>
             </table>
