@@ -16,11 +16,6 @@ export const getServerSideProps: GetServerSideProps = async ({ params, query }) 
             chain: String(query?.chain),
             status: Number(query?.status || 0),
         },
-        include: {
-            _count: {
-                select: { duplicateTokenSymbols: true },
-            },
-        },
         orderBy: [
             {
                 symbol: 'asc',
@@ -28,9 +23,27 @@ export const getServerSideProps: GetServerSideProps = async ({ params, query }) 
         ],
     });
 
+    const tokensWithCount = (tokens as TokenProps[])
+
+    const duplicatesForCurrentStatus = {}
+
+    for(let i = 0; i < tokens.length; i += 1) {
+        const t = tokens[i]
+        if(duplicatesForCurrentStatus[t.symbol] === undefined) {
+            duplicatesForCurrentStatus[t.symbol] = 0
+        } else {
+            duplicatesForCurrentStatus[t.symbol] += 1
+        }
+    }
+
+    for(let i = 0; i < tokensWithCount.length; i += 1) {
+        const t = tokensWithCount[i]
+        tokensWithCount[i].duplicateCount = duplicatesForCurrentStatus[t.symbol]
+    }
+
     return {
         props: {
-            tokens,
+            tokens: tokensWithCount,
             chain: String(query?.chain),
             dex: String(query?.dex),
             status: Number(query?.status || 0),
@@ -52,7 +65,7 @@ const ListTokens: React.FC<Props> = (props) => {
         { label: "Market Cap", accessor: "marketCapUsd", sortable: true, cellType: "usd" },
         { label: "24h Volume", accessor: "volume24hUsd", sortable: true, cellType: "usd" },
         { label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number" },
-        { label: "Possible Duplicates", accessor: "_count.duplicateTokenSymbols", sortable: true, cellType: "display" },
+        { label: "Possible Duplicates", accessor: "duplicateCount", sortable: true, cellType: "display" },
         // { label: "Edit", accessor: "id", sortable: false, cellType: "edit_button", router: {url: "/t/[id]", as: "/t/__ID__"} },
         { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/t/__ID__", text: "View/Edit"} },
     ];

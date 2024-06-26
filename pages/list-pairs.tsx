@@ -8,23 +8,23 @@ import Router from "next/router";
 import ChainName from "../components/ChainName";
 import DexName from "../components/DexName";
 import SortableTable from "../components/SortableTable/SortableTable";
+import {PairProps} from "../types/props";
 
 export const getServerSideProps: GetServerSideProps = async ({ params, query }) => {
+
+    const qStatus = Number(query?.status || 0)
     const pairs = await prisma.pair.findMany({
         where: {
             chain: String(query?.chain),
             dex: String(query?.dex),
-            status: Number(query?.status || 0),
+            status: qStatus,
         },
         include: {
             token0: {
-                select: { symbol: true, id: true, contractAddress: true, status: true },
+                select: { symbol: true, id: true, contractAddress: true, status: true, txCount: true },
             },
             token1: {
-                select: { symbol: true, id: true, contractAddress: true, status: true },
-            },
-            _count: {
-                select: { duplicatePairs: true },
+                select: { symbol: true, id: true, contractAddress: true, status: true, txCount: true },
             },
         },
         orderBy: [
@@ -33,9 +33,35 @@ export const getServerSideProps: GetServerSideProps = async ({ params, query }) 
             },
         ],
     });
+
+    const dupeCounter = {}
+    const pairsWithDuplicates = (pairs as unknown as PairProps[])
+
+    for(let i = 0; i < pairs.length; i += 1) {
+        const p = pairs[i]
+        const p1 = `${p.token0.symbol}-${p.token1.symbol}`
+        const p2 = `${p.token1.symbol}-${p.token0.symbol}`
+        if(dupeCounter[p1] === undefined) {
+            dupeCounter[p1] = 0
+        } else {
+            dupeCounter[p1] += 1
+        }
+        if(dupeCounter[p2] === undefined) {
+            dupeCounter[p2] = 0
+        } else {
+            dupeCounter[p2] += 1
+        }
+    }
+
+    for(let i = 0; i < pairsWithDuplicates.length; i += 1) {
+        const p = pairsWithDuplicates[i]
+        pairsWithDuplicates[i].duplicateCount = dupeCounter[p.pair]
+    }
+
+
     return {
         props: {
-            pairs,
+            pairs: pairsWithDuplicates,
             chain: String(query?.chain),
             dex: String(query?.dex),
             status: Number(query?.status || 0)
@@ -44,7 +70,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params, query }) 
 }
 
 type Props = {
-    pairs: any,
+    pairs: PairProps[],
     chain: string,
     dex: string,
     status: number,
@@ -60,7 +86,7 @@ const ListPairs: React.FC<Props> = (props) => {
         { label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number" },
         { label: "Market Cap USD", accessor: "marketCapUsd", sortable: true, cellType: "usd" },
         { label: "24h Volume", accessor: "volumeUsd24h", sortable: true, cellType: "usd" },
-        {label: "Possible Duplicates", accessor: "_count.duplicatePairs", sortable: true, cellType: "number"},
+        {label: "Possible Duplicates", accessor: "duplicateCount", sortable: true, cellType: "number"},
         // {
         //     label: "Edit",
         //     accessor: "id",

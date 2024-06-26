@@ -1,10 +1,19 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../lib/prisma';
+import {getServerSession} from "next-auth";
+import {authOptions} from "./auth/[...nextauth]";
+import {ExtendedSessionUser} from "../../types/types";
 
 export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
 ) {
+
+    const session = await getServerSession(req, res, authOptions)
+
+    if (!(session.user as ExtendedSessionUser).isAuthotised) {
+        return res.status(403).json("not authorised")
+    }
 
     if(!req.query?.chain || !req.query?.dex) {
         return res.status(400).json("Chain and dex required")

@@ -35,6 +35,7 @@ export type PairProps = {
     status: number;
     verificationMethod: string;
     duplicatePairs: any | null
+    duplicateCount: number | null;
 };
 
 export type PairPropsNoToken = {
@@ -97,6 +98,7 @@ export type TokenProps = {
     decimals: number
     lastChecked: number;
     verificationMethod: string;
+    duplicateCount: number
     pairsToken0: AssociatedPairProps[] | null;
     pairsToken1: AssociatedPairProps[] | null;
     duplicateTokenSymbols: any | null;

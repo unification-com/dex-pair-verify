@@ -1,5 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../lib/prisma';
+import {getServerSession} from "next-auth";
+import {authOptions} from "./auth/[...nextauth]";
+import {ExtendedSessionUser} from "../../types/types";
 
 export default async function handler(
     req: NextApiRequest,
@@ -7,6 +10,12 @@ export default async function handler(
 ) {
 
     const nav = {dexs: [], chains: []}
+
+    const session = await getServerSession(req, res, authOptions)
+
+    if (!(session.user as ExtendedSessionUser).isAuthotised) {
+        return res.status(403).json(nav)
+    }
 
     const data = await prisma.pair.findMany({
         distinct: ['chain', 'dex'],

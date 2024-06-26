@@ -1,6 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import formidable from "formidable";
 import prisma from '../../lib/prisma';
+import {useSession} from "next-auth/react";
+import {ExtendedSessionUser} from "../../types/types";
+import {getServerSession} from "next-auth";
+import {authOptions} from "./auth/[...nextauth]";
 
 export const config = {
     api: {
@@ -12,6 +16,12 @@ export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
 ) {
+
+    const session = await getServerSession(req, res, authOptions)
+
+    if (!(session.user as ExtendedSessionUser).isAuthotised) {
+        return res.status(403).json({ success: false, err: "not authorised" })
+    }
 
     const form = formidable({});
     let fields;
