@@ -188,19 +188,19 @@ const processPairsForChain = async(chain, dex) => {
 const run = async () => {
 
     // Token data
-    // console.log("Tokens")
-    // const chains = []
-    // for (let i = 0; i < dataSources.length; i += 1) {
-    //     const poolMeta = dataSources[i]
-    //     const chain = poolMeta.chain
-    //     if(!chains.includes(chain)) {
-    //         chains.push(chain)
-    //     }
-    // }
-    //
-    // for (let i = 0; i < chains.length; i += 1) {
-    //     await processTokensForChain(chains[i])
-    // }
+    console.log("Tokens")
+    const chains = []
+    for (let i = 0; i < dataSources.length; i += 1) {
+        const poolMeta = dataSources[i]
+        const chain = poolMeta.chain
+        if(!chains.includes(chain)) {
+            chains.push(chain)
+        }
+    }
+
+    for (let i = 0; i < chains.length; i += 1) {
+        await processTokensForChain(chains[i])
+    }
 
     // Pair data
     console.log("Pairs")
