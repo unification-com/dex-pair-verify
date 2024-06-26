@@ -64,7 +64,7 @@ const processTokensForChain = async(chain) => {
 
                 const token = await updateTokenWithCoingeckoData(tId, cgId, tData.total_supply, tData.decimals, tData.volume_usd.h24, mc)
                 if(token) {
-                    console.log("updated", token.id, tData.coingecko_coin_id, tData.total_supply, tData.volume_usd.h24, mc)
+                    console.log("updated token", token.id, tData.coingecko_coin_id, tData.total_supply, tData.volume_usd.h24, mc)
                 } else {
                     console.log("not found", chain, tData.address)
                 }
@@ -155,28 +155,40 @@ const processPairsForChain = async(chain, dex) => {
                 const t0Contract = thisPair.token0.contractAddress
                 const t1Contract = thisPair.token1.contractAddress
 
-                const baseTokenContract = pDataJson.data[k].relationships.base_token.data.id.split("_")[1]
-                const quoteTokenContract = pDataJson.data[k].relationships.quote_token.data.id.split("_")[1]
+                let baseTokenContract = null
+                let quoteTokenContract = null
+
+                if(pDataJson.data[k].relationships?.base_token?.data?.id !== undefined) {
+                    const btArr = pDataJson.data[k].relationships.base_token.data.id.split("_")
+                    baseTokenContract = btArr[btArr.length - 1]
+                }
+
+                if(pDataJson.data[k].relationships?.quote_token?.data?.id !== undefined) {
+                    const qtArr = pDataJson.data[k].relationships.quote_token.data.id.split("_")
+                    quoteTokenContract = qtArr[qtArr.length - 1]
+                }
 
                 let t0Price = 0
                 let t1Price = 0
 
-                if(Web3.utils.toChecksumAddress(t0Contract) === Web3.utils.toChecksumAddress(baseTokenContract)) {
-                    t0Price = pData.base_token_price_quote_token
-                }
-                if(Web3.utils.toChecksumAddress(t1Contract) === Web3.utils.toChecksumAddress(baseTokenContract)) {
-                    t1Price = pData.base_token_price_quote_token
-                }
-                if(Web3.utils.toChecksumAddress(t0Contract) === Web3.utils.toChecksumAddress(quoteTokenContract)) {
-                    t0Price = pData.quote_token_price_base_token
-                }
-                if(Web3.utils.toChecksumAddress(t1Contract) === Web3.utils.toChecksumAddress(quoteTokenContract)) {
-                    t1Price = pData.quote_token_price_base_token
+                if(baseTokenContract !== null && quoteTokenContract !== null) {
+                    if(Web3.utils.toChecksumAddress(t0Contract) === Web3.utils.toChecksumAddress(baseTokenContract)) {
+                        t0Price = (pData?.base_token_price_quote_token === null) ? 0 : pData.base_token_price_quote_token
+                    }
+                    if(Web3.utils.toChecksumAddress(t1Contract) === Web3.utils.toChecksumAddress(baseTokenContract)) {
+                        t1Price = (pData?.base_token_price_quote_token === null) ? 0 : pData.base_token_price_quote_token
+                    }
+                    if(Web3.utils.toChecksumAddress(t0Contract) === Web3.utils.toChecksumAddress(quoteTokenContract)) {
+                        t0Price = (pData?.quote_token_price_base_token === null) ? 0 : pData.quote_token_price_base_token
+                    }
+                    if(Web3.utils.toChecksumAddress(t1Contract) === Web3.utils.toChecksumAddress(quoteTokenContract)) {
+                        t1Price = (pData?.quote_token_price_base_token === null) ? 0 : pData.quote_token_price_base_token
+                    }
                 }
 
                 const pair = await updatePairWithCoingeckoData(thisPair.id, mc, pcp24h, buys, sells, buyers, sellers, vol24h, t0Price, t1Price)
                 if(pair) {
-                    console.log("updated", pair.id, mc, pcp24h, buys, sells, buyers, sellers, vol24h, t0Price, t1Price)
+                    console.log("updated pair", pair.id, mc, pcp24h, buys, sells, buyers, sellers, vol24h, t0Price, t1Price)
                 } else {
                     console.log("not found", chain, pData.address)
                 }
