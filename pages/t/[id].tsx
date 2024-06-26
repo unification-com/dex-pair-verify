@@ -130,6 +130,7 @@ const Token: React.FC<Props> = (props) => {
 
     const assocPairColumns = [
         {label: "Pair", accessor: "pair", sortable: true, sortbyOrder: "asc", cellType: "display"},
+        {label: "Dex", accessor: "dex", sortable: true, sortbyOrder: "asc", cellType: "display"},
         {label: "Reserve USD", accessor: "reserveUsd", sortable: true, cellType: "usd"},
         {label: "Reserve Native", accessor: "reserveNativeCurrency", sortable: true, cellType: "number"},
         {label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number"},
