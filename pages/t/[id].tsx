@@ -57,13 +57,23 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
         },
     });
 
+    const similarTokens = await prisma.token.findMany({
+        where: {
+            symbol: token.symbol,
+            NOT: {
+                chain: token.chain
+            }
+        },
+    })
+
     return {
-        props: {token},
+        props: {token, similarTokens},
     }
 }
 
 type Props = {
     token: TokenProps;
+    similarTokens: TokenProps[];
 }
 
 const Token: React.FC<Props> = (props) => {
@@ -102,6 +112,11 @@ const Token: React.FC<Props> = (props) => {
         {label: "Status", accessor: "status", sortable: true, cellType: "status"},
         { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/t/__ID__", text: "View/Edit"} },
     ];
+
+    const similarTokensColumns = [
+        {label: "Chain", accessor: "chain", sortable: true, sortbyOrder: "asc", cellType: "display"},
+        ...duplicateColumns,
+    ]
 
     const duplicateTokens = []
 
@@ -186,12 +201,25 @@ const Token: React.FC<Props> = (props) => {
                 {
                     (duplicateTokens.length) > 0 &&
                     <>
-                        <h4>Possible Duplicates</h4>
+                        <h4>Possible Duplicates on this chain ({props.token.chain})</h4>
                         <SortableTable
                             key={`duplicatetoken_list_${props.token.id}`}
                             caption=""
                             data={duplicateTokens}
                             columns={duplicateColumns}
+                        />
+                    </>
+                }
+
+                {
+                    (props.similarTokens.length) > 0 &&
+                    <>
+                        <h4>Similar Tokens on other chains</h4>
+                        <SortableTable
+                            key={`similar_list_${props.token.id}`}
+                            caption=""
+                            data={props.similarTokens}
+                            columns={similarTokensColumns}
                         />
                     </>
                 }

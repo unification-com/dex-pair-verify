@@ -38,14 +38,40 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
     },
   });
 
+  const similarPairs = await prisma.pair.findMany({
+    where: {
+      OR: [
+        {
+          pair: `${pair.token0.symbol}-${pair.token1.symbol}`,
+        },
+        {
+          pair: `${pair.token1.symbol}-${pair.token0.symbol}`,
+        }
+      ],
+      NOT: {
+        chain: pair.chain,
+        dex: pair.dex,
+      }
+    },
+    include: {
+      token0: {
+        select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true },
+      },
+      token1: {
+        select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true },
+      },
+    },
+  });
+
 
   return {
-    props: {pair},
+    props: {pair, similarPairs},
   }
 }
 
 type Props = {
   pair: PairProps;
+  similarPairs: PairProps[];
 }
 
 const Pair: React.FC<Props> = (props) => {
@@ -83,6 +109,21 @@ const Pair: React.FC<Props> = (props) => {
     { label: "Market Cap USD", accessor: "marketCapUsd", sortable: true, cellType: "usd" },
     { label: "24h Volume", accessor: "volumeUsd24h", sortable: true, cellType: "usd" },
     { label: "24h Price Change", accessor: "priceChangePercentage24h", sortable: true, cellType: "percent" },
+    { label: "# Buys (24h)", accessor: "buys24h", sortable: true, cellType: "number" },
+    { label: "# Buyers (24h)", accessor: "buys24h", sortable: true, cellType: "number" },
+    { label: "# Sells (24h)", accessor: "sells24h", sortable: true, cellType: "number" },
+    { label: "# Sellers (24h)", accessor: "sellers24h", sortable: true, cellType: "number" },
+    { label: "Status", accessor: "status", sortable: true, cellType: "status" },
+    { label: "Edit", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/p/__ID__", text: "View/Edit"} },
+  ];
+
+  const similarPairsColumns = [
+    { label: "Chain", accessor: "chain", sortable: true, sortbyOrder: "asc", cellType: "display" },
+    { label: "Dex", accessor: "dex", sortable: true, sortbyOrder: "asc", cellType: "display" },
+    { label: "Pair", accessor: "pair", sortable: true, sortbyOrder: "asc", cellType: "display" },
+    { label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number" },
+    { label: "Market Cap USD", accessor: "marketCapUsd", sortable: true, cellType: "usd" },
+    { label: "24h Volume", accessor: "volumeUsd24h", sortable: true, cellType: "usd" },
     { label: "# Buys (24h)", accessor: "buys24h", sortable: true, cellType: "number" },
     { label: "# Buyers (24h)", accessor: "buys24h", sortable: true, cellType: "number" },
     { label: "# Sells (24h)", accessor: "sells24h", sortable: true, cellType: "number" },
@@ -268,12 +309,25 @@ const Pair: React.FC<Props> = (props) => {
           {
               (duplicatePairs.length) > 0 &&
               <>
-                <h4>Possible Duplicates</h4>
+                <h4>Possible Duplicates on this DEX ({props.pair.dex})</h4>
                 <SortableTable
                     key={`duplicatepair_list_${props.pair.id}`}
                     caption=""
                     data={duplicatePairs}
                     columns={columns}
+                />
+              </>
+          }
+
+          {
+              (props.similarPairs.length) > 0 &&
+              <>
+                <h4>Similar pairs on other DEXs</h4>
+                <SortableTable
+                    key={`similarpair_list_${props.pair.id}`}
+                    caption=""
+                    data={props.similarPairs}
+                    columns={similarPairsColumns}
                 />
               </>
           }
