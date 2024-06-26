@@ -108,6 +108,7 @@ const Token: React.FC<Props> = (props) => {
     const duplicateColumns = [
         {label: "Symbol", accessor: "symbol", sortable: true, sortbyOrder: "asc", cellType: "display"},
         {label: "Name", accessor: "name", sortable: true, cellType: "display"},
+        {label: "CG ID", accessor: "coingeckoCoinId", sortable: true, cellType: "cgcoin"},
         {label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number"},
         {label: "Market Cap USD", accessor: "marketCapUsd", sortable: true, cellType: "usd"},
         {label: "24h Volume", accessor: "volume24hUsd", sortable: true, cellType: "usd"},

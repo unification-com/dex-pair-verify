@@ -15,6 +15,7 @@ import NativeToken from "../../components/NativeToken";
 import Link from "next/link";
 import CoinGeckoPoolLink from "../../components/CoinGeckoPoolLink";
 import SortableTable from "../../components/SortableTable/SortableTable";
+import CoinGeckoCoinLink from "../../components/CoinGeckoCoinLink";
 
 
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
@@ -25,10 +26,10 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
     },
     include: {
       token0: {
-        select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true },
+        select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true, coingeckoCoinId: true },
       },
       token1: {
-        select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true },
+        select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true, coingeckoCoinId: true },
       },
       duplicatePairs: {
         select: {
@@ -175,9 +176,9 @@ const Pair: React.FC<Props> = (props) => {
           <h2><DexName dex={props.pair.dex}/> (<ChainName chain={props.pair.chain}/>)</h2>
           <h3>
             {props.pair.pair} <br/>
-            CoinGecko: <CoinGeckoPoolLink chain={props.pair.chain} contractAddress={props.pair.contractAddress} /><br />
+            CoinGecko: <CoinGeckoPoolLink chain={props.pair.chain} contractAddress={props.pair.contractAddress}/><br/>
             DEX Analytics: <PoolUrl chain={props.pair.chain} dex={props.pair.dex}
-                                     contractAddress={props.pair.contractAddress}/><br/>
+                                    contractAddress={props.pair.contractAddress}/><br/>
             Explorer: <ExplorerUrl chain={props.pair.chain} contractAddress={props.pair.contractAddress}
                                    linkType={"address"}/>
           </h3>
@@ -204,7 +205,8 @@ const Pair: React.FC<Props> = (props) => {
             <tbody>
             <tr>
               <td>
-                $<NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.pair.marketCapUsd}/>
+                $<NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
+                                value={props.pair.marketCapUsd}/>
               </td>
               <td>
                 <NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
@@ -225,7 +227,8 @@ const Pair: React.FC<Props> = (props) => {
                 <NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.pair.sellers24h}/>
               </td>
               <td>
-                $<NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.pair.volumeUsd24h}/>
+                $<NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
+                                value={props.pair.volumeUsd24h}/>
               </td>
             </tr>
             </tbody>
@@ -247,20 +250,21 @@ const Pair: React.FC<Props> = (props) => {
             <tbody>
             <tr>
               <td>
-                 $<NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.pair.reserveUsd}/>
+                $<NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
+                                value={props.pair.reserveUsd}/>
               </td>
               <td>
                 <NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
-                                               value={props.pair.reserveNativeCurrency}/> <NativeToken
+                               value={props.pair.reserveNativeCurrency}/> <NativeToken
                   chain={props.pair.chain}/>
               </td>
               <td>
                 <NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
-                                                value={props.pair.reserve0}/> {props.pair.token0.symbol}
+                               value={props.pair.reserve0}/> {props.pair.token0.symbol}
               </td>
               <td>
                 <NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
-                                                value={props.pair.reserve1}/> {props.pair.token1.symbol}
+                               value={props.pair.reserve1}/> {props.pair.token1.symbol}
               </td>
               <td>
                 <NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.pair.volumeUsd}/>
@@ -278,8 +282,10 @@ const Pair: React.FC<Props> = (props) => {
             <ExplorerUrl chain={props.pair.chain} contractAddress={props.pair.token0.contractAddress}
                          linkType={"token"}/>
           </p>
+          <p>Coin Gecko: <CoinGeckoCoinLink coingeckoId={props.pair.token0.coingeckoCoinId}/></p>
           <p>
-            Tx Count: <NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.pair.token0.txCount}/>
+            Tx Count: <NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
+                                     value={props.pair.token0.txCount}/>
           </p>
 
           <p>Status: <Status status={props.pair.token0.status} method={""}/>&nbsp;
@@ -295,8 +301,10 @@ const Pair: React.FC<Props> = (props) => {
             <ExplorerUrl chain={props.pair.chain} contractAddress={props.pair.token1.contractAddress}
                          linkType={"token"}/>
           </p>
+          <p>Coin Gecko: <CoinGeckoCoinLink coingeckoId={props.pair.token1.coingeckoCoinId}/></p>
           <p>
-            Tx Count: <NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.pair.token1.txCount}/>
+            Tx Count: <NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
+                                     value={props.pair.token1.txCount}/>
           </p>
 
           <p>Status: <Status status={props.pair.token1.status} method={""}/>&nbsp;
