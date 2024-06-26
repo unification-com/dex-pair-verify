@@ -1,4 +1,8 @@
 
+type DuplicatePairCounter = {
+    duplicatePairs: number;
+}
+
 export type PairProps = {
     id: string;
     chain: string;
@@ -36,6 +40,7 @@ export type PairProps = {
     verificationMethod: string;
     duplicatePairs: any | null
     duplicateCount: number | null;
+    _count: DuplicatePairCounter | null;
 };
 
 export type PairPropsNoToken = {
@@ -83,6 +88,10 @@ export type AssociatedPairProps = {
     duplicatePairs: any | null
 }
 
+type DuplicateTokenCounter = {
+    duplicateTokenSymbols: number;
+}
+
 export type TokenProps = {
     id: string;
     chain: string;
@@ -101,5 +110,5 @@ export type TokenProps = {
     duplicateCount: number
     pairsToken0: AssociatedPairProps[] | null;
     pairsToken1: AssociatedPairProps[] | null;
-    duplicateTokenSymbols: any | null;
+    _count: DuplicateTokenCounter | null;
 };
