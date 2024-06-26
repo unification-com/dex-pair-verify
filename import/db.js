@@ -321,8 +321,8 @@ const updatePairWithCoingeckoData = async (
             buyers24h: parseInt(buyers24h),
             sellers24h: parseInt(sellers24h),
             volumeUsd24h: parseFloat(volumeUsd24h),
-            token0PriceCg: parseFloat(token0PriceCg),
-            token1PriceCg: parseFloat(token1PriceCg),
+            token0PriceCg: (token0PriceCg === null) ? 0 : parseFloat(token0PriceCg),
+            token1PriceCg: (token1PriceCg === null) ? 0 : parseFloat(token1PriceCg),
             lastChecked: now,
         },
     })
