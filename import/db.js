@@ -108,6 +108,10 @@ const getOrAddPair = async (
                 sellers24h: 0,
                 volumeUsd24h: 0,
                 lastChecked: 0,
+                token0PriceCg: 0,
+                token0PriceDex: 0,
+                token1PriceCg: 0,
+                token1PriceDex: 0,
                 token0: {
                     connect: {
                         id: t0Id,
@@ -216,6 +220,14 @@ const getPairsToFetchFromCoingecko = async (chain, dex) => {
                 lt: yesterday,
             }
         },
+        include: {
+            token0: {
+                select: { symbol: true, id: true, contractAddress: true, status: true, txCount: true },
+            },
+            token1: {
+                select: { symbol: true, id: true, contractAddress: true, status: true, txCount: true },
+            },
+        },
     })
 }
 
@@ -291,6 +303,8 @@ const updatePairWithCoingeckoData = async (
     buyers24h,
     sellers24h,
     volumeUsd24h,
+    token0PriceCg,
+    token1PriceCg,
     ) => {
 
     const now = Math.floor(Date.now() / 1000)
@@ -307,6 +321,8 @@ const updatePairWithCoingeckoData = async (
             buyers24h: parseInt(buyers24h),
             sellers24h: parseInt(sellers24h),
             volumeUsd24h: parseFloat(volumeUsd24h),
+            token0PriceCg: parseFloat(token0PriceCg),
+            token1PriceCg: parseFloat(token1PriceCg),
             lastChecked: now,
         },
     })

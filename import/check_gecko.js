@@ -138,24 +138,45 @@ const processPairsForChain = async(chain, dex) => {
                     vol24h = (pData.volume_usd?.h24 === null) ? 0 : pData.volume_usd.h24
                 }
 
-                let tId = null
+                let thisPair = null
                 for(let t = 0; t < pairList.length; t += 1) {
                     if(Web3.utils.toChecksumAddress(pData.address) === Web3.utils.toChecksumAddress(pairList[t].contractAddress)) {
-                        tId = pairList[t].id
+                        thisPair = pairList[t]
                         break
                     }
                 }
 
-                if(tId === null) {
+                if(thisPair === null) {
                     console.log("Erm, OK...")
                     continue
                 }
 
+                // prices
+                const t0Contract = thisPair.token0.contractAddress
+                const t1Contract = thisPair.token1.contractAddress
 
+                const baseTokenContract = pDataJson.data[k].relationships.base_token.data.id.split("_")[1]
+                const quoteTokenContract = pDataJson.data[k].relationships.quote_token.data.id.split("_")[1]
 
-                const pair = await updatePairWithCoingeckoData(tId, mc, pcp24h, buys, sells, buyers, sellers, vol24h)
+                let t0Price = 0
+                let t1Price = 0
+
+                if(Web3.utils.toChecksumAddress(t0Contract) === Web3.utils.toChecksumAddress(baseTokenContract)) {
+                    t0Price = pData.base_token_price_quote_token
+                }
+                if(Web3.utils.toChecksumAddress(t1Contract) === Web3.utils.toChecksumAddress(baseTokenContract)) {
+                    t1Price = pData.base_token_price_quote_token
+                }
+                if(Web3.utils.toChecksumAddress(t0Contract) === Web3.utils.toChecksumAddress(quoteTokenContract)) {
+                    t0Price = pData.quote_token_price_base_token
+                }
+                if(Web3.utils.toChecksumAddress(t1Contract) === Web3.utils.toChecksumAddress(quoteTokenContract)) {
+                    t1Price = pData.quote_token_price_base_token
+                }
+
+                const pair = await updatePairWithCoingeckoData(thisPair.id, mc, pcp24h, buys, sells, buyers, sellers, vol24h, t0Price, t1Price)
                 if(pair) {
-                    console.log("updated", pair.id, mc, pcp24h, buys, sells, buyers, sellers, vol24h)
+                    console.log("updated", pair.id, mc, pcp24h, buys, sells, buyers, sellers, vol24h, t0Price, t1Price)
                 } else {
                     console.log("not found", chain, pData.address)
                 }
@@ -167,19 +188,19 @@ const processPairsForChain = async(chain, dex) => {
 const run = async () => {
 
     // Token data
-    console.log("Tokens")
-    const chains = []
-    for (let i = 0; i < dataSources.length; i += 1) {
-        const poolMeta = dataSources[i]
-        const chain = poolMeta.chain
-        if(!chains.includes(chain)) {
-            chains.push(chain)
-        }
-    }
-
-    for (let i = 0; i < chains.length; i += 1) {
-        await processTokensForChain(chains[i])
-    }
+    // console.log("Tokens")
+    // const chains = []
+    // for (let i = 0; i < dataSources.length; i += 1) {
+    //     const poolMeta = dataSources[i]
+    //     const chain = poolMeta.chain
+    //     if(!chains.includes(chain)) {
+    //         chains.push(chain)
+    //     }
+    // }
+    //
+    // for (let i = 0; i < chains.length; i += 1) {
+    //     await processTokensForChain(chains[i])
+    // }
 
     // Pair data
     console.log("Pairs")
