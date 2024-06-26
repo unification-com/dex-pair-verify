@@ -292,7 +292,7 @@ const Pair: React.FC<Props> = (props) => {
           <h4>Token 1</h4>
           <p>Symbol: {props.pair.token1.symbol}</p>
           <p>Explorer: &nbsp;
-            <ExplorerUrl chain={props.pair.chain} contractAddress={props.pair.token0.contractAddress}
+            <ExplorerUrl chain={props.pair.chain} contractAddress={props.pair.token1.contractAddress}
                          linkType={"token"}/>
           </p>
           <p>
