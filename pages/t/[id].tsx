@@ -33,6 +33,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
                     volumeUsd: true,
                     txCount: true,
                     status: true,
+                    dex: true,
                 },
             },
             pairsToken1: {
@@ -47,6 +48,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
                     volumeUsd: true,
                     txCount: true,
                     status: true,
+                    dex: true,
                 },
             },
             duplicateTokenSymbols: {
