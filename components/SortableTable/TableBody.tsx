@@ -5,9 +5,9 @@ const TableBody = ({ tableData, columns }) => {
         <tbody>
         {tableData.map((rowData) => {
             return (
-                <tr key={rowData.id}>
+                <tr key={`row_${rowData.id}`}>
                     {columns.map((column) => {
-                        return <TableCell column={column} data={rowData} id={rowData.id} />;
+                        return <TableCell column={column} data={rowData} key={`cell_${column.accessor}_${rowData.id}`} />;
                     })}
                 </tr>
             );

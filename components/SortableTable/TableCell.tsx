@@ -4,7 +4,7 @@ import {NumericFormat} from "react-number-format";
 import Status from "../Status";
 import Link from "next/link";
 
-const TableCell = ({ data, column, id }) => {
+const TableCell = ({ data, column }) => {
 
     let cellData = null
 
@@ -45,7 +45,7 @@ const TableCell = ({ data, column, id }) => {
     }
 
     return (
-        <td key={`${column.accessor}_${id}`}>{cellData}</td>
+        <td>{cellData}</td>
     );
 };
 
