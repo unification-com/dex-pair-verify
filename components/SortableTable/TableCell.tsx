@@ -3,6 +3,7 @@ import React from "react";
 import {NumericFormat} from "react-number-format";
 import Status from "../Status";
 import Link from "next/link";
+import CoinGeckoCoinLink from "../CoinGeckoCoinLink";
 
 const TableCell = ({ data, column }) => {
 
@@ -31,6 +32,9 @@ const TableCell = ({ data, column }) => {
         case "status":
             cellData = <><Status status={d} method={""} /></>
             break
+        case "cgcoin":
+            cellData = <><CoinGeckoCoinLink coingeckoId={d} /></>
+            break;
         case "edit_button":
             cellData = <button onClick={() => Router.push(column.router.url, column.router.as.replace("__ID__", d))}>
                 <strong>Edit</strong>

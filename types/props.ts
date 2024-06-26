@@ -15,6 +15,7 @@ export type PairProps = {
         contractAddress: string;
         txCount: number;
         status: number;
+        coingeckoCoinId: string;
     } | null;
     token1: {
         id: string;
@@ -22,6 +23,7 @@ export type PairProps = {
         contractAddress: string;
         txCount: number;
         status: number;
+        coingeckoCoinId: string;
     } | null;
     reserveUsd: number;
     reserve0: number;
