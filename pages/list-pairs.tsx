@@ -26,6 +26,9 @@ export const getServerSideProps: GetServerSideProps = async ({ params, query }) 
             token1: {
                 select: { symbol: true, id: true, contractAddress: true, status: true, txCount: true },
             },
+            _count: {
+                select: { duplicatePairs: true },
+            },
         },
         orderBy: [
             {
@@ -86,7 +89,8 @@ const ListPairs: React.FC<Props> = (props) => {
         { label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number" },
         { label: "Market Cap USD", accessor: "marketCapUsd", sortable: true, cellType: "usd" },
         { label: "24h Volume", accessor: "volumeUsd24h", sortable: true, cellType: "usd" },
-        {label: "Possible Duplicates", accessor: "duplicateCount", sortable: true, cellType: "number"},
+        {label: `Dupes (status ${props.status})`, accessor: "duplicateCount", sortable: true, cellType: "number"},
+        {label: "Total Dupes", accessor: "_count.duplicatePairs", sortable: true, cellType: "number"},
         // {
         //     label: "Edit",
         //     accessor: "id",
