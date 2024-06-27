@@ -35,7 +35,7 @@ const fetchFromSubgraph = async () => {
             query: poolMeta.graphql.funcQueryTop1000(),
         })
 
-        const poolResArray = result.data[poolMeta.graphql.poolName]
+        const poolResArray = result.data[poolMeta.graphql.poolsName]
 
         for (let j = 0; j < poolResArray.length; j += 1) {
             const pRes = poolResArray[j]

@@ -3,7 +3,7 @@ import TableHead from "./TableHead";
 import { useSortableTable } from "../../hooks/useSortableTable";
 import {useState} from "react";
 
-const SortableTable = ({ caption, data, columns }) => {
+const SortableTable = ({ caption, data, columns, useFilter }) => {
 
     const [tableData, handleSorting, handleFiltering] = useSortableTable(data, columns);
 
@@ -15,11 +15,11 @@ const SortableTable = ({ caption, data, columns }) => {
 
     return (
         <>
-            <input
+            {(useFilter === true) && <input
                 type="text"
                 placeholder="Filter items"
                 onChange={filter}
-            />
+            />}
             <table className="table">
                 {
                     caption ? (<caption>{caption}</caption>) : null
