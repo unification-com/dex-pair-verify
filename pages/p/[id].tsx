@@ -111,7 +111,7 @@ const Pair: React.FC<Props> = (props) => {
     { label: "24h Volume", accessor: "volumeUsd24h", sortable: true, cellType: "usd" },
     { label: "24h Price Change", accessor: "priceChangePercentage24h", sortable: true, cellType: "percent" },
     { label: "# Buys (24h)", accessor: "buys24h", sortable: true, cellType: "number" },
-    { label: "# Buyers (24h)", accessor: "buys24h", sortable: true, cellType: "number" },
+    { label: "# Buyers (24h)", accessor: "buyers24h", sortable: true, cellType: "number" },
     { label: "# Sells (24h)", accessor: "sells24h", sortable: true, cellType: "number" },
     { label: "# Sellers (24h)", accessor: "sellers24h", sortable: true, cellType: "number" },
     { label: "Status", accessor: "status", sortable: true, cellType: "status" },
@@ -126,7 +126,7 @@ const Pair: React.FC<Props> = (props) => {
     { label: "Market Cap USD", accessor: "marketCapUsd", sortable: true, cellType: "usd" },
     { label: "24h Volume", accessor: "volumeUsd24h", sortable: true, cellType: "usd" },
     { label: "# Buys (24h)", accessor: "buys24h", sortable: true, cellType: "number" },
-    { label: "# Buyers (24h)", accessor: "buys24h", sortable: true, cellType: "number" },
+    { label: "# Buyers (24h)", accessor: "buyers24h", sortable: true, cellType: "number" },
     { label: "# Sells (24h)", accessor: "sells24h", sortable: true, cellType: "number" },
     { label: "# Sellers (24h)", accessor: "sellers24h", sortable: true, cellType: "number" },
     { label: "Status", accessor: "status", sortable: true, cellType: "status" },
@@ -164,7 +164,8 @@ const Pair: React.FC<Props> = (props) => {
     <select name="status" id="pairstatus" defaultValue={currentStatus}>
       {verifyOpts}
     </select>
-    <input type={"hidden"} value={props.pair.id} name={"pairid"}/>
+    <input type={"text"} defaultValue={props.pair.verificationComment} name={"comment"} placeholder={"optional comment"} />
+    <input type={"hidden"} value={props.pair.id} name={"pairid"} />
     <button type="submit">Submit</button>
   </form>
 
@@ -172,7 +173,7 @@ const Pair: React.FC<Props> = (props) => {
   return (
       <Layout>
         <div key={`token_page_${props.pair.id}`}>
-          <h1>Pair</h1>
+        <h1>Pair</h1>
           <h2><DexName dex={props.pair.dex}/> (<ChainName chain={props.pair.chain}/>)</h2>
           <h3>
             {props.pair.pair} <br/>

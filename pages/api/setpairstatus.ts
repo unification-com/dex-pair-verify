@@ -33,8 +33,14 @@ export default async function handler(
     }
 
     const pair = await prisma.pair.update({
-        where: { id: fields.pairid[0] },
-        data: { status: parseInt(fields.status[0]), verificationMethod: "manual" },
+        where: {
+            id: fields.pairid[0]
+        },
+        data: {
+            status: parseInt(fields.status[0]),
+            verificationMethod: "manual",
+            verificationComment: fields.comment[0],
+        },
     })
 
     return res.status(200).json({ success: true, data: {new_status: pair.status, id: pair.id } })

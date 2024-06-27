@@ -165,7 +165,8 @@ const Token: React.FC<Props> = (props) => {
                     <option value="2">Duplicate</option>
                     <option value="3">Fake/Bad/Not Usable</option>
                 </select>
-                <input type={"hidden"} value={props.token.id} name={"tokenid"}/>
+                <input type={"text"} defaultValue={props.token.verificationComment} name={"comment"} placeholder={"optional comment"} />
+                <input type={"hidden"} value={props.token.id} name={"tokenid"} />
                 <button type="submit">Submit</button>
             </form>
 
@@ -220,7 +221,7 @@ const Token: React.FC<Props> = (props) => {
                     <>
                         <h4>Similar Tokens on other chains</h4>
                         <SortableTable
-                            key={`similar_list_${props.token.id}`}
+                            key={`similartoken_list_${props.token.id}`}
                             caption=""
                             data={props.similarTokens}
                             columns={similarTokensColumns}
