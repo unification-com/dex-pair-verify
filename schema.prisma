@@ -107,6 +107,7 @@ model Pair {
   token1PriceDex           Float @default(0)
   status                   Int
   verificationMethod       String
+  verificationComment      String @default("")
   lastChecked              Int
   duplicatePairs           DuplicatePairs[] @relation("OriginalPair")
   dp2                      DuplicatePairs[] @relation("DuplicatePair")
@@ -134,6 +135,7 @@ model Token {
   marketCapUsd          Float
   decimals              Int
   lastChecked           Int
+  verificationComment   String @default("")
   pairsToken0           Pair[]                  @relation("Token0")
   pairsToken1           Pair[]                  @relation("Token1")
   duplicateTokenSymbols DuplicateTokenSymbols[] @relation("OriginalToken")

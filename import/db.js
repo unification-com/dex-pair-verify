@@ -52,6 +52,7 @@ const getOrAddToken = async (chain, contractAddress, name, symbol, txCount, stat
                 marketCapUsd: 0,
                 lastChecked: 0,
                 decimals: 0,
+                verificationComment: "",
             },
         })
         created = true
@@ -112,6 +113,7 @@ const getOrAddPair = async (
                 token0PriceDex: 0,
                 token1PriceCg: 0,
                 token1PriceDex: 0,
+                verificationComment: "",
                 token0: {
                     connect: {
                         id: t0Id,

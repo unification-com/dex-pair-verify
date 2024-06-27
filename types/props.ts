@@ -42,6 +42,7 @@ export type PairProps = {
     token1PriceCg: number | string | null;
     status: number;
     verificationMethod: string;
+    verificationComment: string;
     duplicatePairs: any | null
     duplicateCount: number | null;
     _count: DuplicatePairCounter | null;
@@ -68,6 +69,7 @@ export type PairPropsNoToken = {
     volumeUsd24h: number,
     status: number;
     verificationMethod: string;
+    verificationComment: string;
     duplicatePairs: any | null
 };
 
@@ -111,6 +113,7 @@ export type TokenProps = {
     decimals: number
     lastChecked: number;
     verificationMethod: string;
+    verificationComment: string;
     duplicateCount: number
     pairsToken0: AssociatedPairProps[] | null;
     pairsToken1: AssociatedPairProps[] | null;

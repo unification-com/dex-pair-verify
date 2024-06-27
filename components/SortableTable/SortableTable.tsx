@@ -24,8 +24,16 @@ const SortableTable = ({ caption, data, columns }) => {
                 {
                     caption ? (<caption>{caption}</caption>) : null
                 }
-                <TableHead columns={columns} handleSorting={handleSorting}/>
-                <TableBody columns={columns} tableData={tableData}/>
+                <TableHead
+                    key={`table_head`}
+                    columns={columns}
+                    handleSorting={handleSorting}
+                />
+                <TableBody
+                    key={`_table_body`}
+                    columns={columns}
+                    tableData={tableData}
+                />
             </table>
         </>
     );

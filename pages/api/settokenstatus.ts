@@ -34,14 +34,19 @@ export default async function handler(
 
     const newStatus = parseInt(fields.status[0])
     const tokenId = fields.tokenid[0]
+    const comment = fields.comment[0]
     let updatedPairCount = 0
     let updatedTokenCount = 1;
 
     const token = await prisma.token.update({
         where: { id: tokenId },
-        data: { status: newStatus, verificationMethod: "manual" },
+        data: {
+            status: newStatus,
+            verificationMethod: "manual",
+            verificationComment: comment,
+        },
     })
-    
+
     if(newStatus !== 1) {
         // cascade update associated pairs
         const updatedPairCountRes = await prisma.pair.updateMany({
@@ -55,7 +60,10 @@ export default async function handler(
                     },
                 ],
             },
-            data: { status: newStatus, verificationMethod: "cascade" },
+            data: {
+                status: newStatus,
+                verificationMethod: "cascade"
+            },
         })
 
         updatedPairCount = updatedPairCountRes.count
