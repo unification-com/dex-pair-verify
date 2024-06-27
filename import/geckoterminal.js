@@ -91,8 +91,8 @@ const fetchFromSubgraph = async () => {
             query: poolMeta.graphql.funcQueryWithAddressList(q2Addr),
         })
 
-        const poolRes1 = result1.data[poolMeta.graphql.poolName]
-        const poolRes2 = result2.data[poolMeta.graphql.poolName]
+        const poolRes1 = result1.data[poolMeta.graphql.poolsName]
+        const poolRes2 = result2.data[poolMeta.graphql.poolsName]
 
         console.log(poolRes1.length, poolRes2.length)
 

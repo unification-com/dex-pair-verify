@@ -21,13 +21,19 @@ const TableCell = ({ data, column }) => {
             cellData = d ? d : "";
             break
         case "number":
-            cellData = <NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={d}/>;
+            cellData = <NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={d} />;
+            break
+        case "number_dp":
+            cellData = <NumericFormat displayType="text" thousandSeparator="," value={d} decimalScale={column.dp} />;
+            break
+        case "number_raw":
+            cellData = <NumericFormat displayType="text" thousandSeparator="," value={d} />;
             break
         case "usd":
-            cellData = <>$<NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={d}/></>
+            cellData = <>$<NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={d} /></>
             break
         case "percent":
-            cellData = <><NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={d}/>%</>;
+            cellData = <><NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={d} />%</>;
             break
         case "status":
             cellData = <><Status status={d} method={""} /></>

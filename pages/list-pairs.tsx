@@ -80,7 +80,7 @@ type Props = {
 }
 
 const ListPairs: React.FC<Props> = (props) => {
-    const columns = [
+    let columns = [
         {label: "Pair", accessor: "pair", sortable: true, sortbyOrder: "asc", cellType: "display"},
         // {label: "Token 0", accessor: "token0.symbol", sortable: true, cellType: "display"},
         {label: "(Token 0 Status)", accessor: "token0.status", sortable: true, cellType: "status"},
@@ -91,15 +91,15 @@ const ListPairs: React.FC<Props> = (props) => {
         { label: "24h Volume", accessor: "volumeUsd24h", sortable: true, cellType: "usd" },
         {label: `Dupes (status ${props.status})`, accessor: "duplicateCount", sortable: true, cellType: "number"},
         {label: "Total Dupes", accessor: "_count.duplicatePairs", sortable: true, cellType: "number"},
-        // {
-        //     label: "Edit",
-        //     accessor: "id",
-        //     sortable: false,
-        //     cellType: "edit_button",
-        //     router: {url: "/p/[id]", as: "/p/__ID__"}
-        // },
         { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/p/__ID__", text: "View/Edit"} },
     ];
+
+    if(props.status === 1) {
+        columns = [
+            ...columns,
+            { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/p/test/pair/__ID__", text: "Test Query"} },
+        ]
+    }
 
     return (
         <Layout>
@@ -144,6 +144,7 @@ const ListPairs: React.FC<Props> = (props) => {
                         caption=""
                         data={props.pairs}
                         columns={columns}
+                        useFilter={true}
                     />
                 </main>
             </div>

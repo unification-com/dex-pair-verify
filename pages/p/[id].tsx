@@ -2,7 +2,6 @@ import React, {FormEvent, useState} from "react"
 import { GetServerSideProps } from "next"
 import Layout from "../../components/Layout"
 import prisma from '../../lib/prisma';
-import Router from "next/router";
 import {NotificationManager} from 'react-notifications';
 import { NumericFormat } from 'react-number-format';
 import Status from "../../components/Status";
@@ -172,7 +171,7 @@ const Pair: React.FC<Props> = (props) => {
 
   return (
       <Layout>
-        <div key={`token_page_${props.pair.id}`}>
+        <div key={`pair_page_${props.pair.id}`}>
         <h1>Pair</h1>
           <h2><DexName dex={props.pair.dex}/> (<ChainName chain={props.pair.chain}/>)</h2>
           <h3>
@@ -338,6 +337,7 @@ const Pair: React.FC<Props> = (props) => {
                     caption=""
                     data={duplicatePairs}
                     columns={columns}
+                    useFilter={false}
                 />
               </>
           }
@@ -351,6 +351,7 @@ const Pair: React.FC<Props> = (props) => {
                     caption=""
                     data={props.similarPairs}
                     columns={similarPairsColumns}
+                    useFilter={true}
                 />
               </>
           }

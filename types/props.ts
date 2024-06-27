@@ -45,6 +45,8 @@ export type PairProps = {
     verificationComment: string;
     duplicatePairs: any | null
     duplicateCount: number | null;
+    token0Id: string;
+    token1Id: string;
     _count: DuplicatePairCounter | null;
 };
 

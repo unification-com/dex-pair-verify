@@ -212,6 +212,7 @@ const Token: React.FC<Props> = (props) => {
                             caption=""
                             data={duplicateTokens}
                             columns={duplicateColumns}
+                            useFilter={true}
                         />
                     </>
                 }
@@ -225,6 +226,7 @@ const Token: React.FC<Props> = (props) => {
                             caption=""
                             data={props.similarTokens}
                             columns={similarTokensColumns}
+                            useFilter={true}
                         />
                     </>
                 }
@@ -236,6 +238,7 @@ const Token: React.FC<Props> = (props) => {
                     caption=""
                     data={associatedPairs}
                     columns={assocPairColumns}
+                    useFilter={true}
                 />
             </div>
         </Layout>

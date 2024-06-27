@@ -6,7 +6,8 @@ const dataSources = [
         dex: "uniswap_v2",
         last_page: 10,
         graphql: {
-            poolName: "pairs",
+            poolsName: "pairs",
+            poolName: "pair",
             reserveUSD: "reserveUSD",
             reserveNativeCurrency: "reserveETH",
             reserve0: "reserve0",
@@ -79,7 +80,8 @@ const dataSources = [
         dex: "uniswap_v3",
         last_page: 10,
         graphql: {
-            poolName: "pools",
+            poolsName: "pools",
+            poolName: "pool",
             reserveUSD: "totalValueLockedUSD",
             reserveNativeCurrency: "totalValueLockedETH",
             reserve0: "totalValueLockedToken0",
@@ -155,7 +157,8 @@ const dataSources = [
         dex: "sushiswap",
         last_page: 10,
         graphql: {
-            poolName: "pairs",
+            poolsName: "pairs",
+            poolName: "pair",
             reserveUSD: "reserveUSD",
             reserveNativeCurrency: "reserveETH",
             reserve0: "reserve0",
@@ -228,7 +231,8 @@ const dataSources = [
         dex: "shibaswap",
         last_page: 10,
         graphql: {
-            poolName: "pairs",
+            poolsName: "pairs",
+            poolName: "pair",
             reserveUSD: "reserveUSD",
             reserveNativeCurrency: "reserveETH",
             reserve0: "reserve0",
@@ -301,7 +305,8 @@ const dataSources = [
     //     dex: "pancakeswap_v2",
     //     last_page: 10,
     //     graphql: {
-    //         poolName: "pairs",
+    //         poolsName: "pairs",
+    //         poolName: "pair",
     //         reserveUSD: "reserveUSD",
     //         reserveNativeCurrency: "reserveBNB",
     //         reserve0: "reserve0",
@@ -373,7 +378,8 @@ const dataSources = [
         dex: "quickswap_v3",
         last_page: 10,
         graphql: {
-            poolName: "pools",
+            poolsName: "pools",
+            poolName: "pool",
             reserveUSD: "totalValueLockedUSD",
             reserveNativeCurrency: "totalValueLockedMatic",
             reserve0: "totalValueLockedToken0",
@@ -448,7 +454,8 @@ const dataSources = [
         dex: "honeyswap",
         last_page: 10,
         graphql: {
-            poolName: "pairs",
+            poolsName: "pairs",
+            poolName: "pair",
             reserveUSD: "reserveUSD",
             reserveNativeCurrency: "reserveNativeCurrency",
             reserve0: "reserve0",
@@ -521,7 +528,8 @@ const dataSources = [
         dex: "pancakeswap-v3-bsc",
         last_page: 10,
         graphql: {
-            poolName: "pools",
+            poolsName: "pools",
+            poolName: "pool",
             reserveUSD: "totalValueLockedUSD",
             reserveNativeCurrency: "totalValueLockedETH",
             reserve0: "totalValueLockedToken0",

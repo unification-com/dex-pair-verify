@@ -108,6 +108,7 @@ const ListTokens: React.FC<Props> = (props) => {
                         caption=""
                         data={props.tokens}
                         columns={columns}
+                        useFilter={true}
                     />
                 </main>
             </div>
