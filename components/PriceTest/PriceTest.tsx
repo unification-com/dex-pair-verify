@@ -1,17 +1,17 @@
 import React, {useState} from "react";
 import {PairProps} from "../../types/props";
-import Status from "../Status";
-import SortableTable from "../SortableTable/SortableTable";
 import PriceData from "./PriceData";
 import Link from "next/link";
 import NoneSortableTable from "../SortableTable/NoneSortableTable";
+import {NumericFormat} from "react-number-format";
 
 const PriceTest: React.FC<{
     base: string,
     target: string,
-    usablePairs: PairProps[];
-    ignoredPairs: PairProps[];
-}> = ({ base, target, usablePairs, ignoredPairs }) => {
+    usablePairs: PairProps[],
+    ignoredPairs: PairProps[],
+    minReserveUsd: number,
+}> = ({ base, target, usablePairs, ignoredPairs, minReserveUsd }) => {
 
     const [usable, setUsable] = useState(usablePairs)
     const [ignored, setIgnored] = useState(ignoredPairs)
@@ -60,7 +60,7 @@ const PriceTest: React.FC<{
             {
                 (ignored.length) > 0 &&
                 <>
-                    <h4>Ignored pairs</h4>
+                    <h4>Ignored pairs with Reserve USD &lt; $<NumericFormat displayType="text" thousandSeparator="," value={minReserveUsd} /></h4>
                     <NoneSortableTable
                         key={`test_pair_ignore_list_${base}-${target}`}
                         caption=""
