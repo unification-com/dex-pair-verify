@@ -11,6 +11,7 @@ import {
     scientificToDecimal
 } from "../../lib/stats"
 import {NumericFormat} from "react-number-format";
+import NoneSortableTable from "../SortableTable/NoneSortableTable";
 const PriceData: React.FC<{
     base: string,
     target: string,
@@ -287,23 +288,21 @@ const PriceData: React.FC<{
             <h4>DEX pairs Used</h4>
 
             <div>
-                <SortableTable
-                    key={`pair_prices_${base}_${target}_${Date.now()}`}
+                <NoneSortableTable
+                    key={`pair_prices_${base}_${target}`}
                     caption=""
                     data={priceTableData}
                     columns={columns}
-                    useFilter={false}
                 />
             </div>
 
             {statsBefore && <div>
                 <h4>Stats before Outliers Removed</h4>
-                <SortableTable
-                    key={`stats_before_${base}_${target}_${Date.now()}`}
+                <NoneSortableTable
+                    key={`stats_before_${base}_${target}`}
                     caption=""
                     data={[statsBefore]}
                     columns={statsColumns}
-                    useFilter={false}
                 />
             </div>}
 
