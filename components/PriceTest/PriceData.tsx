@@ -2,7 +2,14 @@ import React, {useEffect, useState} from "react";
 import SortableTable from "../SortableTable/SortableTable";
 import {PairProps} from "../../types/props";
 import {Web3} from "web3";
-import {removeOutliersChauvenet, calculateMean, getStats, scientificToDecimal} from "../../lib/stats"
+import {
+    removeOutliersChauvenet,
+    removeOutliersIQD,
+    removeOutliersPeirceCriterion,
+    calculateMean,
+    getStats,
+    scientificToDecimal
+} from "../../lib/stats"
 import {NumericFormat} from "react-number-format";
 const PriceData: React.FC<{
     base: string,
@@ -10,29 +17,41 @@ const PriceData: React.FC<{
     pairs: PairProps[],
 }> = ({ base, target, pairs }) => {
 
+    const OUT_PEIRCE_CRITERION = "PeirceCriterion"
+    const OUT_NONE = "None"
+    const OUT_IDQ = "IDQ"
+    const OUT_CHAUVENET = "Chauvenet"
+
+    const [isFetching, setIsFetching] = useState(true)
+    const [errorMsg, setErrorMsg] = useState("")
     const [priceTableData, setPriceTableData] = useState([]);
-    const [priceData, setPriceData] = useState({
-        meanPrice: 0,
-        statsBefore: {
+    const [originalPrices, setOriginalPrices] = useState([])
+    const [pricesOutliersRemoved, setPricesOutliersRemoved] = useState([])
+    const [removedPrices, setRemovedPrices] = useState([])
+    const [meanPrice, setMeanPrice] = useState(0)
+    const [statsBefore, setStatsBefore] = useState(
+        {
             id: "stats-before",
             mean: 0,
             n: 0,
             stdDev: 0,
             sum: 0,
             variance: 0,
-        },
-        statsAfter: {
+        }
+    )
+    const [statsAfter, setStatsAfter] = useState(
+        {
             id: "stats-after",
             mean: 0,
             n: 0,
             stdDev: 0,
             sum: 0,
             variance: 0,
-        },
-        originalPrices: [],
-        pricesOutliersRemoved: [],
-        removedPrices: [],
-    });
+        }
+    )
+    const [outlierMethod, setOutlierMethod] = useState(OUT_CHAUVENET)
+    const [dMax, setDMax] = useState(2)
+
     const contactList = {}
 
     for(let i = 0; i < pairs.length; i += 1) {
@@ -49,6 +68,7 @@ const PriceData: React.FC<{
     }
 
     useEffect(() => {
+        console.log("fetch")
         const endpoints = []
         for (const chain in contactList) {
             // Get the indexed item by the key:
@@ -109,16 +129,19 @@ const PriceData: React.FC<{
                                 }
                             )
                         }
+                    } else {
+                        setErrorMsg(d.error)
+                        setIsFetching(false)
                     }
                 }
                 setPriceTableData(pd)
             })
-            .catch(error => {
-                console.log(error)
+            .catch(e => {
+                console.log(e)
+                setErrorMsg(e.message)
+                setIsFetching(false)
             });
-
-        // fetchData();
-    }, []);
+    }, [pairs]);
 
     useEffect(() => {
         const prices = []
@@ -128,35 +151,65 @@ const PriceData: React.FC<{
             prices.push(parseFloat(price))
         }
 
-        if(prices.length > 1) {
-            const statsBefore = getStats(prices)
-            const pricesOutliersRemoved = removeOutliersChauvenet(prices, 2)
-            const statsAfter = getStats(pricesOutliersRemoved)
-            const meanPrice = calculateMean(pricesOutliersRemoved)
-
-            const removedPrices =
-                prices.filter((element) => !pricesOutliersRemoved.includes(element));
-
-            statsBefore.id = "stats-before"
-            statsAfter.id = "stats-after"
-
-            const d = {
-                meanPrice,
-                statsBefore,
-                statsAfter,
-                originalPrices: prices,
-                pricesOutliersRemoved,
-                removedPrices,
-            }
-
-            // @ts-ignore
-            setPriceData(d)
-        } else {
-            const d = priceData
-            d.meanPrice = prices[0]
-            setPriceData(d)
-        }
+        setOriginalPrices(prices)
+        setIsFetching(false)
     }, [priceTableData]);
+
+    useEffect(() => {
+        function processMean() {
+            let pricesOutliersRemoved = []
+            if(originalPrices.length > 1) {
+                const statsBefore = getStats(originalPrices)
+
+                switch(outlierMethod) {
+                    case OUT_CHAUVENET:
+                        pricesOutliersRemoved = removeOutliersChauvenet(originalPrices, dMax)
+                        break
+                    case OUT_IDQ:
+                        pricesOutliersRemoved = removeOutliersIQD(originalPrices)
+                        break
+                    case OUT_PEIRCE_CRITERION:
+                        pricesOutliersRemoved = removeOutliersPeirceCriterion(originalPrices)
+                        break
+                    case OUT_NONE:
+                    default:
+                        pricesOutliersRemoved = originalPrices
+                        break
+                }
+
+                const statsAfter = getStats(pricesOutliersRemoved)
+                const meanPrice = calculateMean(pricesOutliersRemoved)
+
+                const removedPrices =
+                    originalPrices.filter((element) => !pricesOutliersRemoved.includes(element));
+
+                statsBefore.id = "stats-before"
+                statsAfter.id = "stats-after"
+
+                setMeanPrice(meanPrice)
+                setPricesOutliersRemoved(pricesOutliersRemoved)
+                setRemovedPrices(removedPrices)
+                // @ts-ignore
+                setStatsBefore(statsBefore)
+                // @ts-ignore
+                setStatsAfter(statsAfter)
+            } else {
+                setMeanPrice(originalPrices[0])
+            }
+        }
+
+        processMean()
+    }, [originalPrices, outlierMethod, dMax]);
+
+    const onOutlierMethodChange = (event) => {
+        const value = event.target.value;
+        setOutlierMethod(value);
+    };
+
+    const onDMaxChange = (event) => {
+        const value = event.target.value;
+        setDMax(parseInt(value))
+    }
 
     const columns = [
         {label: "Chain", accessor: "chain", sortable: true, sortbyOrder: "asc", cellType: "display"},
@@ -172,20 +225,64 @@ const PriceData: React.FC<{
     ]
 
     const statsColumns = [
-        {label: "Number of Elements", accessor: "n", sortable: true, cellType: "number_raw"},
+        {label: "Num. Prices Used", accessor: "n", sortable: true, cellType: "number_raw"},
         {label: "Sum", accessor: "sum", sortable: true, cellType: "number_raw"},
         {label: "Mean", accessor: "mean", sortable: true, cellType: "number_raw"},
         {label: "Std Deviation", accessor: "stdDev", sortable: true, cellType: "number_raw"},
         {label: "Variance", accessor: "variance", sortable: true, cellType: "number_raw"},
     ]
 
+    if(isFetching) {
+        return (
+            <h3>Loading...</h3>
+        )
+    }
+
     return (
-        <div>
+        <div key={`price-data-results-${base}-${target}`}>
             <h2>Price Results for {base} - {target}</h2>
 
-            <h3>Mean Price: 1 {base} = {priceData.meanPrice} {target}</h3>
+            {
+                errorMsg && <>
+                    <h3>ERROR: {errorMsg}</h3>
+                </>
+            }
+
+            <h4>
+                Change Outlier Remove method<br/>
+                Method: <select onChange={onOutlierMethodChange} className="form-select" defaultValue={outlierMethod}>
+                <option value={OUT_CHAUVENET}>{OUT_CHAUVENET}</option>
+                <option value={OUT_PEIRCE_CRITERION}>{OUT_PEIRCE_CRITERION}</option>
+                <option value={OUT_IDQ}>{OUT_IDQ}</option>
+                <option value={OUT_NONE}>{OUT_NONE}</option>
+            </select>
+                {(outlierMethod === OUT_CHAUVENET) &&
+                    <>
+                        <br/>
+                        {OUT_CHAUVENET} dMax Value: <select defaultValue={dMax} onChange={onDMaxChange}>
+                        <option value={1}>1</option>
+                        <option value={2}>2</option>
+                        <option value={3}>3</option>
+                        <option value={4}>4</option>
+                    </select>
+                    </>
+                }
+                <br />
+                Note: OoO AdHoc currently only uses the {OUT_CHAUVENET}, with dMax = 1
+            </h4>
+
+            <h3>Mean Price: 1 {base} = {meanPrice} {target}</h3>
 
             <h3>||| Raw Data |||</h3>
+
+            <h4>Outlier Removal Method: {outlierMethod}
+                {(outlierMethod === OUT_CHAUVENET) &&
+                    <>
+                        &nbsp; (dMax: {dMax})
+                    </>
+                }
+
+            </h4>
 
             <h4>DEX pairs Used</h4>
 
@@ -199,23 +296,23 @@ const PriceData: React.FC<{
                 />
             </div>
 
-            {priceData.statsBefore && <div>
+            {statsBefore && <div>
                 <h4>Stats before Outliers Removed</h4>
                 <SortableTable
                     key={`stats_before_${base}_${target}_${Date.now()}`}
                     caption=""
-                    data={[priceData.statsBefore]}
+                    data={[statsBefore]}
                     columns={statsColumns}
                     useFilter={false}
                 />
             </div>}
 
-            {
-                (priceData.removedPrices.length > 0) && <>
-                    <h4>Prices removed from calculation</h4>
+            <h4>{removedPrices.length} Prices removed from calculation using {outlierMethod} method</h4>
 
+            {
+                (removedPrices.length > 0) && <>
                     <ul>
-                        {priceData.removedPrices.map((removed) => {
+                        {removedPrices.map((removed) => {
                             return (
                                 <li>
                                     <NumericFormat displayType="text" thousandSeparator="," value={removed}/>
@@ -226,18 +323,18 @@ const PriceData: React.FC<{
                 </>
             }
 
-            {priceData.statsAfter && <div>
+            {statsAfter && <div>
                 <h4>Stats after Outliers Removed</h4>
                 <SortableTable
                     key={`stats_before_${base}_${target}_${Date.now()}`}
                     caption=""
-                    data={[priceData.statsAfter]}
+                    data={[statsAfter]}
                     columns={statsColumns}
                     useFilter={false}
                 />
             </div>}
 
-            <h1>FINAL MEAN PRICE<br />1 {base} = {scientificToDecimal(priceData.meanPrice)} {target}</h1>
+            <h1>FINAL MEAN PRICE<br/>1 {base} = {scientificToDecimal(meanPrice)} {target}</h1>
         </div>
     )
 

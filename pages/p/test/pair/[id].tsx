@@ -1,4 +1,4 @@
-import React from "react"
+import React, {useEffect, useState} from "react"
 import { GetServerSideProps } from "next"
 import Layout from "../../../../components/Layout"
 import prisma from '../../../../lib/prisma';
@@ -8,8 +8,6 @@ import Status from "../../../../components/Status";
 import PriceTest from "../../../../components/PriceTest/PriceTest";
 
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
-
-    const minReserveUsd = 50000
 
     const pair = await prisma.pair.findUnique({
         where: {
@@ -39,31 +37,8 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
         },
     });
 
-    const usablePairs = []
-    const ignoredPairs = []
-    const contactList = {}
-
-    for(let i = 0; i < pairs.length; i += 1) {
-        const p = pairs[i]
-
-        if(p.reserveUsd >= minReserveUsd) {
-            usablePairs.push(p)
-
-            if(contactList[p.chain] === undefined) {
-                contactList[p.chain] = {}
-            }
-
-            if(contactList[p.chain][p.dex] === undefined) {
-                contactList[p.chain][p.dex] = []
-            }
-            contactList[p.chain][p.dex].push(p.contractAddress)
-        } else {
-            ignoredPairs.push(p)
-        }
-    }
-
     return {
-        props: {pair, base: pair.token0.symbol, target: pair.token1.symbol, usablePairs, ignoredPairs, minReserveUsd, contactList},
+        props: {pair, base: pair.token0.symbol, target: pair.token1.symbol, pairs},
     }
 }
 
@@ -71,13 +46,15 @@ type Props = {
     pair: PairProps,
     base: string,
     target: string,
-    usablePairs: PairProps[];
-    ignoredPairs: PairProps[];
-    minReserveUsd: number;
-    contactList: object;
+    pairs: PairProps[];
 }
 
 const Pair: React.FC<Props> = (props) => {
+    
+    const [minReserveUsd, setMinReserveUsd] = useState(50000)
+    const [minReserveUsdInput, setMinReserveUsdInput] = useState(50000)
+    const [usablePairs, setUsablePairs] = useState([])
+    const [ignoredPairs, setIgnoredPairs] = useState([])
 
     if(props.pair.status !== 1) {
         return (
@@ -87,15 +64,57 @@ const Pair: React.FC<Props> = (props) => {
         )
     }
 
+    useEffect(() => {
+        const up = []
+        const ip = []
+
+        for(let i = 0; i < props.pairs.length; i += 1) {
+            const p = props.pairs[i]
+
+            if(p.reserveUsd >= minReserveUsd) {
+                up.push(p)
+            } else {
+                ip.push(p)
+            }
+        }
+        setUsablePairs(up)
+        setIgnoredPairs(ip)
+    }, [minReserveUsd]);
+
+    const onMinReserveUsdChange = (event) => {
+        const value = event.target.value;
+        setMinReserveUsdInput(parseInt(value))
+    }
+    const handleMinReserveChange = (event) => {
+        event.preventDefault();
+        setMinReserveUsd(minReserveUsdInput)
+    }
+
+    if(usablePairs.length === 0) {
+        return (
+            <Layout>
+                <h3>No usable <Status status={1} method={""} /> pairs found for {props.base}-{props.target}. Please try another</h3>
+            </Layout>
+        )
+    }
+
     return (
         <Layout>
+
+            <h3>
+                <form onSubmit={handleMinReserveChange}>
+                    Only <Status status={1} method={""}/> pairs are used, with a USD reserve &gt;= $
+                    <input type={"text"} defaultValue={minReserveUsdInput} onChange={onMinReserveUsdChange}/>
+                    <input type="submit" value="Change Min reserve"/>
+                </form>
+            </h3>
+
             <PriceTest
-                key={`${props.base}_${props.target}_${Date.now()}`}
+                key={`price_test_${props.base}_${props.target}`}
                 base={props.base}
                 target={props.target}
-                usablePairs={props.usablePairs}
-                ignoredPairs={props.ignoredPairs}
-                minReserveUsd={props.minReserveUsd}
+                usablePairs={usablePairs}
+                ignoredPairs={ignoredPairs}
             />
         </Layout>
     )
