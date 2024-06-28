@@ -115,6 +115,7 @@ const Pair: React.FC<Props> = (props) => {
                 target={props.target}
                 usablePairs={usablePairs}
                 ignoredPairs={ignoredPairs}
+                minReserveUsd={minReserveUsd}
             />
         </Layout>
     )
