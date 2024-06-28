@@ -51,7 +51,7 @@ const PriceData: React.FC<{
         }
     )
     const [outlierMethod, setOutlierMethod] = useState(OUT_CHAUVENET)
-    const [dMax, setDMax] = useState(2)
+    const [dMax, setDMax] = useState(1)
 
     const contactList = {}
 
