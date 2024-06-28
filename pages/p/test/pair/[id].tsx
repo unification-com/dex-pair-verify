@@ -50,7 +50,7 @@ type Props = {
 }
 
 const Pair: React.FC<Props> = (props) => {
-    
+
     const [minReserveUsd, setMinReserveUsd] = useState(50000)
     const [minReserveUsdInput, setMinReserveUsdInput] = useState(50000)
     const [usablePairs, setUsablePairs] = useState([])
