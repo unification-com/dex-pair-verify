@@ -14,6 +14,7 @@ export default async function handler(
         prices: [],
         chain: "",
         dex: "",
+        addresses: "",
         error: "",
         success: false,
     }
@@ -36,6 +37,7 @@ export default async function handler(
     const addrStr = `"${addresses.join('","')}"`
     retData.chain = chain
     retData.dex = dex
+    retData.addresses = addrStr
 
     let poolsName = null
     let url = null
