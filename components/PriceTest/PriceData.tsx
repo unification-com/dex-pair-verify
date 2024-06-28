@@ -24,7 +24,7 @@ const PriceData: React.FC<{
     const OUT_CHAUVENET = "Chauvenet"
 
     const [isFetching, setIsFetching] = useState(true)
-    const [errorMsg, setErrorMsg] = useState("")
+    const [errorMsg, setErrorMsg] = useState(null)
     const [priceTableData, setPriceTableData] = useState([]);
     const [originalPrices, setOriginalPrices] = useState([])
     const [pricesOutliersRemoved, setPricesOutliersRemoved] = useState([])
@@ -69,7 +69,9 @@ const PriceData: React.FC<{
     }
 
     useEffect(() => {
-        console.log("fetch")
+        setIsFetching(true)
+        setErrorMsg(null)
+
         const endpoints = []
         for (const chain in contactList) {
             // Get the indexed item by the key:
@@ -108,6 +110,7 @@ const PriceData: React.FC<{
             .then(data => {
                 // Merge and process the data
                 const pd = []
+                const fetchErrors = []
                 for(let i = 0; i < data.length; i += 1) {
                     const d = data[i]
                     if(d.success) {
@@ -131,11 +134,14 @@ const PriceData: React.FC<{
                             )
                         }
                     } else {
-                        setErrorMsg(d.error)
-                        setIsFetching(false)
+                        fetchErrors.push(`FETCH ERROR ${i}: ${d.chain}, ${d.dex}, ${d.addresses} - ${d.error}`)
                     }
                 }
+                if(fetchErrors.length > 0) {
+                    setErrorMsg(fetchErrors.join(" | "))
+                }
                 setPriceTableData(pd)
+                setIsFetching(false)
             })
             .catch(e => {
                 console.log(e)
@@ -153,7 +159,6 @@ const PriceData: React.FC<{
         }
 
         setOriginalPrices(prices)
-        setIsFetching(false)
     }, [priceTableData]);
 
     useEffect(() => {
@@ -235,20 +240,24 @@ const PriceData: React.FC<{
 
     if(isFetching) {
         return (
-            <h3>Loading...</h3>
+            <div>
+                <h2>Fetching data...</h2>
+            </div>
+        )
+    }
+
+    if(errorMsg !== null) {
+        return (
+            <div>
+                <h3>ERROR Fetching Data</h3>
+                <p>{errorMsg}</p>
+            </div>
         )
     }
 
     return (
         <div key={`price-data-results-${base}-${target}`}>
             <h2>Price Results for {base} - {target}</h2>
-
-            {
-                errorMsg && <>
-                    <h3>ERROR: {errorMsg}</h3>
-                </>
-            }
-
             <h4>
                 Change Outlier Remove method<br/>
                 Method: <select onChange={onOutlierMethodChange} className="form-select" defaultValue={outlierMethod}>
