@@ -1,16 +1,25 @@
-import React from "react";
+import React, {useState} from "react";
 import {PairProps} from "../../types/props";
 import Status from "../Status";
 import SortableTable from "../SortableTable/SortableTable";
 import PriceData from "./PriceData";
+import Link from "next/link";
+import NoneSortableTable from "../SortableTable/NoneSortableTable";
 
 const PriceTest: React.FC<{
     base: string,
     target: string,
     usablePairs: PairProps[];
     ignoredPairs: PairProps[];
-    minReserveUsd: number;
-}> = ({ base, target, usablePairs, ignoredPairs, minReserveUsd }) => {
+}> = ({ base, target, usablePairs, ignoredPairs }) => {
+
+    const [usable, setUsable] = useState(usablePairs)
+    const [ignored, setIgnored] = useState(ignoredPairs)
+
+    React.useEffect(() => {
+        setUsable(usablePairs)
+        setIgnored(ignoredPairs)
+    }, [usablePairs, ignoredPairs]);
 
     const columns = [
         { label: "Chain", accessor: "chain", sortable: true, sortbyOrder: "asc", cellType: "display" },
@@ -27,38 +36,46 @@ const PriceTest: React.FC<{
     return (
         <div key={`pair_price_test_${base}-${target}`}>
             <h1>Pair</h1>
-            <h2>Test prices for {base} to {target}</h2>
+            <h2>Test prices for {base} to {target} &nbsp;
+                (Try &nbsp;
+                <Link
+                    href={`/p/test/${target}/${base}`}>
+                    <a>{target}-{base}</a>
+                </Link>
+                )</h2>
 
-            <h3>Only <Status status={1} method={""} /> pairs are used, with a USD reserve &gt;= ${minReserveUsd}</h3>
             {
-                (usablePairs.length) > 0 &&
+                (usable.length) > 0 &&
                 <>
                     <h4>Usable pairs from all DEXs</h4>
-                    <SortableTable
+                    <NoneSortableTable
                         key={`test_pair_usable_list_${base}-${target}`}
                         caption=""
-                        data={usablePairs}
+                        data={usable}
                         columns={columns}
-                        useFilter={false}
                     />
                 </>
             }
 
             {
-                (ignoredPairs.length) > 0 &&
+                (ignored.length) > 0 &&
                 <>
                     <h4>Ignored pairs</h4>
-                    <SortableTable
+                    <NoneSortableTable
                         key={`test_pair_ignore_list_${base}-${target}`}
                         caption=""
-                        data={ignoredPairs}
+                        data={ignored}
                         columns={columns}
-                        useFilter={false}
                     />
                 </>
             }
 
-            <PriceData base={base} target={target} pairs={usablePairs} />
+            <PriceData
+                key={`price-data-${base}-${target}`}
+                base={base}
+                target={target}
+                pairs={usable}
+            />
 
         </div>
     )
