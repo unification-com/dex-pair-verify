@@ -86,6 +86,13 @@ export default async function handler(
         // max 10 minutes
         minutes = 10
     }
+
+    if(chain === "bsc") {
+        if(minutes > 4) {
+            minutes = 4
+        }
+    }
+
     const addrStr = `"${addresses.join('","')}"`
     const blocksPerMin = chainInfo[chain]?.blocksPerMin
     const rpc = chainInfo[chain]?.rpc
