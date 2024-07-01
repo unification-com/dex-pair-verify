@@ -188,7 +188,7 @@ const Pair: React.FC<Props> = (props) => {
             }
 
           </h2>
-          
+
           <h3>
             CoinGecko: <CoinGeckoPoolLink chain={props.pair.chain} contractAddress={props.pair.contractAddress}/><br/>
             DEX Analytics: <PoolUrl chain={props.pair.chain} dex={props.pair.dex}

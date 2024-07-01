@@ -10,6 +10,7 @@ const DexName: React.FC<{ dex: string }> = ({ dex }) => {
         uniswap_v3: "Uniswap V3",
         quickswap_v3: "Quickswap V3",
         honeyswap: "Honeyswap",
+        "pancakeswap-v3-bsc": "Pancakeswap V3",
     }
 
     const dexName = dexNames[dex]
