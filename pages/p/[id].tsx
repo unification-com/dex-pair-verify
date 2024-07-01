@@ -172,22 +172,24 @@ const Pair: React.FC<Props> = (props) => {
   return (
       <Layout>
         <div key={`pair_page_${props.pair.id}`}>
-        <h1>Pair</h1>
+          <h1>Pair</h1>
           <h2><DexName dex={props.pair.dex}/> (<ChainName chain={props.pair.chain}/>)</h2>
-          <h3>
+          <h2>
             {props.pair.pair}
 
             {
                 (props.pair.status === 1) &&
-                <>
+                <>&nbsp;-&nbsp;
                   <Link
                       href={`/p/test/pair/${props.pair.id}`}>
-                    (<a target={"_blank"}>Test Price fetch</a>)
+                    <a target={"_blank"}>Test Price fetch</a>
                   </Link>
                 </>
             }
 
-            <br/>
+          </h2>
+          
+          <h3>
             CoinGecko: <CoinGeckoPoolLink chain={props.pair.chain} contractAddress={props.pair.contractAddress}/><br/>
             DEX Analytics: <PoolUrl chain={props.pair.chain} dex={props.pair.dex}
                                     contractAddress={props.pair.contractAddress}/><br/>
@@ -276,7 +278,7 @@ const Pair: React.FC<Props> = (props) => {
             <tbody>
             <tr>
               <td>
-              $<NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
+                $<NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
                                 value={props.pair.reserveUsd}/>
               </td>
               <td>
