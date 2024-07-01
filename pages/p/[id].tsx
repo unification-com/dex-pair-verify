@@ -176,6 +176,17 @@ const Pair: React.FC<Props> = (props) => {
           <h2><DexName dex={props.pair.dex}/> (<ChainName chain={props.pair.chain}/>)</h2>
           <h3>
             {props.pair.pair} <br/>
+
+            {
+              (props.pair.status === 1) &&
+                <>
+                  <Link
+                      href={`/p/test/pair/${props.pair.id}`}>
+                    (<a target={"_blank"}>Test Price fetch</a>)
+                  </Link>
+                </>
+            }
+
             CoinGecko: <CoinGeckoPoolLink chain={props.pair.chain} contractAddress={props.pair.contractAddress}/><br/>
             DEX Analytics: <PoolUrl chain={props.pair.chain} dex={props.pair.dex}
                                     contractAddress={props.pair.contractAddress}/><br/>
