@@ -4,6 +4,15 @@ import {getServerSession} from "next-auth";
 import {authOptions} from "./auth/[...nextauth]";
 import {ExtendedSessionUser} from "../../types/types";
 
+const cleanseDexId = (dex) => {
+    switch(dex) {
+        case "pancakeswap-v3-bsc":
+            return "pancakeswap_v3"
+        default:
+            return dex
+    }
+}
+
 export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
@@ -44,10 +53,12 @@ export default async function handler(
         ],
     })
 
+    const dexIdForOoO = cleanseDexId(dex)
+
     const retData = {
         pairs: [],
         chain,
-        dex,
+        dex: dexIdForOoO,
     }
 
     for(let i = 0; i < data.length; i += 1) {
@@ -67,7 +78,7 @@ export default async function handler(
 
     if(parseInt(download) === 1) {
         res.setHeader('Content-Type', 'application/json');
-        res.setHeader(`Content-Disposition`, `attachment; filename=${chain}_${dex}_verified.json`);
+        res.setHeader(`Content-Disposition`, `attachment; filename=${chain}-${dexIdForOoO}-verified.json`);
     }
 
     return res.status(200).json(retData)
