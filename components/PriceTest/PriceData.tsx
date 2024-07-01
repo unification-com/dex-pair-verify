@@ -52,6 +52,7 @@ const PriceData: React.FC<{
     )
     const [outlierMethod, setOutlierMethod] = useState(OUT_CHAUVENET)
     const [dMax, setDMax] = useState(1)
+    const [minsOfData, setMinsOfData] = useState(0)
 
     const contactList = {}
 
@@ -78,7 +79,7 @@ const PriceData: React.FC<{
             const chainDexs = contactList[chain];
             for (const dex in chainDexs) {
                 const contracts = chainDexs[dex]
-                const url = `/api/getprices?chain=${chain}&dex=${dex}&addresses=${contracts.join(",")}`
+                const url = `/api/getprices?chain=${chain}&dex=${dex}&addresses=${contracts.join(",")}&mins=${minsOfData}`
                 endpoints.push(url)
             }
         }
@@ -148,7 +149,7 @@ const PriceData: React.FC<{
                 setErrorMsg(e.message)
                 setIsFetching(false)
             });
-    }, [pairs]);
+    }, [pairs, minsOfData]);
 
     useEffect(() => {
         const prices = []
@@ -216,6 +217,11 @@ const PriceData: React.FC<{
         const value = event.target.value;
         setDMax(parseInt(value))
     }
+    const onMinutesDataChange = (event) => {
+        const value = event.target.value;
+        setMinsOfData(parseInt(value))
+    }
+
 
     const columns = [
         {label: "Chain", accessor: "chain", sortable: true, sortbyOrder: "asc", cellType: "display"},
@@ -258,6 +264,24 @@ const PriceData: React.FC<{
     return (
         <div key={`price-data-results-${base}-${target}`}>
             <h2>Price Results for {base} - {target}</h2>
+            <h4>
+                Change Number of Minutes of data to use<br/>
+                <select onChange={onMinutesDataChange} className="form-select" defaultValue={minsOfData}>
+                    <option value={0}>0</option>
+                    <option value={1}>1</option>
+                    <option value={2}>2</option>
+                    <option value={3}>3</option>
+                    <option value={4}>4</option>
+                    <option value={5}>5</option>
+                    <option value={6}>6</option>
+                    <option value={7}>7</option>
+                    <option value={8}>8</option>
+                    <option value={9}>9</option>
+                    <option value={10}>10</option>
+                </select>
+                <br/>
+                Note: 0 = only the latest price
+            </h4>
             <h4>
                 Change Outlier Remove method<br/>
                 Method: <select onChange={onOutlierMethodChange} className="form-select" defaultValue={outlierMethod}>

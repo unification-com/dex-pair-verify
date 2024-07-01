@@ -4,7 +4,7 @@ const {
     getPairsToFetchFromCoingecko,
     updatePairWithCoingeckoData,
 } = require("./db")
-const {dataSources} = require("./sources")
+const {dataSources} = require("../lib/sources")
 const Web3 = require("web3");
 
 const CG_WAIT = 2500; // coin gecko API limited to 30 calls/minute, so wait 2.5 seconds between calls.

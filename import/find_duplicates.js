@@ -4,7 +4,7 @@ const {
     getAllPairsForChainDex,
     getOrAddDuplicatePair,
 } = require("./db")
-const {dataSources} = require("./sources")
+const {dataSources} = require("../lib/sources")
 
 const processTokensForChain = async(chain) => {
     console.log(chain)
