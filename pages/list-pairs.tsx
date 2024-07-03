@@ -4,11 +4,11 @@ import Layout from "../components/Layout"
 import prisma from '../lib/prisma';
 import Status from "../components/Status";
 import Link from "next/link";
-import Router from "next/router";
 import ChainName from "../components/ChainName";
 import DexName from "../components/DexName";
 import SortableTable from "../components/SortableTable/SortableTable";
 import {PairProps} from "../types/props";
+import {TokenPairStatus} from "../types/types";
 
 export const getServerSideProps: GetServerSideProps = async ({ params, query }) => {
 
@@ -94,7 +94,7 @@ const ListPairs: React.FC<Props> = (props) => {
         { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/p/__ID__", text: "View/Edit"} },
     ];
 
-    if(props.status === 1) {
+    if(props.status === TokenPairStatus.Verified) {
         columns = [
             ...columns,
             { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/p/test/pair/__ID__", text: "Test Query"} },
@@ -111,28 +111,28 @@ const ListPairs: React.FC<Props> = (props) => {
                 </h2>
                 <h3>
                     <Link
-                        href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=0`}>
+                        href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=${TokenPairStatus.Unverified}`}>
                         <a>Unverified</a>
                     </Link>
                     &nbsp;|&nbsp;
                     <Link
-                        href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=1`}>
+                        href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=${TokenPairStatus.Verified}`}>
                         <a>VERIFIED</a>
                     </Link>
                     &nbsp;|&nbsp;
                     <Link
-                        href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=2`}>
+                        href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=${TokenPairStatus.Duplicate}`}>
                         <a>Duplicate</a>
                     </Link>
                     &nbsp;|&nbsp;
                     <Link
-                        href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=3`}>
+                        href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=${TokenPairStatus.NotCurrentlyUsable}`}>
                         <a>Fake/Bad/Not Usable</a>
                     </Link>
                 </h3>
                 <main>
                     {
-                        (props.status === 2) && <>
+                        (props.status === TokenPairStatus.Duplicate) && <>
                             <p>
                                 <strong>Note:</strong> Duplicate includes both duplicate pairs and pairs that may contain
                                 duplicate token symbols

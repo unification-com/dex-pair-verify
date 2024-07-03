@@ -1,4 +1,5 @@
 import React from "react";
+import {TokenPairStatus} from "../types/types";
 
 const Status: React.FC<{ status: number, method: string }> = ({ status, method }) => {
 
@@ -6,22 +7,22 @@ const Status: React.FC<{ status: number, method: string }> = ({ status, method }
     let statusClass = "status-unverified"
 
     switch(status) {
-        case 0:
+        case TokenPairStatus.Unverified:
         default:
             statusStr = "Unverified"
             statusClass = "status-unverified"
             break
-        case 1:
+        case TokenPairStatus.Verified:
             statusStr = "VERIFIED";
             statusClass = "status-verified"
             break;
-        case 2:
+        case TokenPairStatus.Duplicate:
             statusStr = "Duplicate";
             statusClass = "status-dupe"
             break;
-        case 3:
+        case TokenPairStatus.NotCurrentlyUsable:
             statusStr = "Fake/Bad/Not Usable";
-            statusClass = "status-bad"
+            statusClass = "status-not-usable"
             break;
     }
     return (
@@ -40,7 +41,7 @@ const Status: React.FC<{ status: number, method: string }> = ({ status, method }
                     color: orange;
                 }
 
-                .status-bad {
+                .status-not-usable {
                     font-weight: bold;
                     color: red;
                 }

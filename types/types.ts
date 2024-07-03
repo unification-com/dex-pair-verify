@@ -5,3 +5,10 @@ export type ExtendedSessionUser = {
     image: string,
     isAuthotised: boolean,
 }
+
+export enum TokenPairStatus {
+    Unverified,
+    Verified,
+    Duplicate,
+    NotCurrentlyUsable,
+}
