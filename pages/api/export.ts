@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '../../lib/prisma';
 import {getServerSession} from "next-auth";
 import {authOptions} from "./auth/[...nextauth]";
-import {ExtendedSessionUser} from "../../types/types";
+import {ExtendedSessionUser, TokenPairStatus} from "../../types/types";
 
 const cleanseDexId = (dex) => {
     switch(dex) {
@@ -36,7 +36,7 @@ export default async function handler(
         where: {
             chain,
             dex,
-            status: 1,
+            status: TokenPairStatus.Verified,
         },
         include: {
             token0: {

@@ -2,8 +2,6 @@ import React, {FormEvent, useState} from "react"
 import { GetServerSideProps } from "next"
 import Layout from "../../components/Layout"
 import prisma from '../../lib/prisma';
-import Link from "next/link";
-
 import {NotificationManager} from 'react-notifications';
 import Status from "../../components/Status";
 import {TokenProps} from "../../types/props";
@@ -12,7 +10,7 @@ import ExplorerUrl from "../../components/ExplorerUrl";
 import {NumericFormat} from "react-number-format";
 import CoinGeckoCoinLink from "../../components/CoinGeckoCoinLink";
 import SortableTable from "../../components/SortableTable/SortableTable";
-import Router from "next/router";
+import {TokenPairStatus} from "../../types/types";
 
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
 
@@ -160,10 +158,10 @@ const Token: React.FC<Props> = (props) => {
                 <p>Status: <Status status={currentStatus} method={props.token.verificationMethod}/></p>
                 Change Status: <form onSubmit={onSubmit}>
                 <select name="status" id="tokenstatus" defaultValue={currentStatus}>
-                    <option value="0">Unverified</option>
-                    <option value="1">VERIFIED</option>
-                    <option value="2">Duplicate</option>
-                    <option value="3">Fake/Bad/Not Usable</option>
+                    <option value={TokenPairStatus.Unverified}>Unverified</option>
+                    <option value={TokenPairStatus.Verified}>VERIFIED</option>
+                    <option value={TokenPairStatus.Duplicate}>Duplicate</option>
+                    <option value={TokenPairStatus.NotCurrentlyUsable}>Fake/Bad/Not Usable</option>
                 </select>
                 <input type={"text"} defaultValue={props.token.verificationComment} name={"comment"} placeholder={"optional comment"} />
                 <input type={"hidden"} value={props.token.id} name={"tokenid"} />

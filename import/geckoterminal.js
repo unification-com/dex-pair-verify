@@ -122,13 +122,13 @@ const fetchFromSubgraph = async () => {
 
             if (stRes) {
                 // token0
-                const [t0, t0Created] = await getOrAddToken(chain, token0Address, token0.name, token0.symbol, token0TxCount, 1, "geckoterminal.com")
+                const [t0, t0Created] = await getOrAddToken(chain, token0Address, token0.name, token0.symbol, token0TxCount, 0, "")
                 // token1
-                const [t1, t1Created] = await getOrAddToken(chain, token1Address, token1.name, token1.symbol, token1TxCount, 1, "geckoterminal.com")
+                const [t1, t1Created] = await getOrAddToken(chain, token1Address, token1.name, token1.symbol, token1TxCount, 0, "")
 
                 const pSym = `${t0.symbol}-${t1.symbol}`
 
-                const [p, pCreated] = await getOrAddPair(chain, dex, pairAddress, pSym, t0.id, t1.id, reserveUSD, reserveNativeCurrency, reserve0, reserve1, volumeUSD, txCount, 1, "geckoterminal.com")
+                const [p, pCreated] = await getOrAddPair(chain, dex, pairAddress, pSym, t0.id, t1.id, reserveUSD, reserveNativeCurrency, reserve0, reserve1, volumeUSD, txCount, 0, "")
 
                 if(pCreated) {
                     results[chain][dex].new += 1

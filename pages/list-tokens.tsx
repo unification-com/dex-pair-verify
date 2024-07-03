@@ -4,10 +4,10 @@ import Layout from "../components/Layout"
 import prisma from '../lib/prisma';
 import Status from "../components/Status";
 import Link from "next/link";
-import Router from "next/router";
 import ChainName from "../components/ChainName";
 import {TokenProps} from "../types/props";
 import SortableTable from "../components/SortableTable/SortableTable";
+import {TokenPairStatus} from "../types/types";
 
 export const getServerSideProps: GetServerSideProps = async ({ params, query }) => {
 
@@ -83,22 +83,22 @@ const ListTokens: React.FC<Props> = (props) => {
                 <h2>Chain: <ChainName chain={props.chain}/></h2>
                 <h3>
                     <Link
-                        href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=0`}>
+                        href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=${TokenPairStatus.Unverified}`}>
                         <a>Unverified</a>
                     </Link>
                     &nbsp;|&nbsp;
                     <Link
-                        href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=1`}>
+                        href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=${TokenPairStatus.Verified}`}>
                         <a>VERIFIED</a>
                     </Link>
                     &nbsp;|&nbsp;
                     <Link
-                        href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=2`}>
+                        href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=${TokenPairStatus.Duplicate}`}>
                         <a>Duplicate</a>
                     </Link>
                     &nbsp;|&nbsp;
                     <Link
-                        href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=3`}>
+                        href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=${TokenPairStatus.NotCurrentlyUsable}`}>
                         <a>Fake/Bad/Not Usable</a>
                     </Link>
                 </h3>

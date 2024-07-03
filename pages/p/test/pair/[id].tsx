@@ -6,6 +6,7 @@ import {PairProps} from "../../../../types/props";
 import SortableTable from "../../../../components/SortableTable/SortableTable";
 import Status from "../../../../components/Status";
 import PriceTest from "../../../../components/PriceTest/PriceTest";
+import {TokenPairStatus} from "../../../../types/types";
 
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
 
@@ -33,7 +34,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
                     pair: `${pair.token1.symbol}-${pair.token0.symbol}`,
                 }
             ],
-            status: 1,
+            status: TokenPairStatus.Verified,
         },
     });
 
@@ -56,7 +57,7 @@ const Pair: React.FC<Props> = (props) => {
     const [usablePairs, setUsablePairs] = useState([])
     const [ignoredPairs, setIgnoredPairs] = useState([])
 
-    if(props.pair.status !== 1) {
+    if(props.pair.status !== TokenPairStatus.Verified) {
         return (
             <Layout>
                 <h3>Pair "{props.pair.pair}" status is <Status status={props.pair.status} method={""} />. Please try another</h3>
@@ -93,7 +94,7 @@ const Pair: React.FC<Props> = (props) => {
     if(usablePairs.length === 0) {
         return (
             <Layout>
-                <h3>No usable <Status status={1} method={""} /> pairs found for {props.base}-{props.target}. Please try another</h3>
+                <h3>No usable <Status status={TokenPairStatus.Verified} method={""} /> pairs found for {props.base}-{props.target}. Please try another</h3>
             </Layout>
         )
     }
@@ -103,7 +104,7 @@ const Pair: React.FC<Props> = (props) => {
 
             <h3>
                 <form onSubmit={handleMinReserveChange}>
-                    Only <Status status={1} method={""}/> pairs are used, with a USD reserve &gt;= $
+                    Only <Status status={TokenPairStatus.Verified} method={""}/> pairs are used, with a USD reserve &gt;= $
                     <input type={"text"} defaultValue={minReserveUsdInput} onChange={onMinReserveUsdChange}/>
                     <input type="submit" value="Change Min reserve"/>
                 </form>
