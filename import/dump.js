@@ -98,6 +98,27 @@ const deleteTokens = async(chain) => {
     return "Done"
 }
 
+const setCreatedAt = async () => {
+    const updateTokens = await prisma.token.updateMany({
+        where: {
+            createdAt: 0,
+        },
+        data: {
+            createdAt: 1719487962,
+        },
+    })
+
+    const updatePairs = await prisma.pair.updateMany({
+        where: {
+            createdAt: 0,
+        },
+        data: {
+            createdAt: 1719487963,
+        },
+    })
+
+}
+
 const run = async () => {
     // await truncateAll()
 
@@ -106,6 +127,8 @@ const run = async () => {
 
     // const delTokens = await deleteTokens("bsc")
     // console.log(delTokens)
+
+    // await setCreatedAt()
 }
 
 run().then(console.log)

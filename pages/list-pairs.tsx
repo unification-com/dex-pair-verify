@@ -91,12 +91,25 @@ const ListPairs: React.FC<Props> = (props) => {
         { label: "24h Volume", accessor: "volumeUsd24h", sortable: true, cellType: "usd" },
         {label: `Dupes (status ${props.status})`, accessor: "duplicateCount", sortable: true, cellType: "number"},
         {label: "Total Dupes", accessor: "_count.duplicatePairs", sortable: true, cellType: "number"},
-        { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/p/__ID__", text: "View/Edit"} },
     ];
+
+    if(props.status === TokenPairStatus.Unverified) {
+        columns = [
+            ...columns,
+            { label: "Imported", accessor: "createdAt", sortable: true, cellType: "datetime" },
+        ]
+    }
+
+    columns = [
+        ...columns,
+        // @ts-ignore
+        { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/p/__ID__", text: "View/Edit"} },
+    ]
 
     if(props.status === TokenPairStatus.Verified) {
         columns = [
             ...columns,
+            // @ts-ignore
             { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/p/test/pair/__ID__", text: "Test Query"} },
         ]
     }
