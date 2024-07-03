@@ -28,7 +28,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params, query }) 
         ],
     });
 
-    const tokensWithCount = (tokens as TokenProps[])
+    const tokensWithCount = (tokens as unknown as TokenProps[])
 
     const duplicatesForCurrentStatus = {}
 

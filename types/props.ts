@@ -47,6 +47,8 @@ export type PairProps = {
     duplicateCount: number | null;
     token0Id: string;
     token1Id: string;
+    createdAt: Date;
+    lastChecked: Date;
     _count: DuplicatePairCounter | null;
 };
 
@@ -113,12 +115,13 @@ export type TokenProps = {
     volume24hUsd: number
     marketCapUsd: number
     decimals: number
-    lastChecked: number;
+    lastChecked: Date;
     verificationMethod: string;
     verificationComment: string;
     duplicateCount: number
     pairsToken0: AssociatedPairProps[] | null;
     pairsToken1: AssociatedPairProps[] | null;
     duplicateTokenSymbols: any | null;
+    createdAt: Date;
     _count: DuplicateTokenCounter | null;
 };
