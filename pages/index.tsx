@@ -7,17 +7,17 @@ import ChainName from "../components/ChainName";
 import DexName from "../components/DexName";
 
 export const getStaticProps: GetStaticProps = async () => {
-  const feed = await prisma.pair.findMany({
+  const chainDexs = await prisma.pair.findMany({
     distinct: ['chain', 'dex'],
   });
   return {
-    props: { feed },
+    props: { chainDexs: JSON.parse(JSON.stringify(chainDexs)) },
     revalidate: 10,
   };
 }
 
 type Props = {
-  feed: any
+  chainDexs: any
 }
 
 const Home: React.FC<Props> = (props) => {
@@ -37,7 +37,7 @@ const Home: React.FC<Props> = (props) => {
             </tr>
             </thead>
             <tbody>
-          {props.feed.map((pair) => (
+          {props.chainDexs.map((pair) => (
               <tr key={pair.id}>
                 <td>
                   <ChainName chain={pair.chain}/>
