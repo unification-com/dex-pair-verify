@@ -41,6 +41,9 @@ const TableCell = ({ data, column }) => {
         case "cgcoin":
             cellData = <><CoinGeckoCoinLink coingeckoId={d} /></>
             break;
+        case "datetime":
+            cellData = <>{new Intl.DateTimeFormat('en-GB', {timeStyle: "short", dateStyle: "short"}).format(new Date(d * 1000))}</>
+            break;
         case "edit_button":
             cellData = <button onClick={() => Router.push(column.router.url, column.router.as.replace("__ID__", d))}>
                 <strong>Edit</strong>

@@ -29,6 +29,7 @@ const getOrAddStagingPair = async (chain, dex, contractAddress, token0Address, t
 
 const getOrAddToken = async (chain, contractAddress, name, symbol, txCount, status, verificationMethod) => {
     let created = false
+    const now = Math.floor(Date.now() / 1000)
     let token = await prisma.token.findFirst({
         where: {
             chain,
@@ -50,10 +51,10 @@ const getOrAddToken = async (chain, contractAddress, name, symbol, txCount, stat
                 totalSupply: 0,
                 volume24hUsd: 0,
                 marketCapUsd: 0,
-                lastChecked: Date.now(),
+                lastChecked: 0,
                 decimals: 0,
                 verificationComment: "",
-                createdAt: Date.now(),
+                createdAt: now,
             },
         })
         created = true
@@ -79,6 +80,7 @@ const getOrAddPair = async (
     verificationMethod
 ) => {
     let created = false
+    const now = Math.floor(Date.now() / 1000)
     let pairDb = await prisma.pair.findFirst({
         where: {
             contractAddress: Web3.utils.toChecksumAddress(contractAddress),
@@ -109,13 +111,13 @@ const getOrAddPair = async (
                 buyers24h: 0,
                 sellers24h: 0,
                 volumeUsd24h: 0,
-                lastChecked: Date.now(),
+                lastChecked: 0,
                 token0PriceCg: 0,
                 token0PriceDex: 0,
                 token1PriceCg: 0,
                 token1PriceDex: 0,
                 verificationComment: "",
-                createdAt: Date.now(),
+                createdAt: now,
                 token0: {
                     connect: {
                         id: t0Id,
@@ -164,13 +166,13 @@ const getStagingPair = async (chain, dex, contractAddress, token0Address, token1
 }
 
 const getTokensToFetchFromCoingecko = async (chain) => {
-    let d = new Date()
-    d.setDate(d.getDate() - 1)
+    const now = Math.floor(Date.now() / 1000)
+    const yesterday = now - 86400
     return prisma.token.findMany({
         where: {
             chain,
             lastChecked: {
-                lt: d,
+                lt: yesterday,
             }
         },
     })
@@ -214,14 +216,14 @@ const getOrAddDuplicateTokenSymbol = async (chain, originalTokenId, duplicateTok
 }
 
 const getPairsToFetchFromCoingecko = async (chain, dex) => {
-    let d = new Date()
-    d.setDate(d.getDate() - 1)
+    const now = Math.floor(Date.now() / 1000)
+    const yesterday = now - 86400
     return prisma.pair.findMany({
         where: {
             chain,
             dex,
             lastChecked: {
-                lt: d,
+                lt: yesterday,
             }
         },
         include: {
@@ -237,6 +239,8 @@ const getPairsToFetchFromCoingecko = async (chain, dex) => {
 
 const updateTokenWithCoingeckoData = async (tId, coingeckoCoinId, totalSupply, decimals, volume24hUsd, marketCapUsd) => {
 
+    const now = Math.floor(Date.now() / 1000)
+
     return await prisma.token.update({
         where: {
             id: tId,
@@ -247,7 +251,7 @@ const updateTokenWithCoingeckoData = async (tId, coingeckoCoinId, totalSupply, d
             volume24hUsd: parseFloat(volume24hUsd),
             marketCapUsd: parseFloat(marketCapUsd),
             decimals: parseInt(decimals),
-            lastChecked: Date.now(),
+            lastChecked: now,
         },
     })
 }
@@ -309,6 +313,8 @@ const updatePairWithCoingeckoData = async (
     token1PriceCg,
     ) => {
 
+    const now = Math.floor(Date.now() / 1000)
+
     return await prisma.pair.update({
         where: {
             id: pId,
@@ -323,7 +329,7 @@ const updatePairWithCoingeckoData = async (
             volumeUsd24h: parseFloat(volumeUsd24h),
             token0PriceCg: (token0PriceCg === null) ? 0 : parseFloat(token0PriceCg),
             token1PriceCg: (token1PriceCg === null) ? 0 : parseFloat(token1PriceCg),
-            lastChecked: Date.now(),
+            lastChecked: now,
         },
     })
 }

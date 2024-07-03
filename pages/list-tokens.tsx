@@ -64,7 +64,7 @@ type Props = {
 
 const ListTokens: React.FC<Props> = (props) => {
 
-    const columns = [
+    let columns = [
         { label: "Symbol", accessor: "symbol", sortable: true, sortbyOrder: "asc", cellType: "display" },
         { label: "Name", accessor: "name", sortable: true, cellType: "display" },
         { label: "Market Cap", accessor: "marketCapUsd", sortable: true, cellType: "usd" },
@@ -73,8 +73,20 @@ const ListTokens: React.FC<Props> = (props) => {
         { label: `Dupes (status ${props.status})`, accessor: "duplicateCount", sortable: true, cellType: "display" },
         { label: "Total Dupes", accessor: "_count.duplicateTokenSymbols", sortable: true, cellType: "display" },
         // { label: "Edit", accessor: "id", sortable: false, cellType: "edit_button", router: {url: "/t/[id]", as: "/t/__ID__"} },
-        { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/t/__ID__", text: "View/Edit"} },
     ];
+
+    if(props.status === TokenPairStatus.Unverified) {
+        columns = [
+            ...columns,
+            { label: "Imported", accessor: "createdAt", sortable: true, cellType: "datetime" },
+        ]
+    }
+
+    columns = [
+        ...columns,
+        // @ts-ignore
+        { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/t/__ID__", text: "View/Edit"} },
+    ]
 
     return (
         <Layout>

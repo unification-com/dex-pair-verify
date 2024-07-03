@@ -108,8 +108,8 @@ model Pair {
   status                   Int
   verificationMethod       String
   verificationComment      String @default("")
-  lastChecked              DateTime @default(now())
-  createdAt                DateTime @default(now())
+  lastChecked              Int @default(0)
+  createdAt                Int @default(0)
   duplicatePairs           DuplicatePairs[] @relation("OriginalPair")
   dp2                      DuplicatePairs[] @relation("DuplicatePair")
 
@@ -135,9 +135,9 @@ model Token {
   volume24hUsd          Float
   marketCapUsd          Float
   decimals              Int
-  lastChecked           DateTime @default(now())
+  lastChecked           Int @default(0)
   verificationComment   String @default("")
-  createdAt             DateTime @default(now())
+  createdAt             Int @default(0)
   pairsToken0           Pair[]                  @relation("Token0")
   pairsToken1           Pair[]                  @relation("Token1")
   duplicateTokenSymbols DuplicateTokenSymbols[] @relation("OriginalToken")

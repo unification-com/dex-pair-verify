@@ -11,7 +11,7 @@ export const getStaticProps: GetStaticProps = async () => {
     distinct: ['chain', 'dex'],
   });
   return {
-    props: { chainDexs: JSON.parse(JSON.stringify(chainDexs)) },
+    props: { chainDexs },
     revalidate: 10,
   };
 }
