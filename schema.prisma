@@ -190,3 +190,11 @@ model DuplicatePairs {
   @@index([originalPairId])
   @@index([duplicatePairId])
 }
+
+model Threshold {
+  id              String @id @default(cuid())
+  chain           String
+  dex             String
+  minLiquidityUsd Int
+  minTxCount      Int
+}

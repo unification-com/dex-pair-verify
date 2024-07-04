@@ -31,17 +31,24 @@ export default async function handler(
         return res.status(400).json({ success: false, err: err })
     }
 
-    const pair = await prisma.pair.update({
+    const threshold = await prisma.threshold.update({
         where: {
-            id: fields.pairid[0]
+            id: fields.thresholdid[0],
         },
         data: {
-            status: parseInt(fields.status[0]),
-            verificationMethod: "manual",
-            verificationComment: fields.comment[0],
+            minLiquidityUsd: parseInt(fields.min_liquidity[0]),
+            minTxCount: parseInt(fields.min_tx_count[0]),
         },
     })
 
-    return res.status(200).json({ success: true, data: {new_status: pair.status, id: pair.id } })
-
+    return res.status(200).json(
+        {
+            success: true,
+            data: {
+                id: threshold.id,
+                new_min_liquidity: threshold.minLiquidityUsd,
+                new_min_tx_count: threshold.minTxCount,
+            }
+        }
+    )
 }

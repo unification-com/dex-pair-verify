@@ -55,6 +55,22 @@ const TableCell = ({ data, column }) => {
                 <a>{column.meta.text}</a>
             </Link>
             break
+        case "threshold_check":
+            let exportable = "No"
+            const style = {
+                color: "white",
+                backgroundColor: "red",
+                textAlign: "center",
+            }
+            const minLiquidity = column.threshold.minLiquidity
+            const minTxCount = column.threshold.minTxCount
+            if(data.reserveUsd >= minLiquidity && data.txCount >= minTxCount) {
+                exportable = "Yes"
+                style.backgroundColor = "green"
+            }
+            // @ts-ignore
+            cellData = <div style={style}>{exportable}</div>
+            break;
     }
 
     return (

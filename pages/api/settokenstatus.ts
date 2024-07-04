@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import formidable from "formidable";
 import prisma from '../../lib/prisma';
-import {useSession} from "next-auth/react";
 import {ExtendedSessionUser, TokenPairStatus} from "../../types/types";
 import {getServerSession} from "next-auth";
 import { authOptions } from "./auth/[...nextauth]"
