@@ -125,3 +125,11 @@ export type TokenProps = {
     createdAt: Date;
     _count: DuplicateTokenCounter | null;
 };
+
+export type ThresholdProps = {
+    id: string;
+    chain: string;
+    dex: string;
+    minLiquidityUsd: number;
+    minTxCount: number;
+}

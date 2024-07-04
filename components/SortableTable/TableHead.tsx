@@ -15,7 +15,7 @@ const TableHead = ({ columns, handleSorting }) => {
     return (
         <thead>
         <tr>
-            {columns.map(({label, accessor, sortable}) => {
+            {columns.map(({label, accessor, sortable}, idx) => {
                 const cl = sortable
                     ? sortField === accessor && order === "asc"
                         ? "up"
@@ -25,7 +25,7 @@ const TableHead = ({ columns, handleSorting }) => {
                     : "";
                 return (
                     <th
-                        key={accessor}
+                        key={`${idx}_${accessor}`}
                         onClick={sortable ? () => handleSortingChange(accessor) : null}
                         className={cl}
                     >

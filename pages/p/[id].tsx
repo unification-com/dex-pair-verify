@@ -101,7 +101,6 @@ const Pair: React.FC<Props> = (props) => {
     } else {
       NotificationManager.error("Error", `${res.err}`, 5000)
     }
-
   }
 
   const columns = [

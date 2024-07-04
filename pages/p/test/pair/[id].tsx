@@ -24,6 +24,8 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
         },
     });
 
+    console.log(pair)
+
     const pairs = await prisma.pair.findMany({
         where: {
             OR: [
@@ -57,10 +59,11 @@ const Pair: React.FC<Props> = (props) => {
     const [usablePairs, setUsablePairs] = useState([])
     const [ignoredPairs, setIgnoredPairs] = useState([])
 
-    if(props.pair.status !== TokenPairStatus.Verified) {
+    if (props.pair.status !== TokenPairStatus.Verified) {
         return (
             <Layout>
-                <h3>Pair "{props.pair.pair}" status is <Status status={props.pair.status} method={""} />. Please try another</h3>
+                <h3>Pair "{props.pair.pair}" status is <Status status={props.pair.status} method={""}/>. Please try
+                    another</h3>
             </Layout>
         )
     }
@@ -69,10 +72,10 @@ const Pair: React.FC<Props> = (props) => {
         const up = []
         const ip = []
 
-        for(let i = 0; i < props.pairs.length; i += 1) {
+        for (let i = 0; i < props.pairs.length; i += 1) {
             const p = props.pairs[i]
 
-            if(p.reserveUsd >= minReserveUsd) {
+            if (p.reserveUsd >= minReserveUsd) {
                 up.push(p)
             } else {
                 ip.push(p)
@@ -91,25 +94,26 @@ const Pair: React.FC<Props> = (props) => {
         setMinReserveUsd(minReserveUsdInput)
     }
 
-    if(usablePairs.length === 0) {
-        return (
-            <Layout>
-                <h3>No usable <Status status={TokenPairStatus.Verified} method={""} /> pairs found for {props.base}-{props.target}. Please try another</h3>
-            </Layout>
-        )
+    const minReserveForm = <h3>
+        <form onSubmit={handleMinReserveChange}>
+            Only <Status status={TokenPairStatus.Verified} method={""}/> pairs are used, with a USD reserve &gt;= $
+            <input type={"text"} defaultValue={minReserveUsdInput} onChange={onMinReserveUsdChange}/>
+            <input type="submit" value="Change Min reserve"/>
+        </form>
+    </h3>
+
+    let noUsablePairsWarning = <></>
+
+    if (usablePairs.length === 0) {
+        noUsablePairsWarning = <h2>No usable <Status status={TokenPairStatus.Verified} method={""}/> pairs found
+            for {props.base}-{props.target} using min USD reserve ${minReserveUsd}. Please try another, or modify
+            reserve threshold</h2>
     }
 
     return (
         <Layout>
-
-            <h3>
-                <form onSubmit={handleMinReserveChange}>
-                    Only <Status status={TokenPairStatus.Verified} method={""}/> pairs are used, with a USD reserve &gt;= $
-                    <input type={"text"} defaultValue={minReserveUsdInput} onChange={onMinReserveUsdChange}/>
-                    <input type="submit" value="Change Min reserve"/>
-                </form>
-            </h3>
-
+            {minReserveForm}
+            {noUsablePairsWarning}
             <PriceTest
                 key={`price_test_${props.base}_${props.target}`}
                 base={props.base}
