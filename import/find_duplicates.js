@@ -9,6 +9,7 @@ const {dataSources} = require("../lib/sources")
 const processTokensForChain = async(chain) => {
     console.log(chain)
     const tokens = await getAllTokenSymbolsForChain(chain)
+    let duplicateCount = 0
 
     for(let i = 0; i < tokens.length; i += 1) {
         const original = tokens[i]
@@ -20,17 +21,20 @@ const processTokensForChain = async(chain) => {
             }
 
             if(original.symbol === potentialDuplicate.symbol) {
-                console.log("potential duplicate token symbol", original.symbol, potentialDuplicate.symbol)
                 const [duplicate, created] = await getOrAddDuplicateTokenSymbol(chain, original.id, potentialDuplicate.id)
-                console.log(duplicate.id, created)
+                if(created) {
+                    duplicateCount += 1
+                }
             }
         }
     }
 
+    return duplicateCount
 }
 
 const processPairsForChain = async(chain, dex) => {
     console.log(chain, dex)
+    let duplicateCount = 0
 
     const pairs = await getAllPairsForChainDex(chain, dex)
 
@@ -46,12 +50,15 @@ const processPairsForChain = async(chain, dex) => {
             }
 
             if(pairCheck0 === potentialDuplicate.pair || pairCheck1 === potentialDuplicate.pair) {
-                console.log("found potential duplicate pair", original.pair, potentialDuplicate.pair)
                 const [duplicate, created] = await getOrAddDuplicatePair(chain, dex, original.id, potentialDuplicate.id)
-                console.log(duplicate.id, created)
+                if(created) {
+                    duplicateCount += 1
+                }
             }
         }
     }
+
+    return duplicateCount
 }
 
 
@@ -59,6 +66,10 @@ const run = async () => {
 
     // Token data
     console.log("Tokens")
+    const duplicates = {
+        tokens: {},
+        pairs: {},
+    }
     const chains = []
     for (let i = 0; i < dataSources.length; i += 1) {
         const poolMeta = dataSources[i]
@@ -69,7 +80,7 @@ const run = async () => {
     }
 
     for (let i = 0; i < chains.length; i += 1) {
-        await processTokensForChain(chains[i])
+        duplicates.tokens[chains[i]] = await processTokensForChain(chains[i])
     }
 
     // Pair data
@@ -79,8 +90,15 @@ const run = async () => {
         const chain = poolMeta.chain
         const dex = poolMeta.dex
 
-        await processPairsForChain(chain, dex)
+        if(duplicates.pairs[chain] === undefined) {
+            duplicates.pairs[chain] = {}
+        }
+
+        duplicates.pairs[chain][dex] = await processPairsForChain(chain, dex)
     }
+
+    console.log("New duplicates found")
+    console.log(JSON.stringify(duplicates, null, 2))
 
     return "Done"
 }
