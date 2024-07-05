@@ -179,7 +179,7 @@ const ListPairs: React.FC<Props> = (props) => {
                 </h2>
 
                 <h3>
-                    Set Export Thresholds
+                    Set OoO Simulation Thresholds
                 </h3>
                 <p>
                     These thresholds will determine which <Status status={TokenPairStatus.Verified}  method={""}/> pairs/tokens will be used in the OoO simulations
