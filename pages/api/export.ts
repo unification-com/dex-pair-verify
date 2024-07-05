@@ -31,32 +31,12 @@ export default async function handler(
     const chain = String(req.query?.chain)
     const dex = String(req.query?.dex)
     const download = String(req.query?.download)
-    let minLiquidity = 0
-    let minTxCount = 0
-
-    let thresholds = await prisma.threshold.findFirst({
-        where: {
-            chain,
-            dex,
-        }
-    })
-
-    if(thresholds !== null) {
-        minLiquidity = thresholds.minLiquidityUsd
-        minTxCount = thresholds.minTxCount
-    }
 
     const data = await prisma.pair.findMany({
         where: {
             chain,
             dex,
             status: TokenPairStatus.Verified,
-            txCount: {
-                gte: minTxCount,
-            },
-            reserveUsd: {
-                gte: minLiquidity,
-            },
         },
         include: {
             token0: {
