@@ -231,7 +231,9 @@ const getOrAddDuplicateTokenSymbol = async (chain, originalTokenId, duplicateTok
                 duplicateTokenId,
             },
         })
-        created = true
+        if(duplicate !== null) {
+            created = true
+        }
     }
 
     return [duplicate, created]
@@ -315,7 +317,9 @@ const getOrAddDuplicatePair = async (chain, dex, originalPairId, duplicatePairId
                 duplicatePairId,
             },
         })
-        created = true
+        if(duplicate !== null) {
+            created = true
+        }
     }
 
     return [duplicate, created]
