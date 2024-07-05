@@ -9,9 +9,9 @@ nvm use
 yarn install
 yarn prisma db push
 yarn prisma generate
-node import/geckoterminal.js
-node import/graphql.js
-node import/check_gecko.js
+node import/import_geckoterminal.js
+node import/import_graphql.js
+node import/refresh_data.js
 node import/find_duplicates.js
 yarn run dev
 ```
