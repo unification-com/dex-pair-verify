@@ -27,6 +27,14 @@ const getOrAddStagingPair = async (chain, dex, contractAddress, token0Address, t
     return [pairDb, created]
 }
 
+const deleteFromStaging = async (id) => {
+    return prisma.pairStaging.delete({
+        where: {
+            id,
+        },
+    })
+}
+
 const getOrAddToken = async (chain, contractAddress, name, symbol, txCount, status, verificationMethod) => {
     let created = false
     const now = Math.floor(Date.now() / 1000)
@@ -57,10 +65,22 @@ const getOrAddToken = async (chain, contractAddress, name, symbol, txCount, stat
                 createdAt: now,
             },
         })
-        created = true
+        if(token !== null) {
+            created = true
+        }
     }
 
     return [token, created]
+}
+
+const getPair = async (chain, dex, pairContractAddress) => {
+    return prisma.pair.findFirst({
+        where: {
+            contractAddress: Web3.utils.toChecksumAddress(pairContractAddress),
+            chain,
+            dex,
+        },
+    })
 }
 
 const getOrAddPair = async (
@@ -130,7 +150,9 @@ const getOrAddPair = async (
                 }
             },
         })
-        created = true
+        if(pairDb !== null) {
+            created = true
+        }
     }
 
     return [pairDb, created]
@@ -241,7 +263,7 @@ const updateTokenWithCoingeckoData = async (tId, coingeckoCoinId, totalSupply, d
 
     const now = Math.floor(Date.now() / 1000)
 
-    return await prisma.token.update({
+    return prisma.token.update({
         where: {
             id: tId,
         },
@@ -299,6 +321,28 @@ const getOrAddDuplicatePair = async (chain, dex, originalPairId, duplicatePairId
     return [duplicate, created]
 }
 
+const getOrCreateEmptyThresholds = async (chain, dex) => {
+    let created = false
+    let thresholds = await prisma.threshold.findFirst({
+        where: {
+            chain,
+            dex,
+        }
+    })
+
+    if(thresholds === null) {
+        thresholds = await prisma.threshold.create({
+            data: {
+                chain,
+                dex,
+                minLiquidityUsd: 0,
+                minTxCount: 0,
+            }
+        })
+    }
+    return [thresholds, created]
+}
+
 
 const updatePairWithCoingeckoData = async (
     pId,
@@ -315,7 +359,7 @@ const updatePairWithCoingeckoData = async (
 
     const now = Math.floor(Date.now() / 1000)
 
-    return await prisma.pair.update({
+    return prisma.pair.update({
         where: {
             id: pId,
         },
@@ -329,6 +373,49 @@ const updatePairWithCoingeckoData = async (
             volumeUsd24h: parseFloat(volumeUsd24h),
             token0PriceCg: (token0PriceCg === null) ? 0 : parseFloat(token0PriceCg),
             token1PriceCg: (token1PriceCg === null) ? 0 : parseFloat(token1PriceCg),
+            lastChecked: now,
+        },
+    })
+}
+
+const updatePairWithDexData = async (
+    pId,
+    reserveUsd,
+    volumeUsd,
+    txCount,
+    reserveNativeCurrency,
+    reserve0,
+    reserve1,
+) => {
+
+    const now = Math.floor(Date.now() / 1000)
+
+    return prisma.pair.update({
+        where: {
+            id: pId,
+        },
+        data: {
+            reserveUsd: parseFloat(reserveUsd),
+            volumeUsd: parseFloat(volumeUsd),
+            txCount: parseInt(txCount),
+            reserveNativeCurrency: parseFloat(reserveNativeCurrency),
+            reserve0: parseFloat(reserve0),
+            reserve1: parseFloat(reserve1),
+            lastChecked: now,
+        },
+    })
+}
+
+const updateTokenWithTxCountFromDex = async (tId, txCount) => {
+
+    const now = Math.floor(Date.now() / 1000)
+
+    return prisma.token.update({
+        where: {
+            id: tId,
+        },
+        data: {
+            txCount: parseInt(txCount, 10),
             lastChecked: now,
         },
     })
@@ -348,4 +435,9 @@ module.exports = {
     getOrAddDuplicateTokenSymbol,
     getAllPairsForChainDex,
     getOrAddDuplicatePair,
+    updatePairWithDexData,
+    updateTokenWithTxCountFromDex,
+    getPair,
+    deleteFromStaging,
+    getOrCreateEmptyThresholds,
 }

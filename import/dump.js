@@ -22,6 +22,19 @@ const truncateAll = async() => {
     return "Done"
 }
 
+const truncateStaging = async() => {
+    console.log("Truncating PairStaging")
+    let res = null
+    try {
+        res = await prisma.$executeRawUnsafe(`TRUNCATE TABLE "public"."PairStaging" CASCADE;`)
+    } catch (error) {
+        console.log({ error })
+    }
+
+    console.log(res)
+    return "Done"
+}
+
 const deleteFromPairs = async(chain, dex) => {
 
     const pairsToDel = await prisma.pair.findMany({
@@ -129,6 +142,9 @@ const run = async () => {
     // console.log(delTokens)
 
     // await setCreatedAt()
+
+    // await truncateStaging()
+    return "Done"
 }
 
 run().then(console.log)
