@@ -165,7 +165,7 @@ const ListPairs: React.FC<Props> = (props) => {
             // @ts-ignore
             { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/p/test/pair/__ID__", text: "Test Query"} },
             // @ts-ignore
-            { label: "Exportable", accessor: "", sortable: false, cellType: "threshold_check", threshold: {minLiquidity: thresholdMinLiquidity, minTxCount: thresholdMinTxCount} },
+            { label: "OoO Sim Use?", accessor: "", sortable: false, cellType: "threshold_check", threshold: {minLiquidity: thresholdMinLiquidity, minTxCount: thresholdMinTxCount} },
         ]
     }
 
@@ -182,12 +182,12 @@ const ListPairs: React.FC<Props> = (props) => {
                     Set Export Thresholds
                 </h3>
                 <p>
-                    These thresholds will determine which <Status status={TokenPairStatus.Verified}  method={""}/> pairs/tokens will be exported for OoO usage
+                    These thresholds will determine which <Status status={TokenPairStatus.Verified}  method={""}/> pairs/tokens will be used in the OoO simulations
                 </p>
                 <form onSubmit={onSubmit}>
                     Min Liquidity: $<input type={"text"} defaultValue={thresholdMinLiquidity} name={"min_liquidity"}
                            placeholder={"Minimum Liquidity"}/><br />
-                    Min Tx Count: $<input type={"text"} defaultValue={thresholdMinTxCount} name={"min_tx_count"}
+                    Min Tx Count: <input type={"text"} defaultValue={thresholdMinTxCount} name={"min_tx_count"}
                                            placeholder={"Minimum Tx Count"}/><br />
                     <input type={"hidden"} value={props.thresholds.id} name={"thresholdid"}/>
                     <button type="submit">Submit</button>

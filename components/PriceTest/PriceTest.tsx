@@ -10,8 +10,7 @@ const PriceTest: React.FC<{
     target: string,
     usablePairs: PairProps[],
     ignoredPairs: PairProps[],
-    minReserveUsd: number,
-}> = ({ base, target, usablePairs, ignoredPairs, minReserveUsd }) => {
+}> = ({ base, target, usablePairs, ignoredPairs }) => {
 
     const [usable, setUsable] = useState(usablePairs)
     const [ignored, setIgnored] = useState(ignoredPairs)
@@ -47,7 +46,7 @@ const PriceTest: React.FC<{
             {
                 (usable.length) > 0 &&
                 <>
-                    <h4>Usable pairs from all DEXs</h4>
+                    <h4><span style={{color: "green"}}>Usable</span> pairs from all DEXs</h4>
                     <NoneSortableTable
                         key={`test_pair_usable_list_${base}-${target}`}
                         caption=""
@@ -60,7 +59,8 @@ const PriceTest: React.FC<{
             {
                 (ignored.length) > 0 &&
                 <>
-                    <h4>Ignored pairs with Reserve USD &lt; $<NumericFormat displayType="text" thousandSeparator="," value={minReserveUsd} /></h4>
+                    <h4><span style={{color: "red"}}>Ignored</span> pairs with Reserve USD and Tx Count below
+                        thresholds</h4>
                     <NoneSortableTable
                         key={`test_pair_ignore_list_${base}-${target}`}
                         caption=""

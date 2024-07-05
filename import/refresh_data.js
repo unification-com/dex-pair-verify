@@ -3,16 +3,20 @@ const {
     updateTokenWithCoingeckoData,
     getPairsToFetchFromCoingecko,
     updatePairWithCoingeckoData,
+    updatePairWithDexData,
+    updateTokenWithTxCountFromDex,
+    getOrCreateEmptyThresholds,
 } = require("./db")
 const {dataSources} = require("../lib/sources")
 const Web3 = require("web3");
+const {ApolloClient, InMemoryCache} = require("@apollo/client");
 
 const CG_WAIT = 2500; // coin gecko API limited to 30 calls/minute, so wait 2.5 seconds between calls.
 
 const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay))
 
-const processTokensForChain = async(chain) => {
-    console.log(chain)
+const processTokenDataFromCoinGeckoForChain = async(chain) => {
+    console.log("Tokens Coin Gecko", chain)
 
     const tokens = await getTokensToFetchFromCoingecko(chain)
 
@@ -73,18 +77,17 @@ const processTokensForChain = async(chain) => {
     }
 }
 
-const processPairsForChain = async(chain, dex) => {
-    console.log(chain, dex)
-
-    const pairs = await getPairsToFetchFromCoingecko(chain, dex)
+const processPairDataFromCoinGecko = async(chain, dex, pairs) => {
+    console.log("Pairs Coin Gecko", chain, dex)
+    const pairsCopy = [...pairs]
 
     const pairCollection = []
 
-    while(pairs.length > 30) {
-        pairCollection.push(pairs.splice(0,30))
+    while(pairsCopy.length > 30) {
+        pairCollection.push(pairsCopy.splice(0,30))
     }
 
-    pairCollection.push(pairs)
+    pairCollection.push(pairsCopy)
 
     for(let i = 0; i < pairCollection.length; i += 1) {
         if(i > 0) {
@@ -197,6 +200,91 @@ const processPairsForChain = async(chain, dex) => {
     }
 }
 
+const processPairDataFromDexSubgraph = async(chain, dex, poolMeta, pairs) => {
+    console.log("Pairs Subgraph", chain, dex)
+    const pairsCopy = [...pairs]
+
+    const pairCollection = []
+
+    while(pairsCopy.length > 100) {
+        pairCollection.push(pairsCopy.splice(0,100))
+    }
+
+    pairCollection.push(pairsCopy)
+
+    const client = new ApolloClient({
+        uri: poolMeta.graphql.url,
+        cache: new InMemoryCache(),
+    });
+
+    let poolResArray = []
+
+    for(let i = 0; i < pairCollection.length; i += 1) {
+        let pStr = ""
+        const pArr = []
+        const pairList = pairCollection[i]
+
+        for (let j = 0; j < pairList.length; j += 1) {
+            pArr.push(Web3.utils.toChecksumAddress(pairList[j].contractAddress))
+        }
+        pStr = `"${pArr.join('","')}"`
+
+        const result = await client.query({
+            query: poolMeta.graphql.funcQueryWithAddressList(pStr),
+        })
+        const poolRes = result.data[poolMeta.graphql.poolsName]
+        poolResArray = poolResArray.concat(poolRes)
+    }
+
+    for (let i = 0; i < poolResArray.length; i += 1) {
+        const pRes = poolResArray[i]
+
+        const reserveUSD = pRes[poolMeta.graphql.reserveUSD]
+        const reserveNativeCurrency = pRes[poolMeta.graphql.reserveNativeCurrency]
+        const reserve0 = pRes[poolMeta.graphql.reserve0]
+        const reserve1 = pRes[poolMeta.graphql.reserve1]
+        const txCount = (poolMeta.graphql.txCount !== null) ? pRes[poolMeta.graphql.txCount] : 0
+        const volumeUSD = pRes[poolMeta.graphql.volumeUSD]
+        const token0 = pRes.token0
+        const token0TxCount = (token0[poolMeta.graphql.txCount] !== null) ? token0[poolMeta.graphql.txCount] : 0
+        const token1 = pRes.token1
+        const token1TxCount = (token1[poolMeta.graphql.txCount] !== null) ? token1[poolMeta.graphql.txCount] : 0
+        const pairAddress = Web3.utils.toChecksumAddress(pRes.id)
+
+        let thisPair = null
+        for(let t = 0; t < pairs.length; t += 1) {
+            if(Web3.utils.toChecksumAddress(pairAddress) === Web3.utils.toChecksumAddress(pairs[t].contractAddress)) {
+                thisPair = pairs[t]
+                break
+            }
+        }
+
+        if(thisPair === null) {
+            console.log("Erm, OK...")
+            continue
+        }
+
+        const t0up = await updateTokenWithTxCountFromDex(thisPair.token0.id, token0TxCount)
+        if(t0up) {
+            console.log("updated token", thisPair.token0.id, token0TxCount)
+        }
+        const t1up = await updateTokenWithTxCountFromDex(thisPair.token1.id, token1TxCount)
+        if(t1up) {
+            console.log("updated token", thisPair.token1.id, token1TxCount)
+        }
+
+
+        const pair = await updatePairWithDexData(thisPair.id, reserveUSD, volumeUSD, txCount, reserveNativeCurrency, reserve0, reserve1)
+        if(pair) {
+            console.log("updated pair", pair.id, reserveUSD, volumeUSD, txCount, reserveNativeCurrency, reserve0, reserve1)
+        } else {
+            console.log("not found", chain, thisPair.address)
+        }
+
+    }
+}
+
+
 const run = async () => {
 
     // Token data
@@ -210,8 +298,9 @@ const run = async () => {
         }
     }
 
+    // Get token data from CoinGecko Terminal - market cap, CG ID etc. for all tokens in the DB
     for (let i = 0; i < chains.length; i += 1) {
-        await processTokensForChain(chains[i])
+        await processTokenDataFromCoinGeckoForChain(chains[i])
     }
 
     // Pair data
@@ -221,7 +310,16 @@ const run = async () => {
         const chain = poolMeta.chain
         const dex = poolMeta.dex
 
-        await processPairsForChain(chain, dex)
+        const pairs = await getPairsToFetchFromCoingecko(chain, dex)
+
+        // Check and update existing pairs in the DB, grabbing data from CoinGecko
+        await processPairDataFromCoinGecko(chain, dex, pairs)
+
+        // Check and update existing pairs in the DB, grabbing data from DEX
+        await processPairDataFromDexSubgraph(chain, dex, poolMeta, pairs)
+
+        // ensure db has default/empty thresholds
+        const [thresholds, created] = await getOrCreateEmptyThresholds(chain, dex)
     }
 
     return "Done"
