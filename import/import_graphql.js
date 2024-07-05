@@ -20,7 +20,8 @@ const fetchFromSubgraph = async () => {
         }
         results[chain][dex] = {
             new: 0,
-            existing: 0
+            existing: 0,
+            total: 0,
         }
 
         console.log(chain, dex)
@@ -39,6 +40,8 @@ const fetchFromSubgraph = async () => {
 
         for (let j = 0; j < poolResArray.length; j += 1) {
             const pRes = poolResArray[j]
+
+            results[chain][dex].total
 
             const reserveUSD = pRes[poolMeta.graphql.reserveUSD]
             const reserveNativeCurrency = pRes[poolMeta.graphql.reserveNativeCurrency]
