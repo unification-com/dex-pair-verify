@@ -1,18 +1,17 @@
 import React from "react"
-import { GetStaticProps } from "next"
+import { GetServerSideProps } from "next"
 import Layout from "../components/Layout"
 import prisma from '../lib/prisma';
 import Link from "next/link";
 import ChainName from "../components/ChainName";
 import DexName from "../components/DexName";
 
-export const getStaticProps: GetStaticProps = async () => {
+export const getServerSideProps: GetServerSideProps = async () => {
   const chainDexs = await prisma.pair.findMany({
     distinct: ['chain', 'dex'],
   });
   return {
     props: { chainDexs },
-    revalidate: 10,
   };
 }
 

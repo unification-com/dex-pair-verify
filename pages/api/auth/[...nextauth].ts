@@ -20,7 +20,10 @@ export const authOptions = {
         async session({ session, token, user }) {
             // ToDo - migrate to DB
             let isAuthorised = false
-            const allowedUsers = process.env.ALLOWED_USERS.split(",")
+            const allowedUsers = (process.env.ALLOWED_USERS || "")
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean)
             if(allowedUsers.includes(user.email)) {
                 isAuthorised = true
             }
