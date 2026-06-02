@@ -8,7 +8,15 @@
     "start": "next start",
     "lint": "eslint . --ext .js,.mjs,.jsx,.ts,.tsx --max-warnings 0",
     "lint:fix": "eslint . --ext .js,.mjs,.jsx,.ts,.tsx --fix",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "postinstall": "simple-git-hooks"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "yarn lint-staged"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,mjs,jsx}": "eslint --max-warnings 0",
+    "*.{json,md,yml,yaml,prisma}": []
   },
   "keywords": [],
   "author": "",
@@ -39,7 +47,9 @@
     "eslint": "8",
     "eslint-config-next": "12.0.10",
     "eslint-plugin-import": "^2.32.0",
+    "lint-staged": "^15.3.0",
     "prisma": "^5.15.0",
+    "simple-git-hooks": "^2.11.1",
     "typescript": "^5.4.5"
   }
 }
