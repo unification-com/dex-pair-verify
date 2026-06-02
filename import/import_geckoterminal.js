@@ -29,6 +29,12 @@ const fetchFromCg = async () => {
         // ensure db has thresholds for chain/dex
         const [thresholds, created] = await getOrCreateEmptyThresholds(chain, dex)
 
+        // don't process if not on CoinGecko Terminal
+        if (!dataSources.onCoinGekcoTerminal) {
+            console.log("Not on Coin Gecko Terminal:", chain, dex)
+            continue
+        }
+
         if(!results[chain]) {
             results[chain] = {}
         }
