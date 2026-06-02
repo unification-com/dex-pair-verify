@@ -6,58 +6,62 @@ import {NotificationManager} from 'react-notifications';
 import ChainName from "../components/ChainName";
 import DexName from "../components/DexName";
 import Layout from "../components/Layout"
+import Pagination from "../components/Pagination";
 import SortableTable from "../components/SortableTable/SortableTable";
 import Status from "../components/Status";
 import prisma from '../lib/prisma';
 import {PairProps, ThresholdProps} from "../types/props";
 import {TokenPairStatus} from "../types/types";
 
+const PAGE_SIZE = 50
+
 export const getServerSideProps: GetServerSideProps = async ({ params: _params, query }) => {
 
     const qStatus = Number(query?.status || 0)
     const chain = String(query?.chain)
     const dex = String(query?.dex)
-    const pairs = await prisma.pair.findMany({
-        where: {
-            chain,
-            dex,
-            status: qStatus,
-        },
-        include: {
-            token0: {
-                select: { symbol: true, id: true, contractAddress: true, status: true, txCount: true },
-            },
-            token1: {
-                select: { symbol: true, id: true, contractAddress: true, status: true, txCount: true },
-            },
-            _count: {
-                select: { duplicatePairs: true },
-            },
-        },
-        orderBy: [
-            {
-                reserveNativeCurrency: 'desc',
-            },
-        ],
-    });
+    const page = Math.max(1, Number(query?.page || 1))
 
-    const dupeCounter = {}
-    const pairsWithDuplicates = (pairs as unknown as PairProps[])
+    const where = { chain, dex, status: qStatus }
 
-    for(let i = 0; i < pairs.length; i += 1) {
-        const p = pairs[i]
-        const p1 = `${p.token0.symbol}-${p.token1.symbol}`
-        const p2 = `${p.token1.symbol}-${p.token0.symbol}`
-        if(dupeCounter[p1] === undefined) {
-            dupeCounter[p1] = 0
-        } else {
-            dupeCounter[p1] += 1
-        }
-        if(dupeCounter[p2] === undefined) {
-            dupeCounter[p2] = 0
-        } else {
-            dupeCounter[p2] += 1
-        }
+    const [pairs, totalCount, statusGroups, pairGroups] = await Promise.all([
+        prisma.pair.findMany({
+            where,
+            include: {
+                token0: {
+                    select: { symbol: true, id: true, contractAddress: true, status: true, txCount: true },
+                },
+                token1: {
+                    select: { symbol: true, id: true, contractAddress: true, status: true, txCount: true },
+                },
+                _count: {
+                    select: { duplicatePairs: true },
+                },
+            },
+            orderBy: [
+                {
+                    reserveNativeCurrency: 'desc',
+                },
+            ],
+            skip: (page - 1) * PAGE_SIZE,
+            take: PAGE_SIZE,
+        }),
+        prisma.pair.count({ where }),
+        // Per-status counts for the tab labels (across this chain/dex).
+        prisma.pair.groupBy({ by: ['status'], where: { chain, dex }, _count: { _all: true } }),
+        // Count per pair-symbol across the FULL status set so the "Dupes"
+        // column stays accurate even though rows are paginated.
+        prisma.pair.groupBy({ by: ['pair'], where, _count: { pair: true } }),
+    ]);
+
+    const statusCounts: Record<number, number> = {}
+    for (const g of statusGroups) {
+        statusCounts[g.status] = g._count._all
+    }
+
+    const pairCounts: Record<string, number> = {}
+    for (const g of pairGroups) {
+        pairCounts[g.pair] = g._count.pair
     }
 
     let thresholds = await prisma.threshold.findFirst({
@@ -78,18 +82,21 @@ export const getServerSideProps: GetServerSideProps = async ({ params: _params, 
         })
     }
 
-    for(let i = 0; i < pairsWithDuplicates.length; i += 1) {
-        const p = pairsWithDuplicates[i]
-        pairsWithDuplicates[i].duplicateCount = dupeCounter[p.pair]
+    const pairsWithDuplicates = (pairs as unknown as PairProps[])
+    for (const p of pairsWithDuplicates) {
+        p.duplicateCount = (pairCounts[p.pair] ?? 1) - 1
     }
 
     return {
         props: {
             pairs: pairsWithDuplicates,
-            chain: String(query?.chain),
-            dex: String(query?.dex),
-            status: Number(query?.status || 0),
+            chain,
+            dex,
+            status: qStatus,
             thresholds,
+            page,
+            totalPages: Math.max(1, Math.ceil(totalCount / PAGE_SIZE)),
+            statusCounts,
         },
     };
 }
@@ -100,6 +107,9 @@ type Props = {
     dex: string,
     status: number,
     thresholds: ThresholdProps;
+    page: number,
+    totalPages: number,
+    statusCounts: Record<number, number>,
 }
 
 const ListPairs: React.FC<Props> = (props) => {
@@ -198,22 +208,22 @@ const ListPairs: React.FC<Props> = (props) => {
                 <h3>
                     <Link
                         href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=${TokenPairStatus.Unverified}`}>
-                        <a>Unverified</a>
+                        <a>Unverified ({props.statusCounts[TokenPairStatus.Unverified] ?? 0})</a>
                     </Link>
                     &nbsp;|&nbsp;
                     <Link
                         href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=${TokenPairStatus.Verified}`}>
-                        <a>VERIFIED</a>
+                        <a>VERIFIED ({props.statusCounts[TokenPairStatus.Verified] ?? 0})</a>
                     </Link>
                     &nbsp;|&nbsp;
                     <Link
                         href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=${TokenPairStatus.Duplicate}`}>
-                        <a>Duplicate</a>
+                        <a>Duplicate ({props.statusCounts[TokenPairStatus.Duplicate] ?? 0})</a>
                     </Link>
                     &nbsp;|&nbsp;
                     <Link
                         href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=${TokenPairStatus.NotCurrentlyUsable}`}>
-                        <a>Fake/Bad/Not Usable</a>
+                        <a>Fake/Bad/Not Usable ({props.statusCounts[TokenPairStatus.NotCurrentlyUsable] ?? 0})</a>
                     </Link>
                 </h3>
                 <main>
@@ -225,12 +235,22 @@ const ListPairs: React.FC<Props> = (props) => {
                             </p>
                         </>
                     }
+                    <Pagination
+                        page={props.page}
+                        totalPages={props.totalPages}
+                        makeHref={(p) => `/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=${props.status}&page=${p}`}
+                    />
                     <SortableTable
-                        key={`pair_list_${props.chain}_${props.dex}_${props.status}`}
+                        key={`pair_list_${props.chain}_${props.dex}_${props.status}_${props.page}`}
                         caption=""
                         data={props.pairs}
                         columns={columns}
                         useFilter={true}
+                    />
+                    <Pagination
+                        page={props.page}
+                        totalPages={props.totalPages}
+                        makeHref={(p) => `/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=${props.status}&page=${p}`}
                     />
                 </main>
             </div>

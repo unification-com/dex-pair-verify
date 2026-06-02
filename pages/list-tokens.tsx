@@ -4,55 +4,69 @@ import React from "react"
 
 import ChainName from "../components/ChainName";
 import Layout from "../components/Layout"
+import Pagination from "../components/Pagination";
 import SortableTable from "../components/SortableTable/SortableTable";
 import Status from "../components/Status";
 import prisma from '../lib/prisma';
 import {TokenProps} from "../types/props";
 import {TokenPairStatus} from "../types/types";
 
+const PAGE_SIZE = 50
+
 export const getServerSideProps: GetServerSideProps = async ({ params: _params, query }) => {
 
-    const tokens = await prisma.token.findMany({
-        where: {
-            chain: String(query?.chain),
-            status: Number(query?.status || 0),
-        },
-        include: {
-            _count: {
-                select: { duplicateTokenSymbols: true },
+    const chain = String(query?.chain)
+    const qStatus = Number(query?.status || 0)
+    const page = Math.max(1, Number(query?.page || 1))
+
+    const where = { chain, status: qStatus }
+
+    const [tokens, totalCount, statusGroups, symbolGroups] = await Promise.all([
+        prisma.token.findMany({
+            where,
+            include: {
+                _count: {
+                    select: { duplicateTokenSymbols: true },
+                },
             },
-        },
-        orderBy: [
-            {
-                symbol: 'asc',
-            },
-        ],
-    });
+            orderBy: [
+                {
+                    symbol: 'asc',
+                },
+            ],
+            skip: (page - 1) * PAGE_SIZE,
+            take: PAGE_SIZE,
+        }),
+        prisma.token.count({ where }),
+        prisma.token.groupBy({ by: ['status'], where: { chain }, _count: { _all: true } }),
+        // Count per symbol across the FULL status set so "Dupes" stays
+        // accurate even though rows are paginated.
+        prisma.token.groupBy({ by: ['symbol'], where, _count: { symbol: true } }),
+    ]);
 
-    const tokensWithCount = (tokens as unknown as TokenProps[])
-
-    const duplicatesForCurrentStatus = {}
-
-    for(let i = 0; i < tokens.length; i += 1) {
-        const t = tokens[i]
-        if(duplicatesForCurrentStatus[t.symbol] === undefined) {
-            duplicatesForCurrentStatus[t.symbol] = 0
-        } else {
-            duplicatesForCurrentStatus[t.symbol] += 1
-        }
+    const statusCounts: Record<number, number> = {}
+    for (const g of statusGroups) {
+        statusCounts[g.status] = g._count._all
     }
 
-    for(let i = 0; i < tokensWithCount.length; i += 1) {
-        const t = tokensWithCount[i]
-        tokensWithCount[i].duplicateCount = duplicatesForCurrentStatus[t.symbol]
+    const symbolCounts: Record<string, number> = {}
+    for (const g of symbolGroups) {
+        symbolCounts[g.symbol] = g._count.symbol
+    }
+
+    const tokensWithCount = (tokens as unknown as TokenProps[])
+    for (const t of tokensWithCount) {
+        t.duplicateCount = (symbolCounts[t.symbol] ?? 1) - 1
     }
 
     return {
         props: {
             tokens: tokensWithCount,
-            chain: String(query?.chain),
-            dex: String(query?.dex),
-            status: Number(query?.status || 0),
+            chain,
+            status: qStatus,
+            page,
+            totalPages: Math.max(1, Math.ceil(totalCount / PAGE_SIZE)),
+            statusCounts,
         },
     };
 }
@@ -61,6 +75,9 @@ type Props = {
     tokens: TokenProps[],
     chain: string,
     status: number,
+    page: number,
+    totalPages: number,
+    statusCounts: Record<number, number>,
 }
 
 const ListTokens: React.FC<Props> = (props) => {
@@ -97,31 +114,41 @@ const ListTokens: React.FC<Props> = (props) => {
                 <h3>
                     <Link
                         href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=${TokenPairStatus.Unverified}`}>
-                        <a>Unverified</a>
+                        <a>Unverified ({props.statusCounts[TokenPairStatus.Unverified] ?? 0})</a>
                     </Link>
                     &nbsp;|&nbsp;
                     <Link
                         href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=${TokenPairStatus.Verified}`}>
-                        <a>VERIFIED</a>
+                        <a>VERIFIED ({props.statusCounts[TokenPairStatus.Verified] ?? 0})</a>
                     </Link>
                     &nbsp;|&nbsp;
                     <Link
                         href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=${TokenPairStatus.Duplicate}`}>
-                        <a>Duplicate</a>
+                        <a>Duplicate ({props.statusCounts[TokenPairStatus.Duplicate] ?? 0})</a>
                     </Link>
                     &nbsp;|&nbsp;
                     <Link
                         href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=${TokenPairStatus.NotCurrentlyUsable}`}>
-                        <a>Fake/Bad/Not Usable</a>
+                        <a>Fake/Bad/Not Usable ({props.statusCounts[TokenPairStatus.NotCurrentlyUsable] ?? 0})</a>
                     </Link>
                 </h3>
                 <main>
+                    <Pagination
+                        page={props.page}
+                        totalPages={props.totalPages}
+                        makeHref={(p) => `/list-tokens?chain=${encodeURIComponent(props.chain)}&status=${props.status}&page=${p}`}
+                    />
                     <SortableTable
-                        key={`token_list_${props.chain}_${props.status}`}
+                        key={`token_list_${props.chain}_${props.status}_${props.page}`}
                         caption=""
                         data={props.tokens}
                         columns={columns}
                         useFilter={true}
+                    />
+                    <Pagination
+                        page={props.page}
+                        totalPages={props.totalPages}
+                        makeHref={(p) => `/list-tokens?chain=${encodeURIComponent(props.chain)}&status=${props.status}&page=${p}`}
                     />
                 </main>
             </div>
