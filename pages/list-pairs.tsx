@@ -1,17 +1,18 @@
-import React, {FormEvent, useEffect, useState} from "react"
 import { GetServerSideProps} from "next"
-import {NotificationManager} from 'react-notifications';
-import Layout from "../components/Layout"
-import prisma from '../lib/prisma';
-import Status from "../components/Status";
 import Link from "next/link";
+import React, {FormEvent, useState} from "react"
+import {NotificationManager} from 'react-notifications';
+
 import ChainName from "../components/ChainName";
 import DexName from "../components/DexName";
+import Layout from "../components/Layout"
 import SortableTable from "../components/SortableTable/SortableTable";
+import Status from "../components/Status";
+import prisma from '../lib/prisma';
 import {PairProps, ThresholdProps} from "../types/props";
 import {TokenPairStatus} from "../types/types";
 
-export const getServerSideProps: GetServerSideProps = async ({ params, query }) => {
+export const getServerSideProps: GetServerSideProps = async ({ params: _params, query }) => {
 
     const qStatus = Number(query?.status || 0)
     const chain = String(query?.chain)
@@ -155,16 +156,16 @@ const ListPairs: React.FC<Props> = (props) => {
 
     columns = [
         ...columns,
-        // @ts-ignore
+        // @ts-ignore — column literals' `meta`/`threshold` widen the union; TS infers narrower
         { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/p/__ID__", text: "View/Edit"} },
     ]
 
     if(props.status === TokenPairStatus.Verified) {
         columns = [
             ...columns,
-            // @ts-ignore
+            // @ts-ignore — column literals' `meta`/`threshold` widen the union; TS infers narrower
             { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/p/test/pair/__ID__", text: "Test Query"} },
-            // @ts-ignore
+            // @ts-ignore — column literals' `meta`/`threshold` widen the union; TS infers narrower
             { label: "OoO Sim Use?", accessor: "", sortable: false, cellType: "threshold_check", threshold: {minLiquidity: thresholdMinLiquidity, minTxCount: thresholdMinTxCount} },
         ]
     }

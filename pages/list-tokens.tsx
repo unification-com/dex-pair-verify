@@ -1,15 +1,16 @@
-import React from "react"
 import { GetServerSideProps} from "next"
-import Layout from "../components/Layout"
-import prisma from '../lib/prisma';
-import Status from "../components/Status";
 import Link from "next/link";
+import React from "react"
+
 import ChainName from "../components/ChainName";
-import {TokenProps} from "../types/props";
+import Layout from "../components/Layout"
 import SortableTable from "../components/SortableTable/SortableTable";
+import Status from "../components/Status";
+import prisma from '../lib/prisma';
+import {TokenProps} from "../types/props";
 import {TokenPairStatus} from "../types/types";
 
-export const getServerSideProps: GetServerSideProps = async ({ params, query }) => {
+export const getServerSideProps: GetServerSideProps = async ({ params: _params, query }) => {
 
     const tokens = await prisma.token.findMany({
         where: {
@@ -84,7 +85,7 @@ const ListTokens: React.FC<Props> = (props) => {
 
     columns = [
         ...columns,
-        // @ts-ignore
+        // @ts-ignore — column literals' `meta` widens the union; TS infers narrower
         { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/t/__ID__", text: "View/Edit"} },
     ]
 

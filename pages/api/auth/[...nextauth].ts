@@ -1,7 +1,8 @@
+import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import { NextApiHandler } from 'next';
 import NextAuth from 'next-auth';
-import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import GitHubProvider from 'next-auth/providers/github';
+
 import prisma from '../../../lib/prisma';
 
 const authHandler: NextApiHandler = (req, res) => NextAuth(req, res, authOptions);
@@ -17,7 +18,7 @@ export const authOptions = {
     adapter: PrismaAdapter(prisma),
     secret: process.env.SECRET,
     callbacks: {
-        async session({ session, token, user }) {
+        async session({ session, token: _token, user }) {
             // ToDo - migrate to DB
             let isAuthorised = false
             const allowedUsers = (process.env.ALLOWED_USERS || "")

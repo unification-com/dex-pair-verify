@@ -1,10 +1,13 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
-import {getServerSession} from "next-auth";
-import {authOptions} from "./auth/[...nextauth]";
-import {ExtendedSessionUser} from "../../types/types";
-import {dataSources} from "../../lib/sources"
-import {chainInfo} from "../../lib/chains"
 import {ApolloClient, gql, InMemoryCache} from "@apollo/client";
+import {getServerSession} from "next-auth";
+
+import {authOptions} from "./auth/[...nextauth]";
+import {chainInfo} from "../../lib/chains"
+import {dataSources} from "../../lib/sources"
+import {ExtendedSessionUser} from "../../types/types";
+
+import type { NextApiRequest, NextApiResponse } from 'next'
+
 
 
 const getCurrentBlockNumber = async(rpc) => {

@@ -1,12 +1,14 @@
-import Router from "next/router";
+import Link from "next/link";
+import { useRouter } from "next/router";
 import React from "react";
 import {NumericFormat} from "react-number-format";
-import Status from "../Status";
-import Link from "next/link";
+
 import CoinGeckoCoinLink from "../CoinGeckoCoinLink";
+import Status from "../Status";
 
 const TableCell = ({ data, column }) => {
 
+    const router = useRouter()
     let cellData = null
 
     const accessorArray = column.accessor.split(".")
@@ -45,7 +47,7 @@ const TableCell = ({ data, column }) => {
             cellData = <>{new Intl.DateTimeFormat('en-GB', {timeStyle: "short", dateStyle: "short"}).format(new Date(d * 1000))}</>
             break;
         case "edit_button":
-            cellData = <button onClick={() => Router.push(column.router.url, column.router.as.replace("__ID__", d))}>
+            cellData = <button onClick={() => router.push(column.router.url, column.router.as.replace("__ID__", d))}>
                 <strong>Edit</strong>
             </button>
             break
@@ -55,9 +57,9 @@ const TableCell = ({ data, column }) => {
                 <a>{column.meta.text}</a>
             </Link>
             break
-        case "threshold_check":
+        case "threshold_check": {
             let exportable = "No"
-            const style = {
+            const style: React.CSSProperties = {
                 color: "white",
                 backgroundColor: "red",
                 textAlign: "center",
@@ -68,9 +70,9 @@ const TableCell = ({ data, column }) => {
                 exportable = "Yes"
                 style.backgroundColor = "green"
             }
-            // @ts-ignore
             cellData = <div style={style}>{exportable}</div>
             break;
+        }
     }
 
     return (

@@ -1,8 +1,10 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
-import prisma from '../../lib/prisma';
 import {getServerSession} from "next-auth";
+
 import {authOptions} from "./auth/[...nextauth]";
+import prisma from '../../lib/prisma';
 import {ExtendedSessionUser, TokenPairStatus} from "../../types/types";
+
+import type { NextApiRequest, NextApiResponse } from 'next'
 
 const cleanseDexId = (dex) => {
     switch(dex) {

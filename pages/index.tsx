@@ -1,10 +1,11 @@
-import React from "react"
 import { GetServerSideProps } from "next"
-import Layout from "../components/Layout"
-import prisma from '../lib/prisma';
 import Link from "next/link";
+import React from "react"
+
 import ChainName from "../components/ChainName";
 import DexName from "../components/DexName";
+import Layout from "../components/Layout"
+import prisma from '../lib/prisma';
 
 export const getServerSideProps: GetServerSideProps = async () => {
   const chainDexs = await prisma.pair.findMany({
@@ -15,8 +16,14 @@ export const getServerSideProps: GetServerSideProps = async () => {
   };
 }
 
+type ChainDexRow = {
+  id: string
+  chain: string
+  dex: string
+}
+
 type Props = {
-  chainDexs: any
+  chainDexs: ChainDexRow[]
 }
 
 const Home: React.FC<Props> = (props) => {

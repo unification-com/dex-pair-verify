@@ -1,9 +1,11 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
 import formidable from "formidable";
+import {getServerSession} from "next-auth";
+
+import { authOptions } from "./auth/[...nextauth]"
 import prisma from '../../lib/prisma';
 import {ExtendedSessionUser, TokenPairStatus} from "../../types/types";
-import {getServerSession} from "next-auth";
-import { authOptions } from "./auth/[...nextauth]"
+
+import type { NextApiRequest, NextApiResponse } from 'next'
 
 export const config = {
     api: {
@@ -35,7 +37,7 @@ export default async function handler(
     const tokenId = fields.tokenid[0]
     const comment = fields.comment[0]
     let updatedPairCount = 0
-    let updatedTokenCount = 1;
+    const updatedTokenCount = 1;
 
     const token = await prisma.token.update({
         where: { id: tokenId },

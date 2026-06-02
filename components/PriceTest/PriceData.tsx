@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from "react";
-import SortableTable from "../SortableTable/SortableTable";
-import {PairProps} from "../../types/props";
+import {NumericFormat} from "react-number-format";
 import {Web3} from "web3";
+
 import {
     removeOutliersChauvenet,
     removeOutliersIQD,
@@ -10,8 +10,9 @@ import {
     getStats,
     scientificToDecimal
 } from "../../lib/stats"
-import {NumericFormat} from "react-number-format";
+import {PairProps} from "../../types/props";
 import NoneSortableTable from "../SortableTable/NoneSortableTable";
+import SortableTable from "../SortableTable/SortableTable";
 const PriceData: React.FC<{
     base: string,
     target: string,

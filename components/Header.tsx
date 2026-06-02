@@ -1,14 +1,15 @@
 import React from "react";
+
 import NavBar from "./NavBar";
 
 const Header: React.FC = () => {
-    let left = (
+    const left = (
     <div className="left">
       <NavBar />
     </div>
   );
 
-  let right = null;
+  const right = null;
 
   return (
     <nav>

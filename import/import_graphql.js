@@ -1,12 +1,13 @@
 require('dotenv').config()
 const {ApolloClient, InMemoryCache, ApolloProvider, gql} = require('@apollo/client')
 const Web3 = require('web3');
-const { dataSources } = require('../lib/sources')
+
 const {
     getOrAddToken,
     getOrAddPair,
     getStagingPair,
 } = require('./db')
+const { dataSources } = require('../lib/sources')
 
 const fetchFromSubgraph = async () => {
     const results = {}

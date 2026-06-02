@@ -1,7 +1,9 @@
+import React from "react";
+
+
 import TableBody from "./TableBody";
 import TableHead from "./TableHead";
 import { useSortableTable } from "../../hooks/useSortableTable";
-import {useState} from "react";
 
 const SortableTable = ({ caption, data, columns, useFilter }) => {
 
@@ -9,7 +11,7 @@ const SortableTable = ({ caption, data, columns, useFilter }) => {
 
     const filter = (event: React.ChangeEvent<HTMLInputElement>) => {
         const value = event.target.value
-        // @ts-ignore
+        // @ts-ignore — useSortableTable returns a wider tuple than TS infers
         handleFiltering(value)
     }
 

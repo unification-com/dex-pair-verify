@@ -1,9 +1,11 @@
-import React, {useState} from "react";
-import {PairProps} from "../../types/props";
-import PriceData from "./PriceData";
 import Link from "next/link";
+import React, {useEffect, useState} from "react";
+
+import PriceData from "./PriceData";
+import {PairProps} from "../../types/props";
 import NoneSortableTable from "../SortableTable/NoneSortableTable";
-import {NumericFormat} from "react-number-format";
+
+
 
 const PriceTest: React.FC<{
     base: string,
@@ -15,7 +17,7 @@ const PriceTest: React.FC<{
     const [usable, setUsable] = useState(usablePairs)
     const [ignored, setIgnored] = useState(ignoredPairs)
 
-    React.useEffect(() => {
+    useEffect(() => {
         setUsable(usablePairs)
         setIgnored(ignoredPairs)
     }, [usablePairs, ignoredPairs]);

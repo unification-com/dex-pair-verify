@@ -43,7 +43,7 @@ export type PairProps = {
     status: number;
     verificationMethod: string;
     verificationComment: string;
-    duplicatePairs: any | null
+    duplicatePairs: { duplicatePair: PairPropsNoToken }[] | null
     duplicateCount: number | null;
     token0Id: string;
     token1Id: string;
@@ -74,7 +74,7 @@ export type PairPropsNoToken = {
     status: number;
     verificationMethod: string;
     verificationComment: string;
-    duplicatePairs: any | null
+    duplicatePairs: { duplicatePair: PairPropsNoToken }[] | null
 };
 
 export type AssociatedPairProps = {
@@ -95,7 +95,7 @@ export type AssociatedPairProps = {
     sellers24h: number,
     volumeUsd24h: number,
     status: number;
-    duplicatePairs: any | null
+    duplicatePairs: { duplicatePair: PairPropsNoToken }[] | null
 }
 
 type DuplicateTokenCounter = {
@@ -121,7 +121,7 @@ export type TokenProps = {
     duplicateCount: number
     pairsToken0: AssociatedPairProps[] | null;
     pairsToken1: AssociatedPairProps[] | null;
-    duplicateTokenSymbols: any | null;
+    duplicateTokenSymbols: { duplicateToken: TokenProps }[] | null;
     createdAt: number;
     _count: DuplicateTokenCounter | null;
 };

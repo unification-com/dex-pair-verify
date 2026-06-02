@@ -1,13 +1,14 @@
-import React, {ReactNode, useEffect, useState} from "react";
-import Header from "./Header";
+import Link from "next/link";
+import {useSession} from 'next-auth/react';
+import React, {ReactNode} from "react";
 import {NotificationContainer} from 'react-notifications';
-import {signOut, useSession} from 'next-auth/react';
-
 
 import 'react-notifications/lib/notifications.css';
-import Link from "next/link";
-import {ExtendedSessionUser} from "../types/types";
+
+
+import Header from "./Header";
 import LogOutButton from "./LogOutButton";
+import {ExtendedSessionUser} from "../types/types";
 
 type Props = {
   children: ReactNode;

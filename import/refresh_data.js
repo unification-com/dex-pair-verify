@@ -1,3 +1,6 @@
+const {ApolloClient, InMemoryCache} = require("@apollo/client");
+const Web3 = require("web3");
+
 const {
     getTokensToFetchFromCoingecko,
     updateTokenWithCoingeckoData,
@@ -8,8 +11,6 @@ const {
     getOrCreateEmptyThresholds,
 } = require("./db")
 const {dataSources} = require("../lib/sources")
-const Web3 = require("web3");
-const {ApolloClient, InMemoryCache} = require("@apollo/client");
 
 const CG_WAIT = 2500; // coin gecko API limited to 30 calls/minute, so wait 2.5 seconds between calls.
 

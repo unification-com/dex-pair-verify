@@ -1,15 +1,16 @@
-import React, {FormEvent, useState} from "react"
 import { GetServerSideProps } from "next"
-import Layout from "../../components/Layout"
-import prisma from '../../lib/prisma';
+import React, {FormEvent, useState} from "react"
 import {NotificationManager} from 'react-notifications';
-import Status from "../../components/Status";
-import {TokenProps} from "../../types/props";
-import ChainName from "../../components/ChainName";
-import ExplorerUrl from "../../components/ExplorerUrl";
 import {NumericFormat} from "react-number-format";
+
+import ChainName from "../../components/ChainName";
 import CoinGeckoCoinLink from "../../components/CoinGeckoCoinLink";
+import ExplorerUrl from "../../components/ExplorerUrl";
+import Layout from "../../components/Layout"
 import SortableTable from "../../components/SortableTable/SortableTable";
+import Status from "../../components/Status";
+import prisma from '../../lib/prisma';
+import {TokenProps} from "../../types/props";
 import {TokenPairStatus} from "../../types/types";
 
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
@@ -168,7 +169,7 @@ const Token: React.FC<Props> = (props) => {
                 <button type="submit">Submit</button>
             </form>
 
-                <p><strong>Note:</strong> Setting the token status to "Fake/Dupe" will automatically set the status of
+                <p><strong>Note:</strong> Setting the token status to &quot;Fake/Dupe&quot; will automatically set the status of
                     ALL
                     associated pairs to Fake/Dupe</p>
 

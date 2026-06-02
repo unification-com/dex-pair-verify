@@ -1,7 +1,7 @@
 require('dotenv').config()
 const {ApolloClient, InMemoryCache, ApolloProvider, gql} = require('@apollo/client')
 const Web3 = require('web3');
-const { dataSources } = require('../lib/sources')
+
 const {
     getOrAddStagingPair,
     getOrAddToken,
@@ -9,6 +9,7 @@ const {
     getQueryContractAddresses,
     getStagingPair, getPair, deleteFromStaging, getOrCreateEmptyThresholds,
 } = require('./db')
+const { dataSources } = require('../lib/sources')
 
 const CG_WAIT = 20000; // coin gecko API limited to 30 calls/minute, so wait between calls.
 const CG_WAIT2 = 500

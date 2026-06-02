@@ -1,7 +1,8 @@
-import React, {useEffect, useState} from 'react';
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { signOut, useSession } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
+import React, {useEffect, useState} from 'react';
+
 import LogOutButton from "./LogOutButton";
 
 function Navbar() {
@@ -9,7 +10,7 @@ function Navbar() {
     const isActive: (pathname: string) => boolean = (pathname) =>
         router.pathname === pathname;
 
-    const { data: session, status } = useSession();
+    const { data: session } = useSession();
 
     const [nav, setNav] = useState({dexs: [], chains: []});
 

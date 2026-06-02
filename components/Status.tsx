@@ -1,4 +1,5 @@
 import React from "react";
+
 import {TokenPairStatus} from "../types/types";
 
 const Status: React.FC<{ status: number, method: string }> = ({ status, method }) => {

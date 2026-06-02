@@ -21,7 +21,7 @@ const processTokensForChain = async(chain) => {
             }
 
             if(original.symbol === potentialDuplicate.symbol) {
-                const [duplicate, created] = await getOrAddDuplicateTokenSymbol(chain, original.id, potentialDuplicate.id)
+                const [_duplicate, created] = await getOrAddDuplicateTokenSymbol(chain, original.id, potentialDuplicate.id)
                 if(created) {
                     duplicateCount += 1
                 }
@@ -50,7 +50,7 @@ const processPairsForChain = async(chain, dex) => {
             }
 
             if(pairCheck0 === potentialDuplicate.pair || pairCheck1 === potentialDuplicate.pair) {
-                const [duplicate, created] = await getOrAddDuplicatePair(chain, dex, original.id, potentialDuplicate.id)
+                const [_duplicate, created] = await getOrAddDuplicatePair(chain, dex, original.id, potentialDuplicate.id)
                 if(created) {
                     duplicateCount += 1
                 }

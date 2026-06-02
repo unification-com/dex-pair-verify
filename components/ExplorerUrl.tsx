@@ -1,5 +1,5 @@
-import React from "react";
 import Link from "next/link";
+import React from "react";
 
 const ExplorerUrl: React.FC<{ chain: string, contractAddress: string, linkType: string }> = ({ chain, contractAddress, linkType }) => {
 

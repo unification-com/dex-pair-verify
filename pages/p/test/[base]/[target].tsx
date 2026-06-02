@@ -1,11 +1,12 @@
-import React, {FormEvent, useEffect, useState} from "react"
 import { GetServerSideProps } from "next"
+import React, {FormEvent, useEffect, useState} from "react"
 import {NotificationManager} from 'react-notifications';
+
 import Layout from "../../../../components/Layout"
+import PriceTest from "../../../../components/PriceTest/PriceTest";
+import Status from "../../../../components/Status";
 import prisma from '../../../../lib/prisma';
 import {PairProps} from "../../../../types/props";
-import Status from "../../../../components/Status";
-import PriceTest from "../../../../components/PriceTest/PriceTest";
 import {TokenPairStatus} from "../../../../types/types";
 
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
