@@ -107,6 +107,28 @@ const Pair: React.FC<Props> = (props) => {
     }
   }
 
+  async function onRescan() {
+    const response = await fetch('/api/rescanpair', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pairid: props.pair.id }),
+    })
+
+    const res = await response.json()
+
+    if(res.success) {
+      if(res.data.skipped) {
+        NotificationManager.info("Skipped", res.data.message, 5000)
+      } else {
+        const pct = Math.round(res.data.confidence * 100)
+        NotificationManager.success("Verdict", `${res.data.new_status} (confidence ${pct}%) — ${res.data.reason}`, 8000);
+        setCurrentStatus(res.data.new_status)
+      }
+    } else {
+      NotificationManager.error("Error", `${res.err}`, 5000)
+    }
+  }
+
   const columns = [
     { label: "Pair", accessor: "pair", sortable: true, sortbyOrder: "asc", cellType: "display" },
     { label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number" },
@@ -203,6 +225,7 @@ const Pair: React.FC<Props> = (props) => {
 
           <h4>Pair Status: <Status status={currentStatus} method={props.pair.verificationMethod}/>
             {verifyPair}
+            <button onClick={onRescan} type={"button"}>Re-run verdict (auto)</button>
           </h4>
 
 
