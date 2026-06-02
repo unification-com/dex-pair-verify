@@ -1,4 +1,4 @@
-// Verdict-engine fence functions (A.2).
+// Verdict-engine fences + adjudication (A.2).
 //
 // Each fence is a small, pure predicate over a single aspect of a pair: does it
 // have enough liquidity, is it old enough, do its token addresses match the
@@ -7,10 +7,16 @@
 // weekly re-verify cron and the on-demand UI rescan all share the exact same
 // logic (DRY — one implementation, three call sites).
 //
-// evaluatePair (C4) composes these: hard-fence failures short-circuit to
+// evaluatePair composes these: hard-fence failures short-circuit to
 // AutoRejected, the rest combine by weight into a confidence score. The
-// adjudication and the DB-backed checks (sibling lookup, canonical-contract
-// fetch) live there, not here.
+// DB-backed inputs it needs (the precomputed canonical key, whether a verified
+// sibling shares that key, whether this pair lost an intra-chain impostor
+// conflict, each token's canonical address) are gathered by the caller into a
+// VerdictContext — so the adjudication itself stays pure and unit-testable, and
+// the DB context-builder lives at the call sites (the A.4.1 ingest, the
+// re-verify cron, the UI rescan).
+
+import { TokenPairStatus } from "../types/types";
 
 export type Fence = {
   ok: boolean;
@@ -219,4 +225,186 @@ export function dexFactoryMatchesCanonical(
     reason: ok ? "factory matches canonical" : "factory does NOT match canonical",
     weight,
   };
+}
+
+// --- Adjudication --------------------------------------------------------
+
+// Tunable knobs. Liquidity + tx-count come from the Threshold table today; the
+// rest are constants here until A.3 grows the Threshold table to hold them
+// per-(chain, dex). All are surfaced so a caller can override per source.
+export type VerdictConfig = {
+  minLiquidityUsd: number; // soft gate (Threshold.minLiquidityUsd)
+  minTxCount: number; // soft gate (Threshold.minTxCount)
+  minAgeHours: number;
+  maxPriceDeviationPercent: number;
+  minDecimals: number;
+  maxDecimals: number;
+  hardMinLiquidityUsd: number; // below this is an auto-reject, regardless of score
+  autoVerifyConfidence: number; // confidence band for auto-verify
+};
+
+export const DEFAULT_VERDICT_CONFIG: VerdictConfig = {
+  minLiquidityUsd: 0, // operator tightens per (chain, dex) via Threshold
+  minTxCount: 0,
+  minAgeHours: 24,
+  maxPriceDeviationPercent: 5,
+  minDecimals: 0, // 0 passes (unfetched); only absurdly high decimals reject
+  maxDecimals: 36,
+  hardMinLiquidityUsd: 500,
+  autoVerifyConfidence: 0.85,
+};
+
+export type VerdictTokenInput = {
+  contractAddress: string;
+  coingeckoCoinId: string | null;
+  decimals: number;
+  deploymentTimestamp: number | null;
+  priceCg: number; // this token's CoinGecko price (Pair.token{0,1}PriceCg)
+  priceDex: number; // this token's DEX price (Pair.token{0,1}PriceDex)
+  canonicalAddress: string | null; // from fetchCanonicalContract, or null/unknown
+};
+
+export type VerdictPairInput = {
+  chain: string;
+  dex: string;
+  reserveUsd: number;
+  txCount: number;
+  token0: VerdictTokenInput;
+  token1: VerdictTokenInput;
+};
+
+export type VerdictContext = {
+  now: number;
+  config: VerdictConfig;
+  // Precomputed by the caller via canonicalKey() — kept out of evaluatePair so
+  // this module needn't import the prisma-backed canonical.ts.
+  canonicalKey: string | null;
+  // A ManualVerified/AutoVerified pair on a different (chain, dex) shares this
+  // canonical key — a strong "this is real" signal (cross-source sibling).
+  hasVerifiedSibling: boolean;
+  // This pair lost an intra-(chain, dex) impostor conflict: another pair with
+  // the same canonical key on the same (chain, dex) matches the canonical token
+  // addresses and this one doesn't.
+  intraChainImpostorLoser: boolean;
+  pairFactoryAddress: string | null; // unknown until A.4.1 RPC read
+  canonicalFactoryAddress: string | null; // from lib/sources.js
+};
+
+export type VerdictResult = {
+  verdict: TokenPairStatus;
+  reason: string;
+  evidence: Record<string, number | string | boolean>;
+  canonicalKey: string | null;
+  confidence: number;
+};
+
+// Combine fence outcomes into a confidence score in [0, 1]: the fraction of
+// non-skipped weight that passed. Skipped fences (weight 0) drop out entirely.
+const computeConfidence = (fences: Fence[]): number => {
+  let total = 0;
+  let passed = 0;
+  for (const f of fences) {
+    total += f.weight;
+    if (f.ok) {
+      passed += f.weight;
+    }
+  }
+  return total === 0 ? 0 : passed / total;
+};
+
+// Run every fence against a pair and adjudicate a verdict. Pure: all external
+// data arrives via ctx. The verdict-engine's single implementation, reused by
+// ingest / cron / UI-rescan.
+export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): VerdictResult {
+  const { config, now } = ctx;
+
+  const f = {
+    bothCgId: bothTokensHaveCgId(pair.token0.coingeckoCoinId, pair.token1.coingeckoCoinId),
+    liquidity: meetsLiquidity(pair.reserveUsd, config.minLiquidityUsd),
+    txCount: meetsTxCount(pair.txCount, config.minTxCount),
+    age0: meetsAge(pair.token0.deploymentTimestamp, now, config.minAgeHours),
+    age1: meetsAge(pair.token1.deploymentTimestamp, now, config.minAgeHours),
+    decimals0: decimalsLookSane(pair.token0.decimals, config.minDecimals, config.maxDecimals),
+    decimals1: decimalsLookSane(pair.token1.decimals, config.minDecimals, config.maxDecimals),
+    price0: cgPriceWithinTolerance(pair.token0.priceCg, pair.token0.priceDex, config.maxPriceDeviationPercent),
+    price1: cgPriceWithinTolerance(pair.token1.priceCg, pair.token1.priceDex, config.maxPriceDeviationPercent),
+    canon0: tokenAddressesMatchCanonical(pair.token0.contractAddress, pair.token0.canonicalAddress),
+    canon1: tokenAddressesMatchCanonical(pair.token1.contractAddress, pair.token1.canonicalAddress),
+    factory: dexFactoryMatchesCanonical(ctx.pairFactoryAddress, ctx.canonicalFactoryAddress),
+  };
+
+  const allFences = Object.values(f);
+  const confidence = computeConfidence(allFences);
+
+  const evidence: Record<string, number | string | boolean> = {
+    canonicalKey: ctx.canonicalKey ?? "none",
+    confidence,
+    reserveUsd: pair.reserveUsd,
+    txCount: pair.txCount,
+    hasVerifiedSibling: ctx.hasVerifiedSibling,
+    token0MatchesCanonical: f.canon0.ok,
+    token1MatchesCanonical: f.canon1.ok,
+    token0PriceDeviation: f.price0.observed,
+    token1PriceDeviation: f.price1.observed,
+    token0Decimals: pair.token0.decimals,
+    token1Decimals: pair.token1.decimals,
+  };
+
+  const result = (verdict: TokenPairStatus, reason: string): VerdictResult => ({
+    verdict,
+    reason,
+    evidence,
+    canonicalKey: ctx.canonicalKey,
+    confidence,
+  });
+
+  // 1. Hard fences — short-circuit to AutoRejected (bypasses operator review).
+  //    A fence only fails (vs skips) when it had the data to fail on.
+  if (!f.canon0.ok) {
+    return result(TokenPairStatus.AutoRejected, "token0 is a possible impostor (address != CoinGecko canonical)");
+  }
+  if (!f.canon1.ok) {
+    return result(TokenPairStatus.AutoRejected, "token1 is a possible impostor (address != CoinGecko canonical)");
+  }
+  if (pair.reserveUsd < config.hardMinLiquidityUsd) {
+    return result(TokenPairStatus.AutoRejected, `liquidity below hard floor ($${config.hardMinLiquidityUsd})`);
+  }
+  if (!f.decimals0.ok || !f.decimals1.ok) {
+    return result(TokenPairStatus.AutoRejected, "token decimals look bogus");
+  }
+
+  // 2. Intra-(chain, dex) impostor conflict loser → NotCurrentlyUsable.
+  if (ctx.intraChainImpostorLoser) {
+    return result(
+      TokenPairStatus.NotCurrentlyUsable,
+      "another pair with this canonical key on this (chain, dex) matches the canonical token addresses",
+    );
+  }
+
+  // 3. Cannot canonically key (a token lacks a CG id) → operator decides.
+  if (!f.bothCgId.ok) {
+    return result(TokenPairStatus.NeedsReview, "one or both tokens lack a CoinGecko coin id");
+  }
+
+  // 4. A verified cross-source sibling vouches for the key (+ liquidity passes)
+  //    — a strong enough signal to auto-verify even past the mid-band rule.
+  if (ctx.hasVerifiedSibling && f.liquidity.ok) {
+    return result(TokenPairStatus.AutoVerified, "canonical key matches an already-verified cross-source sibling");
+  }
+
+  // 5. Mid-band rule (A.3): a CG/DEX price mismatch is never auto-verified —
+  //    it's not necessarily a scam, but it needs operator eyes.
+  if (!f.price0.ok || !f.price1.ok) {
+    return result(TokenPairStatus.NeedsReview, "CG/DEX price deviation exceeds tolerance");
+  }
+
+  // 6. Otherwise auto-verify only when confidence clears the band AND the core
+  //    quantitative gates (liquidity / tx-count / age) all pass.
+  const coreGatesPass = f.liquidity.ok && f.txCount.ok && f.age0.ok && f.age1.ok;
+  if (confidence >= config.autoVerifyConfidence && coreGatesPass) {
+    return result(TokenPairStatus.AutoVerified, "all fences passed with high confidence");
+  }
+
+  // 7. Everything else lands in the (shrunken) manual queue.
+  return result(TokenPairStatus.NeedsReview, "meets some fences but not the auto-verify bar");
 }
