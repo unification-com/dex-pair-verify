@@ -6,15 +6,6 @@ import {ExtendedSessionUser, TokenPairStatus} from "../../types/types";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
-const cleanseDexId = (dex) => {
-    switch(dex) {
-        case "pancakeswap-v3-bsc":
-            return "pancakeswap_v3"
-        default:
-            return dex
-    }
-}
-
 export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
@@ -55,12 +46,10 @@ export default async function handler(
         ],
     })
 
-    const dexIdForOoO = cleanseDexId(dex)
-
     const retData = {
         pairs: [],
         chain,
-        dex: dexIdForOoO,
+        dex,
     }
 
     for(let i = 0; i < data.length; i += 1) {
@@ -80,7 +69,7 @@ export default async function handler(
 
     if(parseInt(download) === 1) {
         res.setHeader('Content-Type', 'application/json');
-        res.setHeader(`Content-Disposition`, `attachment; filename=${chain}-${dexIdForOoO}-verified.json`);
+        res.setHeader(`Content-Disposition`, `attachment; filename=${chain}-${dex}-verified.json`);
     }
 
     return res.status(200).json(retData)
