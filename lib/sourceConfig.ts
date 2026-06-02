@@ -8,9 +8,15 @@ export type SourceEntry = {
   chain: string;
   dex: string;
   canonicalFactoryAddress?: string;
+  onCoinGeckoTerminal?: boolean;
+  last_page?: number;
 };
 
 const sources = dataSources as SourceEntry[];
+
+export const sourceCount = sources.length;
+
+export const getSourceByIndex = (i: number): SourceEntry | undefined => sources[i];
 
 export const getSource = (chain: string, dex: string): SourceEntry | undefined =>
   sources.find((s) => s.chain === chain && s.dex === dex);

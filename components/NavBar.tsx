@@ -57,6 +57,24 @@ function Navbar() {
                 </span>
             ))}
 
+            {session && (
+                <>
+                    &nbsp;|&nbsp;
+                    <span key={"navbar_admin_ingest"}>
+                        <Link href="/admin/ingest">
+                            <a data-active={isActive("/admin/ingest")}>Ingest</a>
+                        </Link>
+                    </span>
+                    &nbsp;&nbsp;&nbsp;
+                    <span key={"navbar_admin_revalidate"}>
+                        <Link href="/admin/revalidate">
+                            <a data-active={isActive("/admin/revalidate")}>Re-validate</a>
+                        </Link>
+                    </span>
+                    &nbsp;
+                </>
+            )}
+
             {session && <LogOutButton />}
         </>
     );
