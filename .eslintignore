@@ -14,10 +14,6 @@ next-env.d.ts
 # A.0/Phase 2 work. They sit in the ignore list temporarily so the rest of
 # the codebase can land strict-from-day-one ESLint enforcement now.
 
-# B6 — rules-of-hooks + B7 — N+1 threshold query
-# (Next dynamic-route brackets are glob char-classes; ignore the directory)
-pages/p/test/
-
 # B17 + B18 — PriceData memoize + AbortController
 components/PriceTest/PriceData.tsx
 
