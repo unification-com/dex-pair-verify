@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useMemo, useState} from "react";
 import {NumericFormat} from "react-number-format";
 import {Web3} from "web3";
 
@@ -13,6 +13,17 @@ import {
 import {PairProps} from "../../types/props";
 import NoneSortableTable from "../SortableTable/NoneSortableTable";
 import SortableTable from "../SortableTable/SortableTable";
+
+type StatRow = {
+    id: string;
+    n: number;
+    sum: number;
+    mean: number;
+    variance: number;
+    stdDev: number;
+};
+
+type ContractMap = Record<string, Record<string, string[]>>;
 const PriceData: React.FC<{
     base: string,
     target: string,
@@ -25,13 +36,12 @@ const PriceData: React.FC<{
     const OUT_CHAUVENET = "Chauvenet"
 
     const [isFetching, setIsFetching] = useState(true)
-    const [errorMsg, setErrorMsg] = useState(null)
+    const [errorMsg, setErrorMsg] = useState<string | null>(null)
     const [priceTableData, setPriceTableData] = useState([]);
-    const [originalPrices, setOriginalPrices] = useState([])
-    const [pricesOutliersRemoved, setPricesOutliersRemoved] = useState([])
-    const [removedPrices, setRemovedPrices] = useState([])
+    const [originalPrices, setOriginalPrices] = useState<number[]>([])
+    const [removedPrices, setRemovedPrices] = useState<number[]>([])
     const [meanPrice, setMeanPrice] = useState(0)
-    const [statsBefore, setStatsBefore] = useState(
+    const [statsBefore, setStatsBefore] = useState<StatRow>(
         {
             id: "stats-before",
             mean: 0,
@@ -41,7 +51,7 @@ const PriceData: React.FC<{
             variance: 0,
         }
     )
-    const [statsAfter, setStatsAfter] = useState(
+    const [statsAfter, setStatsAfter] = useState<StatRow>(
         {
             id: "stats-after",
             mean: 0,
@@ -55,29 +65,30 @@ const PriceData: React.FC<{
     const [dMax, setDMax] = useState(1)
     const [minsOfData, setMinsOfData] = useState(0)
 
-    const contactList = {}
-
-    for(let i = 0; i < pairs.length; i += 1) {
-        const p = pairs[i]
-
-        if(contactList[p.chain] === undefined) {
-            contactList[p.chain] = {}
+    // Group contract addresses by (chain, dex). Memoised so it isn't rebuilt
+    // on every render (and so the fetch effect's dependency is stable).
+    const contractList = useMemo<ContractMap>(() => {
+        const map: ContractMap = {}
+        for (const p of pairs) {
+            if (map[p.chain] === undefined) {
+                map[p.chain] = {}
+            }
+            if (map[p.chain][p.dex] === undefined) {
+                map[p.chain][p.dex] = []
+            }
+            map[p.chain][p.dex].push(p.contractAddress)
         }
-
-        if(contactList[p.chain][p.dex] === undefined) {
-            contactList[p.chain][p.dex] = []
-        }
-        contactList[p.chain][p.dex].push(p.contractAddress)
-    }
+        return map
+    }, [pairs])
 
     useEffect(() => {
+        const controller = new AbortController()
         setIsFetching(true)
         setErrorMsg(null)
 
         const endpoints = []
-        for (const chain in contactList) {
-            // Get the indexed item by the key:
-            const chainDexs = contactList[chain];
+        for (const chain in contractList) {
+            const chainDexs = contractList[chain];
             for (const dex in chainDexs) {
                 const contracts = chainDexs[dex]
                 const url = `/api/getprices?chain=${chain}&dex=${dex}&addresses=${contracts.join(",")}&mins=${minsOfData}`
@@ -105,7 +116,7 @@ const PriceData: React.FC<{
             return {pId, t0Id, t1Id, pairName}
         }
 
-        const fetchPromises = endpoints.map(endpoint => fetch(endpoint));
+        const fetchPromises = endpoints.map(endpoint => fetch(endpoint, { signal: controller.signal }));
 
         Promise.all(fetchPromises)
             .then(responses => Promise.all(responses.map(response => response.json())))
@@ -146,11 +157,17 @@ const PriceData: React.FC<{
                 setIsFetching(false)
             })
             .catch(e => {
+                // Ignore the abort thrown when a newer fetch supersedes this one.
+                if (e.name === "AbortError") {
+                    return
+                }
                 console.log(e)
                 setErrorMsg(e.message)
                 setIsFetching(false)
             });
-    }, [pairs, minsOfData]);
+
+        return () => controller.abort()
+    }, [pairs, contractList, minsOfData]);
 
     useEffect(() => {
         const prices = []
@@ -161,7 +178,7 @@ const PriceData: React.FC<{
         }
 
         setOriginalPrices(prices)
-    }, [priceTableData]);
+    }, [priceTableData, target]);
 
     useEffect(() => {
         function processMean() {
@@ -191,16 +208,10 @@ const PriceData: React.FC<{
                 const removedPrices =
                     originalPrices.filter((element) => !pricesOutliersRemoved.includes(element));
 
-                statsBefore.id = "stats-before"
-                statsAfter.id = "stats-after"
-
                 setMeanPrice(meanPrice)
-                setPricesOutliersRemoved(pricesOutliersRemoved)
                 setRemovedPrices(removedPrices)
-                // @ts-ignore
-                setStatsBefore(statsBefore)
-                // @ts-ignore
-                setStatsAfter(statsAfter)
+                setStatsBefore({ ...statsBefore, id: "stats-before" })
+                setStatsAfter({ ...statsAfter, id: "stats-after" })
             } else {
                 setMeanPrice(originalPrices[0])
             }
@@ -345,9 +356,9 @@ const PriceData: React.FC<{
             {
                 (removedPrices.length > 0) && <>
                     <ul>
-                        {removedPrices.map((removed) => {
+                        {removedPrices.map((removed, i) => {
                             return (
-                                <li>
+                                <li key={`removed-${i}-${removed}`}>
                                     <NumericFormat displayType="text" thousandSeparator="," value={removed}/>
                                 </li>
                             )

@@ -14,9 +14,6 @@ next-env.d.ts
 # A.0/Phase 2 work. They sit in the ignore list temporarily so the rest of
 # the codebase can land strict-from-day-one ESLint enforcement now.
 
-# B17 + B18 — PriceData memoize + AbortController
-components/PriceTest/PriceData.tsx
-
 # B19 — dump.js becomes a CLI; remove file ignore at that commit
 import/dump.js
 
