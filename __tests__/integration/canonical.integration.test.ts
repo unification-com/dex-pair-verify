@@ -85,6 +85,21 @@ describe("fetchCanonicalContract", () => {
     expect(await testPrisma.canonicalAddress.count()).toBe(0);
   });
 
+  it("does NOT cache on a transient fetch failure (e.g. a 429), so it retries", async () => {
+    // defaultPlatformsFetcher returns null on any non-200 — simulate that.
+    const failing = vi.fn(async () => null);
+    const addr = await fetchCanonicalContract("usd-coin", "eth", { now: NOW, fetcher: failing });
+
+    expect(addr).toBeNull();
+    // No row written — the cache is not poisoned with a negative answer.
+    expect(await testPrisma.canonicalAddress.count()).toBe(0);
+
+    // A later successful call resolves and caches normally.
+    const ok = vi.fn(async () => ({ ethereum: USDC_LOWER }));
+    const addr2 = await fetchCanonicalContract("usd-coin", "eth", { now: NOW, fetcher: ok });
+    expect(addr2).toBe(USDC);
+  });
+
   it("returns null for an empty coin id", async () => {
     const addr = await fetchCanonicalContract("", "eth", { now: NOW });
     expect(addr).toBeNull();

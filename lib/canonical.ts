@@ -109,7 +109,17 @@ export async function fetchCanonicalContract(
   }
 
   const platforms = await fetcher(cgId);
-  const raw = platforms?.[platform];
+  // A null platforms map means the fetch failed transiently (non-200 — rate
+  // limit / network / 404). Do NOT cache that: caching "" here would poison the
+  // 30-day cache on a CoinGecko 429 and make every batch revalidation skip the
+  // impostor fence. Return null so the next run retries.
+  if (platforms === null) {
+    return null;
+  }
+
+  // A definitive answer (200): the address for this chain, or "" when the coin
+  // exists but has no contract here — the latter is safe to negative-cache.
+  const raw = platforms[platform];
   const address = raw && web3Utils.isAddress(raw) ? web3Utils.toChecksumAddress(raw) : "";
 
   await prisma.canonicalAddress.upsert({
