@@ -134,6 +134,12 @@ model Pair {
   verificationComment      String @default("")
   lastChecked              Int @default(0)
   createdAt                Int @default(0)
+  // Verdict-engine fields (A.2). canonicalKey caches min/max of the two
+  // tokens' CoinGecko coin IDs for fast cross-DEX/cross-chain sibling lookup;
+  // confidence is the weighted fence score; verdictAt is the last engine run.
+  canonicalKey             String?
+  confidence               Float?
+  verdictAt                Int @default(0)
   duplicatePairs           DuplicatePairs[] @relation("OriginalPair")
   dp2                      DuplicatePairs[] @relation("DuplicatePair")
 
@@ -143,6 +149,7 @@ model Pair {
   @@index([dex])
   @@index([token0Id])
   @@index([token1Id])
+  @@index([canonicalKey])
 }
 
 model Token {
@@ -162,6 +169,10 @@ model Token {
   lastChecked           Int @default(0)
   verificationComment   String @default("")
   createdAt             Int @default(0)
+  // Cheap-proxy token age for the verdict engine's meetsAge fence (A.2/D7):
+  // unix seconds, seeded from the oldest pool's pool_created_at. Nullable
+  // until first populated.
+  deploymentTimestamp   Int?
   pairsToken0           Pair[]                  @relation("Token0")
   pairsToken1           Pair[]                  @relation("Token1")
   duplicateTokenSymbols DuplicateTokenSymbols[] @relation("OriginalToken")
@@ -221,4 +232,20 @@ model Threshold {
   dex             String
   minLiquidityUsd Int
   minTxCount      Int
+}
+
+// Canonical token contract address per (CoinGecko coin id, chain), resolved
+// from CoinGecko's /coins/<id>/contract/<chain> lookup. Populated lazily by
+// the verdict engine on first sight of a (cgId, chain) tuple and refreshed on
+// a 30d TTL (lastChecked, unix seconds). The verdict engine compares a pair's
+// token contract addresses against this to catch impostor tokens that spoof a
+// known symbol. See A.2.
+model CanonicalAddress {
+  id              String @id @default(cuid())
+  coingeckoCoinId String
+  chain           String
+  contractAddress String
+  lastChecked     Int    @default(0)
+
+  @@unique([coingeckoCoinId, chain])
 }
