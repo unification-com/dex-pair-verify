@@ -3,7 +3,7 @@ import {getServerSession} from "next-auth";
 
 import {authOptions} from "./auth/[...nextauth]";
 import prisma from '../../lib/prisma';
-import {ExtendedSessionUser} from "../../types/types";
+import {ExtendedSessionUser, TokenPairStatus, VerificationMethod} from "../../types/types";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -38,8 +38,8 @@ export default async function handler(
             id: fields.pairid[0]
         },
         data: {
-            status: parseInt(fields.status[0]),
-            verificationMethod: "manual",
+            status: fields.status[0] as TokenPairStatus,
+            verificationMethod: VerificationMethod.Manual,
             verificationComment: fields.comment[0],
         },
     })

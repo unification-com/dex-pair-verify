@@ -1,3 +1,4 @@
+import {TokenPairStatus} from "./types";
 
 type DuplicatePairCounter = {
     duplicatePairs: number;
@@ -14,7 +15,7 @@ export type PairProps = {
         symbol: string;
         contractAddress: string;
         txCount: number;
-        status: number;
+        status: TokenPairStatus;
         coingeckoCoinId: string;
     } | null;
     token1: {
@@ -22,7 +23,7 @@ export type PairProps = {
         symbol: string;
         contractAddress: string;
         txCount: number;
-        status: number;
+        status: TokenPairStatus;
         coingeckoCoinId: string;
     } | null;
     reserveUsd: number;
@@ -40,7 +41,7 @@ export type PairProps = {
     volumeUsd24h: number,
     token0PriceCg: number | string | null;
     token1PriceCg: number | string | null;
-    status: number;
+    status: TokenPairStatus;
     verificationMethod: string;
     verificationComment: string;
     duplicatePairs: { duplicatePair: PairPropsNoToken }[] | null
@@ -71,7 +72,7 @@ export type PairPropsNoToken = {
     buyers24h: number,
     sellers24h: number,
     volumeUsd24h: number,
-    status: number;
+    status: TokenPairStatus;
     verificationMethod: string;
     verificationComment: string;
     duplicatePairs: { duplicatePair: PairPropsNoToken }[] | null
@@ -94,7 +95,7 @@ export type AssociatedPairProps = {
     buyers24h: number,
     sellers24h: number,
     volumeUsd24h: number,
-    status: number;
+    status: TokenPairStatus;
     duplicatePairs: { duplicatePair: PairPropsNoToken }[] | null
 }
 
@@ -108,7 +109,7 @@ export type TokenProps = {
     contractAddress: string;
     symbol: string;
     name: string;
-    status: number;
+    status: TokenPairStatus;
     txCount: number;
     coingeckoCoinId: string;
     totalSupply: number;

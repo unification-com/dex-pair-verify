@@ -15,6 +15,7 @@ import PoolUrl from "../../components/PoolUrl";
 import SortableTable from "../../components/SortableTable/SortableTable";
 import Status from "../../components/Status";
 import prisma from '../../lib/prisma';
+import {isVerifiedStatus} from "../../lib/status";
 import {PairProps} from "../../types/props";
 import {TokenPairStatus} from "../../types/types";
 
@@ -146,17 +147,17 @@ const Pair: React.FC<Props> = (props) => {
 
   let verifyPair = null;
   let verifyOpts = null
-  if(props.pair.token0.status === TokenPairStatus.Verified && props.pair.token1.status === TokenPairStatus.Verified) {
+  if(isVerifiedStatus(props.pair.token0.status) && isVerifiedStatus(props.pair.token1.status)) {
     verifyOpts = <>
       <option value={TokenPairStatus.Unverified}>Unverified</option>
-      <option value={TokenPairStatus.Verified}>VERIFIED</option>
+      <option value={TokenPairStatus.ManualVerified}>VERIFIED</option>
       <option value={TokenPairStatus.Duplicate}>Duplicate</option>
       <option value={TokenPairStatus.NotCurrentlyUsable}>Fake/Bad/Not Usable</option>
     </>
   } else {
     verifyOpts = <>
       <option value={TokenPairStatus.Unverified}>Unverified</option>
-      <option value={TokenPairStatus.Verified} disabled={true}>VERIFIED</option>
+      <option value={TokenPairStatus.ManualVerified} disabled={true}>VERIFIED</option>
       <option value={TokenPairStatus.Duplicate}>Duplicate</option>
       <option value={TokenPairStatus.NotCurrentlyUsable}>Fake/Bad/Not Usable</option>
     </>
@@ -181,7 +182,7 @@ const Pair: React.FC<Props> = (props) => {
             {props.pair.pair}
 
             {
-                (props.pair.status === TokenPairStatus.Verified) &&
+                isVerifiedStatus(props.pair.status) &&
                 <>&nbsp;-&nbsp;
                   <Link
                       href={`/p/test/pair/${props.pair.id}`}>

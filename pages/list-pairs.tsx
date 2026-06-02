@@ -17,7 +17,7 @@ const PAGE_SIZE = 50
 
 export const getServerSideProps: GetServerSideProps = async ({ params: _params, query }) => {
 
-    const qStatus = Number(query?.status || 0)
+    const qStatus = String(query?.status || TokenPairStatus.Unverified) as TokenPairStatus
     const chain = String(query?.chain)
     const dex = String(query?.dex)
     const page = Math.max(1, Number(query?.page || 1))
@@ -54,7 +54,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params: _params, 
         prisma.pair.groupBy({ by: ['pair'], where, _count: { pair: true } }),
     ]);
 
-    const statusCounts: Record<number, number> = {}
+    const statusCounts: Record<string, number> = {}
     for (const g of statusGroups) {
         statusCounts[g.status] = g._count._all
     }
@@ -105,11 +105,11 @@ type Props = {
     pairs: PairProps[],
     chain: string,
     dex: string,
-    status: number,
+    status: TokenPairStatus,
     thresholds: ThresholdProps;
     page: number,
     totalPages: number,
-    statusCounts: Record<number, number>,
+    statusCounts: Record<string, number>,
 }
 
 const ListPairs: React.FC<Props> = (props) => {
@@ -171,7 +171,7 @@ const ListPairs: React.FC<Props> = (props) => {
         { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/p/__ID__", text: "View/Edit"} },
     ]
 
-    if(props.status === TokenPairStatus.Verified) {
+    if(props.status === TokenPairStatus.ManualVerified) {
         columns = [
             ...columns,
             // @ts-ignore — column literals' `meta`/`threshold` widen the union; TS infers narrower
@@ -194,7 +194,7 @@ const ListPairs: React.FC<Props> = (props) => {
                     Set OoO Simulation Thresholds
                 </h3>
                 <p>
-                    These thresholds will determine which <Status status={TokenPairStatus.Verified}  method={""}/> pairs/tokens will be used in the OoO simulations
+                    These thresholds will determine which <Status status={TokenPairStatus.ManualVerified}  method={""}/> pairs/tokens will be used in the OoO simulations
                 </p>
                 <form onSubmit={onSubmit}>
                     Min Liquidity: $<input type={"text"} defaultValue={thresholdMinLiquidity} name={"min_liquidity"}
@@ -212,8 +212,8 @@ const ListPairs: React.FC<Props> = (props) => {
                     </Link>
                     &nbsp;|&nbsp;
                     <Link
-                        href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=${TokenPairStatus.Verified}`}>
-                        <a>VERIFIED ({props.statusCounts[TokenPairStatus.Verified] ?? 0})</a>
+                        href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=${TokenPairStatus.ManualVerified}`}>
+                        <a>VERIFIED ({props.statusCounts[TokenPairStatus.ManualVerified] ?? 0})</a>
                     </Link>
                     &nbsp;|&nbsp;
                     <Link

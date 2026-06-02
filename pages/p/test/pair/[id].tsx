@@ -5,9 +5,9 @@ import Layout from "../../../../components/Layout";
 import ThresholdPriceTest from "../../../../components/PriceTest/ThresholdPriceTest";
 import Status from "../../../../components/Status";
 import prisma from "../../../../lib/prisma";
+import { isVerifiedStatus, VERIFIED_STATUSES } from "../../../../lib/status";
 import { buildThresholdMap, ThresholdMap } from "../../../../lib/thresholds";
 import { PairProps } from "../../../../types/props";
-import { TokenPairStatus } from "../../../../types/types";
 
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
   const pair = await prisma.pair.findUnique({
@@ -30,7 +30,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
         { pair: `${pair.token0.symbol}-${pair.token1.symbol}` },
         { pair: `${pair.token1.symbol}-${pair.token0.symbol}` },
       ],
-      status: TokenPairStatus.Verified,
+      status: { in: [...VERIFIED_STATUSES] },
     },
   });
 
@@ -50,7 +50,7 @@ type Props = {
 };
 
 const PairTestPage: React.FC<Props> = (props) => {
-  if (props.pair.status !== TokenPairStatus.Verified) {
+  if (!isVerifiedStatus(props.pair.status)) {
     return (
       <Layout>
         <h3>

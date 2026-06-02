@@ -3,7 +3,7 @@ import {getServerSession} from "next-auth";
 
 import { authOptions } from "./auth/[...nextauth]"
 import prisma from '../../lib/prisma';
-import {ExtendedSessionUser, TokenPairStatus} from "../../types/types";
+import {ExtendedSessionUser, TokenPairStatus, VerificationMethod} from "../../types/types";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -33,7 +33,7 @@ export default async function handler(
         return res.status(400).json({ success: false, err: err })
     }
 
-    const newStatus = parseInt(fields.status[0])
+    const newStatus = fields.status[0] as TokenPairStatus
     const tokenId = fields.tokenid[0]
     const comment = fields.comment[0]
     let updatedPairCount = 0
@@ -43,12 +43,12 @@ export default async function handler(
         where: { id: tokenId },
         data: {
             status: newStatus,
-            verificationMethod: "manual",
+            verificationMethod: VerificationMethod.Manual,
             verificationComment: comment,
         },
     })
 
-    if(newStatus !== TokenPairStatus.Verified) {
+    if(newStatus !== TokenPairStatus.ManualVerified) {
         // cascade update associated pairs
         const updatedPairCountRes = await prisma.pair.updateMany({
             where: {
@@ -63,7 +63,7 @@ export default async function handler(
             },
             data: {
                 status: newStatus,
-                verificationMethod: "cascade"
+                verificationMethod: VerificationMethod.Cascade
             },
         })
 

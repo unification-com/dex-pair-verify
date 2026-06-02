@@ -2,7 +2,8 @@ import {getServerSession} from "next-auth";
 
 import {authOptions} from "./auth/[...nextauth]";
 import prisma from '../../lib/prisma';
-import {ExtendedSessionUser, TokenPairStatus} from "../../types/types";
+import {VERIFIED_STATUSES} from "../../lib/status";
+import {ExtendedSessionUser} from "../../types/types";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -29,7 +30,7 @@ export default async function handler(
         where: {
             chain,
             dex,
-            status: TokenPairStatus.Verified,
+            status: { in: [...VERIFIED_STATUSES] },
         },
         include: {
             token0: {

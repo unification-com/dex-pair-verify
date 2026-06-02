@@ -10,6 +10,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { resetDb, testPrisma } from "./helpers";
 import dbModule from "../../import/db.js";
+import { TokenPairStatus, VerificationMethod } from "../../types/types";
 
 // db.js is a CommonJS module (module.exports) with no .d.ts; esModuleInterop
 // synthesises the default. Cast to a loose record so the `[entity, created]`
@@ -30,15 +31,15 @@ afterAll(async () => {
 
 describe("getOrAddToken", () => {
   it("creates a new token and reports created=true", async () => {
-    const [token, created] = await db.getOrAddToken("eth", T0, "Token Zero", "TKN0", 100, 0, "");
+    const [token, created] = await db.getOrAddToken("eth", T0, "Token Zero", "TKN0", 100, TokenPairStatus.Unverified, VerificationMethod.Import);
     expect(created).toBe(true);
     expect(token.symbol).toBe("TKN0");
     expect(token.chain).toBe("eth");
   });
 
   it("is idempotent — second call returns the same row with created=false", async () => {
-    const [first] = await db.getOrAddToken("eth", T0, "Token Zero", "TKN0", 100, 0, "");
-    const [second, created] = await db.getOrAddToken("eth", T0, "Token Zero", "TKN0", 100, 0, "");
+    const [first] = await db.getOrAddToken("eth", T0, "Token Zero", "TKN0", 100, TokenPairStatus.Unverified, VerificationMethod.Import);
+    const [second, created] = await db.getOrAddToken("eth", T0, "Token Zero", "TKN0", 100, TokenPairStatus.Unverified, VerificationMethod.Import);
     expect(created).toBe(false);
     expect(second.id).toBe(first.id);
     expect(await testPrisma.token.count()).toBe(1);
@@ -62,14 +63,14 @@ describe("getOrAddStagingPair", () => {
 
 describe("getOrAddPair", () => {
   it("creates a pair linked to two tokens and reports created=true", async () => {
-    const [t0] = await db.getOrAddToken("eth", T0, "Token Zero", "TKN0", 100, 0, "");
-    const [t1] = await db.getOrAddToken("eth", T1, "Token One", "TKN1", 200, 0, "");
+    const [t0] = await db.getOrAddToken("eth", T0, "Token Zero", "TKN0", 100, TokenPairStatus.Unverified, VerificationMethod.Import);
+    const [t1] = await db.getOrAddToken("eth", T1, "Token One", "TKN1", 200, TokenPairStatus.Unverified, VerificationMethod.Import);
 
     const [pair, created] = await db.getOrAddPair(
       "eth", "uniswap_v2", PAIR, "TKN0-TKN1",
       t0.id, t1.id,
       "1000000", "500", "10", "20", "999", "12345",
-      0, "",
+      TokenPairStatus.Unverified, VerificationMethod.Import,
     );
 
     expect(created).toBe(true);
@@ -81,13 +82,13 @@ describe("getOrAddPair", () => {
   });
 
   it("is idempotent on repeat", async () => {
-    const [t0] = await db.getOrAddToken("eth", T0, "Token Zero", "TKN0", 100, 0, "");
-    const [t1] = await db.getOrAddToken("eth", T1, "Token One", "TKN1", 200, 0, "");
+    const [t0] = await db.getOrAddToken("eth", T0, "Token Zero", "TKN0", 100, TokenPairStatus.Unverified, VerificationMethod.Import);
+    const [t1] = await db.getOrAddToken("eth", T1, "Token One", "TKN1", 200, TokenPairStatus.Unverified, VerificationMethod.Import);
     const args = [
       "eth", "uniswap_v2", PAIR, "TKN0-TKN1",
       t0.id, t1.id,
       "1000000", "500", "10", "20", "999", "12345",
-      0, "",
+      TokenPairStatus.Unverified, VerificationMethod.Import,
     ];
     await db.getOrAddPair(...args);
     const [, created] = await db.getOrAddPair(...args);
@@ -115,8 +116,8 @@ describe("getOrCreateEmptyThresholds (B14 regression)", () => {
 
 describe("getOrAddDuplicateTokenSymbol", () => {
   it("creates a duplicate-symbol link and is idempotent", async () => {
-    const [t0] = await db.getOrAddToken("eth", T0, "Token Zero", "DUP", 100, 0, "");
-    const [t1] = await db.getOrAddToken("eth", T1, "Token Zero Clone", "DUP", 200, 0, "");
+    const [t0] = await db.getOrAddToken("eth", T0, "Token Zero", "DUP", 100, TokenPairStatus.Unverified, VerificationMethod.Import);
+    const [t1] = await db.getOrAddToken("eth", T1, "Token Zero Clone", "DUP", 200, TokenPairStatus.Unverified, VerificationMethod.Import);
 
     const [, created1] = await db.getOrAddDuplicateTokenSymbol("eth", t0.id, t1.id);
     const [, created2] = await db.getOrAddDuplicateTokenSymbol("eth", t0.id, t1.id);
@@ -129,15 +130,15 @@ describe("getOrAddDuplicateTokenSymbol", () => {
 
 describe("getOrAddDuplicatePair", () => {
   it("creates a duplicate-pair link and is idempotent", async () => {
-    const [t0] = await db.getOrAddToken("eth", T0, "Token Zero", "TKN0", 100, 0, "");
-    const [t1] = await db.getOrAddToken("eth", T1, "Token One", "TKN1", 200, 0, "");
+    const [t0] = await db.getOrAddToken("eth", T0, "Token Zero", "TKN0", 100, TokenPairStatus.Unverified, VerificationMethod.Import);
+    const [t1] = await db.getOrAddToken("eth", T1, "Token One", "TKN1", 200, TokenPairStatus.Unverified, VerificationMethod.Import);
     const [p0] = await db.getOrAddPair(
       "eth", "uniswap_v2", PAIR, "TKN0-TKN1",
-      t0.id, t1.id, "1000000", "500", "10", "20", "999", "12345", 0, "",
+      t0.id, t1.id, "1000000", "500", "10", "20", "999", "12345", TokenPairStatus.Unverified, VerificationMethod.Import,
     );
     const [p1] = await db.getOrAddPair(
       "eth", "sushiswap", PAIR, "TKN0-TKN1",
-      t0.id, t1.id, "2000000", "600", "11", "21", "888", "54321", 0, "",
+      t0.id, t1.id, "2000000", "600", "11", "21", "888", "54321", TokenPairStatus.Unverified, VerificationMethod.Import,
     );
 
     const [, created1] = await db.getOrAddDuplicatePair("eth", "uniswap_v2", p0.id, p1.id);

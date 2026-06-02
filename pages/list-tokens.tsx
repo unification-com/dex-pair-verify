@@ -16,7 +16,7 @@ const PAGE_SIZE = 50
 export const getServerSideProps: GetServerSideProps = async ({ params: _params, query }) => {
 
     const chain = String(query?.chain)
-    const qStatus = Number(query?.status || 0)
+    const qStatus = String(query?.status || TokenPairStatus.Unverified) as TokenPairStatus
     const page = Math.max(1, Number(query?.page || 1))
 
     const where = { chain, status: qStatus }
@@ -44,7 +44,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params: _params, 
         prisma.token.groupBy({ by: ['symbol'], where, _count: { symbol: true } }),
     ]);
 
-    const statusCounts: Record<number, number> = {}
+    const statusCounts: Record<string, number> = {}
     for (const g of statusGroups) {
         statusCounts[g.status] = g._count._all
     }
@@ -74,10 +74,10 @@ export const getServerSideProps: GetServerSideProps = async ({ params: _params, 
 type Props = {
     tokens: TokenProps[],
     chain: string,
-    status: number,
+    status: TokenPairStatus,
     page: number,
     totalPages: number,
-    statusCounts: Record<number, number>,
+    statusCounts: Record<string, number>,
 }
 
 const ListTokens: React.FC<Props> = (props) => {
@@ -118,8 +118,8 @@ const ListTokens: React.FC<Props> = (props) => {
                     </Link>
                     &nbsp;|&nbsp;
                     <Link
-                        href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=${TokenPairStatus.Verified}`}>
-                        <a>VERIFIED ({props.statusCounts[TokenPairStatus.Verified] ?? 0})</a>
+                        href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=${TokenPairStatus.ManualVerified}`}>
+                        <a>VERIFIED ({props.statusCounts[TokenPairStatus.ManualVerified] ?? 0})</a>
                     </Link>
                     &nbsp;|&nbsp;
                     <Link

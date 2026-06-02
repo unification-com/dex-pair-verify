@@ -76,7 +76,7 @@ const ThresholdPriceTest: React.FC<Props> = (props) => {
 
   const thresholdsTable = (
     <>
-      Only <Status status={TokenPairStatus.Verified} method={""} /> pairs are used, with a USD
+      Only <Status status={TokenPairStatus.ManualVerified} method={""} /> pairs are used, with a USD
       reserve and Tx Count greater or equal to the values below
       <div className={"divTable"}>
         <div className={"divTableBody"}>
@@ -121,7 +121,7 @@ const ThresholdPriceTest: React.FC<Props> = (props) => {
   const noUsablePairsWarning =
     usablePairs.length === 0 ? (
       <h2>
-        No usable <Status status={TokenPairStatus.Verified} method={""} /> pairs found for{" "}
+        No usable <Status status={TokenPairStatus.ManualVerified} method={""} /> pairs found for{" "}
         {props.base}-{props.target} using specified min USD reserve and Tx counts. Please try
         another, or modify respective thresholds
       </h2>

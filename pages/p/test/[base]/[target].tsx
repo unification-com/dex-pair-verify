@@ -4,9 +4,9 @@ import React from "react";
 import Layout from "../../../../components/Layout";
 import ThresholdPriceTest from "../../../../components/PriceTest/ThresholdPriceTest";
 import prisma from "../../../../lib/prisma";
+import { VERIFIED_STATUSES } from "../../../../lib/status";
 import { buildThresholdMap, ThresholdMap } from "../../../../lib/thresholds";
 import { PairProps } from "../../../../types/props";
-import { TokenPairStatus } from "../../../../types/types";
 
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
   const base = String(params?.base);
@@ -15,7 +15,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
   const pairs = await prisma.pair.findMany({
     where: {
       OR: [{ pair: `${base}-${target}` }, { pair: `${target}-${base}` }],
-      status: TokenPairStatus.Verified,
+      status: { in: [...VERIFIED_STATUSES] },
     },
   });
 

@@ -2,7 +2,7 @@ import React from "react";
 
 import {TokenPairStatus} from "../types/types";
 
-const Status: React.FC<{ status: number, method: string }> = ({ status, method }) => {
+const Status: React.FC<{ status: TokenPairStatus, method: string }> = ({ status, method }) => {
 
     let statusStr = "Unverified"
     let statusClass = "status-unverified"
@@ -13,9 +13,25 @@ const Status: React.FC<{ status: number, method: string }> = ({ status, method }
             statusStr = "Unverified"
             statusClass = "status-unverified"
             break
-        case TokenPairStatus.Verified:
+        case TokenPairStatus.ManualVerified:
             statusStr = "VERIFIED";
             statusClass = "status-verified"
+            break;
+        case TokenPairStatus.AutoVerified:
+            statusStr = "AUTO-VERIFIED";
+            statusClass = "status-verified"
+            break;
+        case TokenPairStatus.NeedsReview:
+            statusStr = "Needs Review";
+            statusClass = "status-review"
+            break;
+        case TokenPairStatus.AutoRejected:
+            statusStr = "Auto-Rejected";
+            statusClass = "status-not-usable"
+            break;
+        case TokenPairStatus.ManualRejected:
+            statusStr = "Rejected";
+            statusClass = "status-not-usable"
             break;
         case TokenPairStatus.Duplicate:
             statusStr = "Duplicate";
@@ -46,7 +62,12 @@ const Status: React.FC<{ status: number, method: string }> = ({ status, method }
                     font-weight: bold;
                     color: red;
                 }
-                
+
+                .status-review {
+                    font-weight: bold;
+                    color: #1565c0;
+                }
+
                 .status-unverified {
                     font-weight: bold;
                     color: #444;

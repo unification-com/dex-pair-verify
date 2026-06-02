@@ -162,7 +162,7 @@ const Token: React.FC<Props> = (props) => {
                 Change Status: <form onSubmit={onSubmit}>
                 <select name="status" id="tokenstatus" defaultValue={currentStatus}>
                     <option value={TokenPairStatus.Unverified}>Unverified</option>
-                    <option value={TokenPairStatus.Verified}>VERIFIED</option>
+                    <option value={TokenPairStatus.ManualVerified}>VERIFIED</option>
                     <option value={TokenPairStatus.Duplicate}>Duplicate</option>
                     <option value={TokenPairStatus.NotCurrentlyUsable}>Fake/Bad/Not Usable</option>
                 </select>

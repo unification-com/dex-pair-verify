@@ -59,13 +59,13 @@ const fetchFromSubgraph = async () => {
             const pairAddress = Web3.utils.toChecksumAddress(pRes.id)
 
             // token0
-            const [t0, t0Created] = await getOrAddToken(chain, token0Address, token0.name, token0.symbol, token0TxCount, 0, "")
+            const [t0, t0Created] = await getOrAddToken(chain, token0Address, token0.name, token0.symbol, token0TxCount, "Unverified", "Import")
             // token1
-            const [t1, t1Created] = await getOrAddToken(chain, token1Address, token1.name, token1.symbol, token1TxCount, 0, "")
+            const [t1, t1Created] = await getOrAddToken(chain, token1Address, token1.name, token1.symbol, token1TxCount, "Unverified", "Import")
 
             const pSym = `${t0.symbol}-${t1.symbol}`
 
-            const [p, pCreated] = await getOrAddPair(chain, dex, pairAddress, pSym, t0.id, t1.id, reserveUSD, reserveNativeCurrency, reserve0, reserve1, volumeUSD, txCount, 0, "")
+            const [p, pCreated] = await getOrAddPair(chain, dex, pairAddress, pSym, t0.id, t1.id, reserveUSD, reserveNativeCurrency, reserve0, reserve1, volumeUSD, txCount, "Unverified", "Import")
 
             if(pCreated) {
                 results[chain][dex].new += 1

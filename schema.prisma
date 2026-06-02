@@ -78,6 +78,30 @@ model Authenticator {
 
 // DEX Tool tables
 
+// Verdict / verification status for Pairs and Tokens.
+//
+// Mirrored as a string enum in types/types.ts so client components can use it
+// without importing @prisma/client (which would pull the query engine into the
+// browser bundle). The member names here MUST match that mirror exactly.
+enum TokenPairStatus {
+  Unverified
+  AutoVerified
+  AutoRejected
+  ManualVerified
+  ManualRejected
+  NeedsReview
+  Duplicate
+  NotCurrentlyUsable
+}
+
+// How a Pair/Token reached its current status. Mirrored in types/types.ts.
+enum VerificationMethod {
+  Import // set at ingest, awaiting a verdict
+  Manual // operator set the status directly
+  Cascade // inherited from a token-status change on a sibling
+  Auto // assigned by the verdict engine
+}
+
 model Pair {
   id                       String           @id @default(cuid())
   chain                    String
@@ -105,8 +129,8 @@ model Pair {
   token0PriceDex           Float @default(0)
   token1PriceCg            Float @default(0)
   token1PriceDex           Float @default(0)
-  status                   Int
-  verificationMethod       String
+  status                   TokenPairStatus    @default(Unverified)
+  verificationMethod       VerificationMethod @default(Import)
   verificationComment      String @default("")
   lastChecked              Int @default(0)
   createdAt                Int @default(0)
@@ -127,8 +151,8 @@ model Token {
   contractAddress       String
   symbol                String
   name                  String
-  status                Int
-  verificationMethod    String
+  status                TokenPairStatus    @default(Unverified)
+  verificationMethod    VerificationMethod @default(Import)
   txCount               Int
   coingeckoCoinId       String
   totalSupply           Float
