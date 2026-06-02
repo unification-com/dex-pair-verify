@@ -10,14 +10,27 @@ import Pagination from "../components/Pagination";
 import SortableTable from "../components/SortableTable/SortableTable";
 import Status from "../components/Status";
 import prisma from '../lib/prisma';
+import {isVerifiedStatus} from "../lib/status";
 import {PairProps, ThresholdProps} from "../types/props";
 import {TokenPairStatus} from "../types/types";
 
 const PAGE_SIZE = 50
 
+// Tab order for the pair queue. Needs Review is the operator's working queue
+// (the shrunken manual bucket), so it leads and is the default landing tab.
+const PAIR_TABS: { status: TokenPairStatus; label: string }[] = [
+    { status: TokenPairStatus.NeedsReview, label: "Needs Review" },
+    { status: TokenPairStatus.AutoVerified, label: "Auto-Verified" },
+    { status: TokenPairStatus.ManualVerified, label: "VERIFIED" },
+    { status: TokenPairStatus.AutoRejected, label: "Auto-Rejected" },
+    { status: TokenPairStatus.Unverified, label: "Unverified" },
+    { status: TokenPairStatus.Duplicate, label: "Duplicate" },
+    { status: TokenPairStatus.NotCurrentlyUsable, label: "Fake/Bad/Not Usable" },
+]
+
 export const getServerSideProps: GetServerSideProps = async ({ params: _params, query }) => {
 
-    const qStatus = String(query?.status || TokenPairStatus.Unverified) as TokenPairStatus
+    const qStatus = String(query?.status || TokenPairStatus.NeedsReview) as TokenPairStatus
     const chain = String(query?.chain)
     const dex = String(query?.dex)
     const page = Math.max(1, Number(query?.page || 1))
@@ -171,7 +184,7 @@ const ListPairs: React.FC<Props> = (props) => {
         { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/p/__ID__", text: "View/Edit"} },
     ]
 
-    if(props.status === TokenPairStatus.ManualVerified) {
+    if(isVerifiedStatus(props.status)) {
         columns = [
             ...columns,
             // @ts-ignore — column literals' `meta`/`threshold` widen the union; TS infers narrower
@@ -206,25 +219,15 @@ const ListPairs: React.FC<Props> = (props) => {
                 </form>
 
                 <h3>
-                    <Link
-                        href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=${TokenPairStatus.Unverified}`}>
-                        <a>Unverified ({props.statusCounts[TokenPairStatus.Unverified] ?? 0})</a>
-                    </Link>
-                    &nbsp;|&nbsp;
-                    <Link
-                        href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=${TokenPairStatus.ManualVerified}`}>
-                        <a>VERIFIED ({props.statusCounts[TokenPairStatus.ManualVerified] ?? 0})</a>
-                    </Link>
-                    &nbsp;|&nbsp;
-                    <Link
-                        href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=${TokenPairStatus.Duplicate}`}>
-                        <a>Duplicate ({props.statusCounts[TokenPairStatus.Duplicate] ?? 0})</a>
-                    </Link>
-                    &nbsp;|&nbsp;
-                    <Link
-                        href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=${TokenPairStatus.NotCurrentlyUsable}`}>
-                        <a>Fake/Bad/Not Usable ({props.statusCounts[TokenPairStatus.NotCurrentlyUsable] ?? 0})</a>
-                    </Link>
+                    {PAIR_TABS.map((t, i) => (
+                        <span key={`pairtab_${t.status}`}>
+                            {i > 0 && <>&nbsp;|&nbsp;</>}
+                            <Link
+                                href={`/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=${t.status}`}>
+                                <a>{t.label} ({props.statusCounts[t.status] ?? 0})</a>
+                            </Link>
+                        </span>
+                    ))}
                 </h3>
                 <main>
                     {
