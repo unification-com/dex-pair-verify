@@ -140,6 +140,9 @@ model Pair {
   canonicalKey             String?
   confidence               Float?
   verdictAt                Int @default(0)
+  // The verdict engine's per-fence evidence (observed values vs thresholds),
+  // surfaced on the pair detail page so the operator can audit a verdict.
+  verdictEvidence          Json?
   duplicatePairs           DuplicatePairs[] @relation("OriginalPair")
   dp2                      DuplicatePairs[] @relation("DuplicatePair")
 

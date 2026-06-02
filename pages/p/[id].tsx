@@ -228,6 +228,33 @@ const Pair: React.FC<Props> = (props) => {
             <button onClick={onRescan} type={"button"}>Re-run verdict (auto)</button>
           </h4>
 
+          {
+            (props.pair.verdictEvidence || props.pair.confidence !== null || props.pair.verificationComment) &&
+            <>
+              <h4>Verdict evidence</h4>
+              <p>
+                {props.pair.confidence !== null && <>Confidence: <strong>{Math.round(props.pair.confidence * 100)}%</strong><br/></>}
+                {props.pair.verificationComment && <>Reason: {props.pair.verificationComment}</>}
+              </p>
+              {
+                props.pair.verdictEvidence &&
+                <table>
+                  <thead>
+                    <tr><th>Signal</th><th>Value</th></tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(props.pair.verdictEvidence).map(([k, v]) => (
+                      <tr key={`evidence_${k}`}>
+                        <td>{k}</td>
+                        <td>{String(v)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              }
+            </>
+          }
+
 
           <h4>Data from CoinGecko API</h4>
 

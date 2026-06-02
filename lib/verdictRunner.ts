@@ -207,6 +207,7 @@ export async function runVerdictForPair(
         verdictAt: now,
         verificationMethod: VerificationMethod.Auto,
         verificationComment: result.reason,
+        verdictEvidence: result.evidence,
       },
     });
   }

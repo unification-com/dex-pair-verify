@@ -44,6 +44,8 @@ export type PairProps = {
     status: TokenPairStatus;
     verificationMethod: string;
     verificationComment: string;
+    confidence: number | null;
+    verdictEvidence: Record<string, number | string | boolean> | null;
     duplicatePairs: { duplicatePair: PairPropsNoToken }[] | null
     duplicateCount: number | null;
     token0Id: string;
