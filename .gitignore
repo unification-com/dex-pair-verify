@@ -5,3 +5,6 @@ node_modules/
 tmp/
 .idea/
 yarn-error.log
+
+# TypeScript incremental-build cache (created by `yarn typecheck`)
+tsconfig.tsbuildinfo

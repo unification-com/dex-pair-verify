@@ -9,6 +9,9 @@
     "lint": "eslint . --ext .js,.mjs,.jsx,.ts,.tsx --max-warnings 0",
     "lint:fix": "eslint . --ext .js,.mjs,.jsx,.ts,.tsx --fix",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "postinstall": "simple-git-hooks"
   },
   "simple-git-hooks": {
@@ -50,6 +53,7 @@
     "lint-staged": "^15.3.0",
     "prisma": "^5.15.0",
     "simple-git-hooks": "^2.11.1",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^2"
   }
 }
