@@ -1,14 +1,12 @@
-// Baseline tests for lib/stats.js — commit 7.
+// Tests for lib/stats.js.
 //
-// Captures CURRENT behaviour including the known bugs B8/B9/B10 from
-// BUGS_AND_FINDINGS.md. The subsequent fix commits (B8/B9/B10) update
-// the relevant assertions; the resulting diffs make the behavioural
-// change visible.
-//
-// Bug-tracking assertions are tagged with `// BUG B#` so they're easy
-// to find when the fix lands. Where the current code crashes outright,
-// the test asserts the throw — those go red→green when the guard is
-// added.
+// Originally captured current (buggy) behaviour as a baseline; the B8/B9/B10
+// fixes from BUGS_AND_FINDINGS.md have since landed and the relevant
+// assertions now assert the CORRECTED behaviour:
+//   B8 — calculateMean uses a length guard (handles negatives + zero sums)
+//   B9 — getStats guards empty (zeroed) + single-element (zero spread)
+//   B10 — removeOutliersChauvenet keeps all when stdDev === 0 (mirrors
+//         go-ooo's adhoc.go) instead of excluding everything
 
 import { describe, expect, it } from "vitest";
 
@@ -109,22 +107,20 @@ describe("calculateMean", () => {
     expect(calculateMean([7])).toBe(7);
   });
 
-  // BUG B8 — when the sum is ≤ 0 the helper returns 0 instead of the true
-  // mean. Fix at B8 will replace the `if (total > 0)` guard with a length
-  // check; these assertions update accordingly.
-  it("BUG B8: returns 0 for an all-zero set instead of 0 (happens to be right)", () => {
+  // B8 fixed: mean uses a length guard, not a `sum > 0` guard.
+  it("returns the true mean of an all-zero set", () => {
     expect(calculateMean([0, 0, 0])).toBe(0);
   });
 
-  it("BUG B8: returns 0 for a single negative element (should be -1)", () => {
-    expect(calculateMean([-1])).toBe(0);
+  it("returns the true mean of a single negative element", () => {
+    expect(calculateMean([-1])).toBe(-1);
   });
 
-  it("BUG B8: returns 0 for all-negative set (should be -2)", () => {
-    expect(calculateMean([-1, -2, -3])).toBe(0);
+  it("returns the true mean of an all-negative set", () => {
+    expect(calculateMean([-1, -2, -3])).toBe(-2);
   });
 
-  it("BUG B8: returns 0 for an empty set (acceptable but no length guard)", () => {
+  it("returns 0 for an empty set (length guard)", () => {
     expect(calculateMean([])).toBe(0);
   });
 });
@@ -144,21 +140,19 @@ describe("getStats", () => {
     expect(s.stdDev).toBeCloseTo(1.0954, 3);
   });
 
-  // BUG B9 — `reduce(add)` with no initial value crashes on empty input.
-  // Fix will guard length === 0.
-  it("BUG B9: crashes on an empty array", () => {
-    expect(() => getStats([])).toThrow(TypeError);
+  // B9 fixed: empty input returns zeroed stats instead of crashing.
+  it("returns zeroed stats for an empty array", () => {
+    expect(getStats([])).toEqual({ n: 0, sum: 0, mean: 0, variance: 0, stdDev: 0 });
   });
 
-  // BUG B9 — single-element divides by (n - 1) = 0, returning Infinity / NaN
-  // for variance + stdDev. Fix will return {variance: 0, stdDev: 0}.
-  it("BUG B9: returns Infinity variance on a single-element set", () => {
+  // B9 fixed: single-element set reports zero spread, not NaN/Infinity.
+  it("returns zero variance/stdDev on a single-element set", () => {
     const s = getStats([5]);
     expect(s.n).toBe(1);
     expect(s.sum).toBe(5);
     expect(s.mean).toBe(5);
-    expect(s.variance).toBe(NaN); // (0 / 0)
-    expect(s.stdDev).toBe(NaN);
+    expect(s.variance).toBe(0);
+    expect(s.stdDev).toBe(0);
   });
 });
 
@@ -195,16 +189,14 @@ describe("removeOutliersChauvenet", () => {
     expect(removeOutliersChauvenet([10, 10.1, 10.2, 10.3], 5)).toEqual([10, 10.1, 10.2, 10.3]);
   });
 
-  // BUG B10 — when stdDev = 0 (all elements equal), the per-element
-  // division is NaN/Infinity, the `dMax > NaN` is false, and every element
-  // gets excluded. Fix at B10 mirrors go-ooo's adhoc.go: keep all elements
-  // when stdDev = 0.
-  it("BUG B10: drops every element when all elements are equal (stdDev = 0)", () => {
-    expect(removeOutliersChauvenet([5, 5, 5, 5])).toEqual([]);
+  // B10 fixed: when stdDev = 0 (all elements equal) keep all, mirroring
+  // go-ooo's adhoc.go, instead of excluding everything.
+  it("keeps all elements when they are all equal (stdDev = 0)", () => {
+    expect(removeOutliersChauvenet([5, 5, 5, 5])).toEqual([5, 5, 5, 5]);
   });
 
-  it("BUG B10: drops every element from a single-element set (stdDev = 0)", () => {
-    expect(removeOutliersChauvenet([42])).toEqual([]);
+  it("keeps the single element of a one-element set (stdDev = 0)", () => {
+    expect(removeOutliersChauvenet([42])).toEqual([42]);
   });
 });
 
