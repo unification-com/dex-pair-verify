@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { getQuartile } from "../lib/stats.js";
+import { getQuartile } from "../lib/stats";
 
 describe("smoke", () => {
   it("trivial assertion passes", () => {

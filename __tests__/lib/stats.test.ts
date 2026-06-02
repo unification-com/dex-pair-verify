@@ -20,7 +20,7 @@ import {
   removeOutliersIQD,
   removeOutliersPeirceCriterion,
   scientificToDecimal,
-} from "../../lib/stats.js";
+} from "../../lib/stats";
 
 // ----------------------------------------------------------------------
 // getQuartile — pure interpolation helper
