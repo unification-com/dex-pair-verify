@@ -101,6 +101,14 @@ module.exports = {
         "@typescript-eslint/no-explicit-any": "off",
       },
     },
+    {
+      // Test files legitimately use `any` for loose fixtures + casting
+      // untyped CJS modules under test.
+      files: ["__tests__/**", "**/*.test.{ts,tsx}", "**/*.spec.{ts,tsx}"],
+      rules: {
+        "@typescript-eslint/no-explicit-any": "off",
+      },
+    },
   ],
   ignorePatterns: [
     "node_modules/",

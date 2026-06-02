@@ -2,6 +2,7 @@ node_modules/
 .next/
 .DS_STORE
 .env
+.env.test
 tmp/
 .idea/
 yarn-error.log

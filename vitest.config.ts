@@ -16,7 +16,15 @@ export default defineConfig({
     environment: "node",
     globals: false,
     include: ["**/*.{test,spec}.{ts,tsx,js,mjs}"],
-    exclude: ["node_modules/**", ".next/**", "dist/**", "build/**", "tmp/**"],
+    // Integration tests (DB-requiring) run via vitest.integration.config.ts.
+    exclude: [
+      "node_modules/**",
+      ".next/**",
+      "dist/**",
+      "build/**",
+      "tmp/**",
+      "**/*.integration.test.*",
+    ],
     reporters: ["default"],
   },
 });

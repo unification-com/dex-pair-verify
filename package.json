@@ -12,6 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "db:push:test": "dotenv -e .env.test -- prisma db push --skip-generate",
     "postinstall": "simple-git-hooks"
   },
   "simple-git-hooks": {
@@ -47,6 +49,7 @@
     "@types/react": "17.0.38",
     "@typescript-eslint/eslint-plugin": "^8.60.1",
     "@typescript-eslint/parser": "^8.60.1",
+    "dotenv-cli": "^11.0.0",
     "eslint": "8",
     "eslint-config-next": "12.0.10",
     "eslint-plugin-import": "^2.32.0",
