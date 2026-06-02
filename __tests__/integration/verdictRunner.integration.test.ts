@@ -1,0 +1,193 @@
+// Integration tests for lib/verdictRunner.ts — the DB-backed verdict bridge.
+// Seeds tokens/pairs + a fresh CanonicalAddress cache (so fetchCanonicalContract
+// resolves from cache, never the network) and asserts the persisted verdict.
+
+import { Prisma } from "@prisma/client";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
+
+import { resetDb, testPrisma } from "./helpers";
+import { runVerdictForPair } from "../../lib/verdictRunner";
+import { TokenPairStatus, VerificationMethod } from "../../types/types";
+
+const NOW = 1_700_000_000;
+const OLD = NOW - 1_000_000; // comfortably older than any age gate
+
+const WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
+const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+const FAKE_WETH = "0x000000000000000000000000000000000000dEaD";
+
+let seq = 0;
+const nextAddr = () => `0x${(++seq).toString(16).padStart(40, "0")}`;
+
+type TokenOver = Partial<Prisma.TokenUncheckedCreateInput>;
+async function seedToken(over: TokenOver = {}) {
+  return testPrisma.token.create({
+    data: {
+      chain: "eth",
+      contractAddress: nextAddr(),
+      symbol: "TKN",
+      name: "Token",
+      txCount: 1000,
+      coingeckoCoinId: "",
+      totalSupply: 0,
+      volume24hUsd: 0,
+      marketCapUsd: 0,
+      decimals: 18,
+      deploymentTimestamp: OLD,
+      ...over,
+    },
+  });
+}
+
+type PairOver = Partial<Prisma.PairUncheckedCreateInput>;
+async function seedPair(token0Id: string, token1Id: string, over: PairOver = {}) {
+  return testPrisma.pair.create({
+    data: {
+      chain: "eth",
+      dex: "uniswap_v3",
+      contractAddress: nextAddr(),
+      token0Id,
+      token1Id,
+      pair: "WETH-USDC",
+      reserve0: 0,
+      reserve1: 0,
+      reserveNativeCurrency: 0,
+      reserveUsd: 1_000_000,
+      volumeUsd: 0,
+      marketCapUsd: 0,
+      priceChangePercentage24h: 0,
+      buys24h: 0,
+      sells24h: 0,
+      buyers24h: 0,
+      sellers24h: 0,
+      volumeUsd24h: 0,
+      txCount: 5000,
+      token0PriceCg: 2000,
+      token0PriceDex: 2000,
+      token1PriceCg: 1,
+      token1PriceDex: 1,
+      ...over,
+    },
+  });
+}
+
+async function seedCanonical(coingeckoCoinId: string, chain: string, contractAddress: string) {
+  return testPrisma.canonicalAddress.create({
+    data: { coingeckoCoinId, chain, contractAddress, lastChecked: NOW },
+  });
+}
+
+beforeEach(async () => {
+  await resetDb();
+});
+
+afterAll(async () => {
+  await testPrisma.$disconnect();
+});
+
+describe("runVerdictForPair", () => {
+  it("auto-verifies a clean pair and persists the verdict", async () => {
+    const t0 = await seedToken({ contractAddress: WETH, coingeckoCoinId: "weth", decimals: 18 });
+    const t1 = await seedToken({ contractAddress: USDC, coingeckoCoinId: "usd-coin", decimals: 6 });
+    await seedCanonical("weth", "eth", WETH);
+    await seedCanonical("usd-coin", "eth", USDC);
+    const pair = await seedPair(t0.id, t1.id);
+
+    const out = await runVerdictForPair(pair.id, { now: NOW });
+
+    expect(out.found).toBe(true);
+    expect(out.persisted).toBe(true);
+    expect(out.result?.verdict).toBe(TokenPairStatus.AutoVerified);
+    expect(out.result?.confidence).toBe(1);
+
+    const row = await testPrisma.pair.findUnique({ where: { id: pair.id } });
+    expect(row?.status).toBe(TokenPairStatus.AutoVerified);
+    expect(row?.canonicalKey).toBe("usd-coin:weth");
+    expect(row?.verificationMethod).toBe(VerificationMethod.Auto);
+    expect(row?.verdictAt).toBe(NOW);
+    expect(row?.confidence).toBe(1);
+  });
+
+  it("never overrides an operator (Manual*) status — rule R6", async () => {
+    const t0 = await seedToken({ contractAddress: WETH, coingeckoCoinId: "weth" });
+    const t1 = await seedToken({ contractAddress: USDC, coingeckoCoinId: "usd-coin", decimals: 6 });
+    const pair = await seedPair(t0.id, t1.id, {
+      status: TokenPairStatus.ManualVerified,
+      verificationMethod: VerificationMethod.Manual,
+    });
+
+    const out = await runVerdictForPair(pair.id, { now: NOW });
+
+    expect(out.skippedManual).toBe(true);
+    expect(out.persisted).toBe(false);
+    const row = await testPrisma.pair.findUnique({ where: { id: pair.id } });
+    expect(row?.status).toBe(TokenPairStatus.ManualVerified);
+  });
+
+  it("auto-verifies via a verified cross-source sibling despite a price wobble", async () => {
+    const t0 = await seedToken({ contractAddress: WETH, coingeckoCoinId: "weth" });
+    const t1 = await seedToken({ contractAddress: USDC, coingeckoCoinId: "usd-coin", decimals: 6 });
+    await seedCanonical("weth", "eth", WETH);
+    await seedCanonical("usd-coin", "eth", USDC);
+
+    // A verified sibling on a different (chain, dex) sharing the canonical key.
+    const s0 = await seedToken({ coingeckoCoinId: "weth", chain: "polygon_pos" });
+    const s1 = await seedToken({ coingeckoCoinId: "usd-coin", chain: "polygon_pos", decimals: 6 });
+    await seedPair(s0.id, s1.id, {
+      chain: "polygon_pos",
+      dex: "quickswap_v3",
+      canonicalKey: "usd-coin:weth",
+      status: TokenPairStatus.ManualVerified,
+      verificationMethod: VerificationMethod.Manual,
+    });
+
+    // Target pair: 20% price deviation would normally land it in NeedsReview…
+    const pair = await seedPair(t0.id, t1.id, { token0PriceDex: 2400 });
+    const out = await runVerdictForPair(pair.id, { now: NOW });
+
+    expect(out.result?.verdict).toBe(TokenPairStatus.AutoVerified);
+    expect(out.result?.reason).toMatch(/sibling/i);
+  });
+
+  it("marks the loser of an intra-chain impostor conflict NotCurrentlyUsable", async () => {
+    await seedCanonical("weth", "eth", WETH);
+    await seedCanonical("usd-coin", "eth", USDC);
+    const shared1 = await seedToken({ contractAddress: USDC, coingeckoCoinId: "usd-coin", decimals: 6 });
+
+    // The real pair: token0 matches the canonical WETH address. Its key is
+    // already persisted (it would have been verdicted first).
+    const real0 = await seedToken({ contractAddress: WETH, coingeckoCoinId: "weth" });
+    await seedPair(real0.id, shared1.id, { canonicalKey: "usd-coin:weth", status: TokenPairStatus.AutoVerified });
+
+    // The impostor pair: same coins, same (chain, dex), but a fake token0
+    // address — does NOT match the canonical WETH.
+    const fake0 = await seedToken({ contractAddress: FAKE_WETH, coingeckoCoinId: "weth" });
+    const impostor = await seedPair(fake0.id, shared1.id);
+
+    const out = await runVerdictForPair(impostor.id, { now: NOW });
+
+    expect(out.result?.verdict).toBe(TokenPairStatus.NotCurrentlyUsable);
+  });
+
+  it("computes but does not write when persist is disabled", async () => {
+    const t0 = await seedToken({ contractAddress: WETH, coingeckoCoinId: "weth" });
+    const t1 = await seedToken({ contractAddress: USDC, coingeckoCoinId: "usd-coin", decimals: 6 });
+    await seedCanonical("weth", "eth", WETH);
+    await seedCanonical("usd-coin", "eth", USDC);
+    const pair = await seedPair(t0.id, t1.id);
+
+    const out = await runVerdictForPair(pair.id, { now: NOW, persist: false });
+
+    expect(out.result?.verdict).toBe(TokenPairStatus.AutoVerified);
+    expect(out.persisted).toBe(false);
+    const row = await testPrisma.pair.findUnique({ where: { id: pair.id } });
+    expect(row?.status).toBe(TokenPairStatus.Unverified); // untouched
+    expect(row?.canonicalKey).toBeNull();
+  });
+
+  it("returns found=false for an unknown pair id", async () => {
+    const out = await runVerdictForPair("does-not-exist", { now: NOW });
+    expect(out.found).toBe(false);
+    expect(out.result).toBeNull();
+  });
+});

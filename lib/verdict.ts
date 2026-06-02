@@ -358,7 +358,19 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
     confidence,
   });
 
-  // 1. Hard fences — short-circuit to AutoRejected (bypasses operator review).
+  // 1. Intra-(chain, dex) impostor conflict loser → NotCurrentlyUsable. Checked
+  //    BEFORE the hard impostor fence: a loser definitionally doesn't match the
+  //    canonical addresses, but because a *competing* canonical pair is present
+  //    on this (chain, dex) we know it's a duplicate that lost — softer than the
+  //    AutoRejected we give a lone impostor with no canonical competitor.
+  if (ctx.intraChainImpostorLoser) {
+    return result(
+      TokenPairStatus.NotCurrentlyUsable,
+      "another pair with this canonical key on this (chain, dex) matches the canonical token addresses",
+    );
+  }
+
+  // 2. Hard fences — short-circuit to AutoRejected (bypasses operator review).
   //    A fence only fails (vs skips) when it had the data to fail on.
   if (!f.canon0.ok) {
     return result(TokenPairStatus.AutoRejected, "token0 is a possible impostor (address != CoinGecko canonical)");
@@ -371,14 +383,6 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   }
   if (!f.decimals0.ok || !f.decimals1.ok) {
     return result(TokenPairStatus.AutoRejected, "token decimals look bogus");
-  }
-
-  // 2. Intra-(chain, dex) impostor conflict loser → NotCurrentlyUsable.
-  if (ctx.intraChainImpostorLoser) {
-    return result(
-      TokenPairStatus.NotCurrentlyUsable,
-      "another pair with this canonical key on this (chain, dex) matches the canonical token addresses",
-    );
   }
 
   // 3. Cannot canonically key (a token lacks a CG id) → operator decides.
