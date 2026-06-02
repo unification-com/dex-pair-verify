@@ -17,6 +17,7 @@ const TABLES = [
   "PairStaging",
   "Token",
   "Threshold",
+  "CanonicalAddress",
 ];
 
 export async function resetDb(): Promise<void> {

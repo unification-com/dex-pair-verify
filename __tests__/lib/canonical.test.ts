@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { canonicalKey } from "../../lib/canonical";
+import { canonicalKey, cgPlatformForChain } from "../../lib/canonical";
 
 describe("canonicalKey", () => {
   it("builds min:max regardless of token order", () => {
@@ -75,5 +75,22 @@ describe("canonicalKey", () => {
         token1: { coingeckoCoinId: "dai" },
       }),
     ).toBe("dai:dai");
+  });
+});
+
+describe("cgPlatformForChain", () => {
+  it("maps known GeckoTerminal chain keys to CoinGecko asset-platform ids", () => {
+    expect(cgPlatformForChain("eth")).toBe("ethereum");
+    expect(cgPlatformForChain("polygon_pos")).toBe("polygon-pos");
+    expect(cgPlatformForChain("bsc")).toBe("binance-smart-chain");
+    expect(cgPlatformForChain("xdai")).toBe("xdai");
+  });
+
+  it("returns null for a chain not indexed by CoinGecko (qom)", () => {
+    expect(cgPlatformForChain("qom")).toBeNull();
+  });
+
+  it("returns null for an unknown chain", () => {
+    expect(cgPlatformForChain("solana")).toBeNull();
   });
 });
