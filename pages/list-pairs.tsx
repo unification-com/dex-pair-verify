@@ -1,6 +1,6 @@
 import { GetServerSideProps} from "next"
 import Link from "next/link";
-import React, {FormEvent, useState} from "react"
+import React, {FormEvent, useEffect, useState} from "react"
 import {NotificationManager} from 'react-notifications';
 
 import ChainName from "../components/ChainName";
@@ -107,12 +107,13 @@ const ListPairs: React.FC<Props> = (props) => {
     const [thresholdMinLiquidity, setThresholdMinLiquidity] = useState((props.thresholds.minLiquidityUsd === null) ? 0 : props.thresholds.minLiquidityUsd)
     const [thresholdMinTxCount, setThresholdMinTxCount] = useState((props.thresholds.minTxCount === null) ? 0 : props.thresholds.minTxCount)
 
-    if(thresholdMinLiquidity !== props.thresholds.minLiquidityUsd) {
-        setThresholdMinLiquidity(props.thresholds.minLiquidityUsd)
-    }
-    if(thresholdMinTxCount !== props.thresholds.minTxCount) {
-        setThresholdMinTxCount(props.thresholds.minTxCount)
-    }
+    // Re-sync the editable threshold state when the route's (chain, dex)
+    // changes — the pages router re-renders this same component instance
+    // with new props rather than remounting it.
+    useEffect(() => {
+        setThresholdMinLiquidity(props.thresholds.minLiquidityUsd ?? 0)
+        setThresholdMinTxCount(props.thresholds.minTxCount ?? 0)
+    }, [props.thresholds.minLiquidityUsd, props.thresholds.minTxCount])
 
     async function onSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()

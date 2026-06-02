@@ -22,7 +22,7 @@ export default async function handler(
 
     const session = await getServerSession(req, res, authOptions)
 
-    if (!(session.user as ExtendedSessionUser).isAuthotised) {
+    if (!(session.user as ExtendedSessionUser).isAuthorised) {
         return res.status(403).json("not authorised")
     }
 

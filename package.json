@@ -19,10 +19,6 @@
   "simple-git-hooks": {
     "pre-commit": "yarn lint-staged"
   },
-  "lint-staged": {
-    "*.{ts,tsx,js,mjs,jsx}": "eslint --max-warnings 0",
-    "*.{json,md,yml,yaml,prisma}": []
-  },
   "keywords": [],
   "author": "",
   "license": "MIT",

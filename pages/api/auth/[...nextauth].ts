@@ -28,7 +28,7 @@ export const authOptions = {
             if(allowedUsers.includes(user.email)) {
                 isAuthorised = true
             }
-            session.user.isAuthotised = isAuthorised
+            session.user.isAuthorised = isAuthorised
             return session
         }
     }

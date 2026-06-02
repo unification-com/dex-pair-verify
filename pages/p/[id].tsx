@@ -1,6 +1,6 @@
 import { GetServerSideProps } from "next"
 import Link from "next/link";
-import React, {FormEvent, useState} from "react"
+import React, {FormEvent, useEffect, useState} from "react"
 import {NotificationManager} from 'react-notifications';
 import { NumericFormat } from 'react-number-format';
 
@@ -80,9 +80,11 @@ const Pair: React.FC<Props> = (props) => {
 
   const [currentStatus, setCurrentStatus] = useState(props.pair.status)
 
-  if(currentStatus !== props.pair.status) {
+  // Re-sync when navigating to a different pair — the pages router
+  // re-renders this same component instance with new props.
+  useEffect(() => {
     setCurrentStatus(props.pair.status)
-  }
+  }, [props.pair.status])
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

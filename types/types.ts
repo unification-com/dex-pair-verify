@@ -3,7 +3,7 @@ export type ExtendedSessionUser = {
     name: string,
     email: string,
     image: string,
-    isAuthotised: boolean,
+    isAuthorised: boolean,
 }
 
 export enum TokenPairStatus {

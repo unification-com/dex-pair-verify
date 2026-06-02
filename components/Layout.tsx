@@ -40,7 +40,7 @@ const Layout: React.FC<Props> = (props) => {
     }
 
     // user not authorised
-    if (!(session.user as ExtendedSessionUser).isAuthotised) {
+    if (!(session.user as ExtendedSessionUser).isAuthorised) {
         return (
             <div>
                 <h2>Not Authorised</h2>
