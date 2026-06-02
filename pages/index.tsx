@@ -30,9 +30,9 @@ const Home: React.FC<Props> = (props) => {
             <tr>
               <th>Chain</th>
               <th>Dex</th>
-              <th></th>
-              <th></th>
-              <th></th>
+              <th>Tokens</th>
+              <th>Pairs</th>
+              <th>Export</th>
             </tr>
             </thead>
             <tbody>
