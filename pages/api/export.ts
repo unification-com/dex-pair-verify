@@ -1,12 +1,16 @@
 import {getServerSession} from "next-auth";
 
 import {authOptions} from "./auth/[...nextauth]";
-import prisma from '../../lib/prisma';
-import {VERIFIED_STATUSES} from "../../lib/status";
+import {buildExportV2} from "../../lib/export";
 import {ExtendedSessionUser} from "../../types/types";
+
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
+// Session-gated manual export (the GitHub-upload path). Operator clicks "Export
+// Verified", downloads the JSON, commits it to the GitHub repo go-ooo polls.
+// Emits the same v2 shape as the bearer-token API endpoint (lib/export.ts) so
+// the two paths stay identical.
 export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
@@ -26,47 +30,7 @@ export default async function handler(
     const dex = String(req.query?.dex)
     const download = String(req.query?.download)
 
-    const data = await prisma.pair.findMany({
-        where: {
-            chain,
-            dex,
-            status: { in: [...VERIFIED_STATUSES] },
-        },
-        include: {
-            token0: {
-                select: { chain: true, symbol: true, name: true, contractAddress: true },
-            },
-            token1: {
-                select: { chain: true, symbol: true, name: true, contractAddress: true },
-            },
-        },
-        orderBy: [
-            {
-                reserveUsd: 'desc',
-            },
-        ],
-    })
-
-    const retData = {
-        pairs: [],
-        chain,
-        dex,
-    }
-
-    for(let i = 0; i < data.length; i += 1) {
-        const d = data[i]
-        retData.pairs.push(
-            {
-                contractAddress: d.contractAddress,
-                pair: d.pair,
-                reserveUsd: d.reserveUsd,
-                volumeUsd: d.volumeUsd,
-                txCount: d.txCount,
-                token0: d.token0,
-                token1: d.token1,
-            }
-        )
-    }
+    const retData = await buildExportV2(chain, dex)
 
     if(parseInt(download) === 1) {
         res.setHeader('Content-Type', 'application/json');

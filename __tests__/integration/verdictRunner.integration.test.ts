@@ -2,74 +2,17 @@
 // Seeds tokens/pairs + a fresh CanonicalAddress cache (so fetchCanonicalContract
 // resolves from cache, never the network) and asserts the persisted verdict.
 
-import { Prisma } from "@prisma/client";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { resetDb, testPrisma } from "./helpers";
+import { resetDb, seedPair, seedToken, testPrisma } from "./helpers";
 import { runVerdictForPair } from "../../lib/verdictRunner";
 import { TokenPairStatus, VerificationMethod } from "../../types/types";
 
 const NOW = 1_700_000_000;
-const OLD = NOW - 1_000_000; // comfortably older than any age gate
 
 const WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 const FAKE_WETH = "0x000000000000000000000000000000000000dEaD";
-
-let seq = 0;
-const nextAddr = () => `0x${(++seq).toString(16).padStart(40, "0")}`;
-
-type TokenOver = Partial<Prisma.TokenUncheckedCreateInput>;
-async function seedToken(over: TokenOver = {}) {
-  return testPrisma.token.create({
-    data: {
-      chain: "eth",
-      contractAddress: nextAddr(),
-      symbol: "TKN",
-      name: "Token",
-      txCount: 1000,
-      coingeckoCoinId: "",
-      totalSupply: 0,
-      volume24hUsd: 0,
-      marketCapUsd: 0,
-      decimals: 18,
-      deploymentTimestamp: OLD,
-      ...over,
-    },
-  });
-}
-
-type PairOver = Partial<Prisma.PairUncheckedCreateInput>;
-async function seedPair(token0Id: string, token1Id: string, over: PairOver = {}) {
-  return testPrisma.pair.create({
-    data: {
-      chain: "eth",
-      dex: "uniswap_v3",
-      contractAddress: nextAddr(),
-      token0Id,
-      token1Id,
-      pair: "WETH-USDC",
-      reserve0: 0,
-      reserve1: 0,
-      reserveNativeCurrency: 0,
-      reserveUsd: 1_000_000,
-      volumeUsd: 0,
-      marketCapUsd: 0,
-      priceChangePercentage24h: 0,
-      buys24h: 0,
-      sells24h: 0,
-      buyers24h: 0,
-      sellers24h: 0,
-      volumeUsd24h: 0,
-      txCount: 5000,
-      token0PriceCg: 2000,
-      token0PriceDex: 2000,
-      token1PriceCg: 1,
-      token1PriceDex: 1,
-      ...over,
-    },
-  });
-}
 
 async function seedCanonical(coingeckoCoinId: string, chain: string, contractAddress: string) {
   return testPrisma.canonicalAddress.create({
