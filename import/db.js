@@ -343,6 +343,9 @@ const getOrCreateEmptyThresholds = async (chain, dex) => {
                 minTxCount: 0,
             }
         })
+        if(thresholds !== null) {
+            created = true
+        }
     }
     return [thresholds, created]
 }
