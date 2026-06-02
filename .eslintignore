@@ -8,13 +8,3 @@ dist/
 build/
 tmp/
 next-env.d.ts
-
-# --- Bug-territory files (TODO: come off this list as the bug fix lands) ---
-# These files have known violations that will be resolved by scheduled
-# A.0/Phase 2 work. They sit in the ignore list temporarily so the rest of
-# the codebase can land strict-from-day-one ESLint enforcement now.
-
-# A.4.1 — import/ingest.js supersedes these; remove file ignore when retired
-import/import_geckoterminal.js
-import/import_graphql.js
-import/refresh_data.js

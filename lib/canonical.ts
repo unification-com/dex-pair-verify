@@ -8,9 +8,9 @@
 // that shares a key with an already-verified sibling is very likely real.
 //
 // `coingeckoCoinId` is populated from GeckoTerminal's
-// `/networks/{chain}/tokens/...` response (see import/refresh_data.js). A token
-// with no coin id (empty string) cannot be keyed — canonicalKey returns null,
-// and such pairs route to NeedsReview rather than auto-anything.
+// `/networks/{chain}/tokens/...` response (see lib/ingest.ts). A token with no
+// coin id (empty string) cannot be keyed — canonicalKey returns null, and such
+// pairs route to NeedsReview rather than auto-anything.
 
 import { utils as web3Utils } from "web3";
 
