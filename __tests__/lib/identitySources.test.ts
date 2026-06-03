@@ -77,11 +77,21 @@ describe("resolveTokenIdentity", () => {
     expect(result.confirmedCategoryCount).toBe(2);
   });
 
-  it("does NOT confirm on a single category (token list only)", async () => {
+  it("confirms on a curated token-list match alone (vetted, self-sufficient)", async () => {
     const { result } = await resolveTokenIdentity("eth", ADDR, {
       now: NOW,
       listMembership: async () => ["uniswap-default"],
       fetchSecurity: async () => null,
+    });
+    expect(result.confirmed).toBe(true);
+    expect(result.confirmedCategoryCount).toBe(1);
+  });
+
+  it("does NOT confirm on GoPlus alone when no list vouches (spoof guard)", async () => {
+    const { result } = await resolveTokenIdentity("eth", ADDR, {
+      now: NOW,
+      listMembership: async () => [],
+      fetchSecurity: async () => ({ trust_list: "1" }),
     });
     expect(result.confirmed).toBe(false);
     expect(result.confirmedCategoryCount).toBe(1);

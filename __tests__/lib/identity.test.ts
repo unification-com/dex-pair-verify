@@ -14,32 +14,35 @@ const sig = (source: string, category: IdentitySignal["category"], confirmed: bo
 });
 
 describe("aggregateIdentity", () => {
-  it("confirms when ≥2 independent categories agree", () => {
+  it("confirms on a curated token-list match ALONE (self-sufficient, vetted)", () => {
+    const r = aggregateIdentity([sig("tokenlist:uniswap", "tokenlist", true)], NOW);
+    expect(r.confirmed).toBe(true);
+    expect(r.confirmedCategoryCount).toBe(1);
+    expect(r.checkedAt).toBe(NOW);
+  });
+
+  it("does NOT confirm on GoPlus alone (needs corroboration — a spoof can be open-source)", () => {
+    const r = aggregateIdentity([sig("goplus", "security-api", true)], NOW);
+    expect(r.confirmed).toBe(false);
+    expect(r.confirmedCategoryCount).toBe(1);
+  });
+
+  it("confirms when two non-self-sufficient categories agree", () => {
     const r = aggregateIdentity(
-      [sig("tokenlist:uniswap", "tokenlist", true), sig("goplus", "security-api", true)],
+      [sig("goplus", "security-api", true), sig("onchain:erc20", "onchain", true)],
       NOW,
     );
     expect(r.confirmed).toBe(true);
     expect(r.confirmedCategoryCount).toBe(2);
-    expect(r.checkedAt).toBe(NOW);
   });
 
-  it("does NOT confirm on two sources from the same category (token lists overlap)", () => {
+  it("does NOT count a token list toward self-sufficiency unless it actually confirms", () => {
     const r = aggregateIdentity(
-      [sig("tokenlist:uniswap", "tokenlist", true), sig("tokenlist:1inch", "tokenlist", true)],
+      [sig("tokenlist:uniswap", "tokenlist", false), sig("goplus", "security-api", true)],
       NOW,
     );
-    expect(r.confirmed).toBe(false);
+    expect(r.confirmed).toBe(false); // tokenlist didn't confirm; GoPlus alone insufficient
     expect(r.confirmedCategoryCount).toBe(1);
-  });
-
-  it("ignores non-confirming signals when counting categories", () => {
-    const r = aggregateIdentity(
-      [sig("tokenlist:uniswap", "tokenlist", true), sig("goplus", "security-api", false)],
-      NOW,
-    );
-    expect(r.confirmedCategoryCount).toBe(1);
-    expect(r.confirmed).toBe(false);
   });
 
   it("returns not-confirmed for an empty signal set", () => {

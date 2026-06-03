@@ -4,20 +4,28 @@
 
 import { IdentitySignal, TokenIdentityResult } from "./types";
 
-// A token needs at least this many INDEPENDENT categories to positively confirm
-// before it can take the auto-verify path without a CoinGecko coin id. Two keeps
-// the bar meaningful (a single token list is weak — they overlap) without being
-// unreachable. Independence is by category (see types.ts), so two token lists
+// Non-self-sufficient categories need at least this many INDEPENDENT categories
+// to confirm. Independence is by category (see types.ts), so two token lists
 // count as one.
 export const MIN_INDEPENDENT_CATEGORIES = 2;
+
+// Categories trustworthy enough to confirm a token on their OWN. Curated token
+// lists (Uniswap / 1inch / CoinGecko) are human-vetted and exclude spoofs, so a
+// listing alone is sufficient. Weaker signals — GoPlus "open-source + holders"
+// (a spoof like "ETHERIUM" can have both) — are NOT self-sufficient and need a
+// second independent category to corroborate. This asymmetry is what lets us
+// promote genuine listed-but-unlinked tokens while still blocking GoPlus-only
+// spoofs.
+const SELF_SUFFICIENT_CATEGORIES = new Set<IdentitySignal["category"]>(["tokenlist"]);
 
 export function aggregateIdentity(signals: IdentitySignal[], now: number): TokenIdentityResult {
   // Distinct confirming *categories* — a Set dedupes both repeated categories
   // (two token lists) and accidental duplicate signals from one source.
   const confirmingCategories = new Set(signals.filter((s) => s.confirmed).map((s) => s.category));
   const confirmedCategoryCount = confirmingCategories.size;
+  const hasSelfSufficient = Array.from(confirmingCategories).some((c) => SELF_SUFFICIENT_CATEGORIES.has(c));
   return {
-    confirmed: confirmedCategoryCount >= MIN_INDEPENDENT_CATEGORIES,
+    confirmed: hasSelfSufficient || confirmedCategoryCount >= MIN_INDEPENDENT_CATEGORIES,
     confirmedCategoryCount,
     signals,
     checkedAt: now,

@@ -16,10 +16,11 @@ const confirmingDeps = {
   listMembership: async () => ["uniswap-default"],
   fetchSecurity: async () => ({ trust_list: "1" }),
 };
-// Only one category vouches → below the bar.
+// Only GoPlus vouches (not a self-sufficient category) and no list → below the
+// bar. (A token-list match alone WOULD confirm — that's the vetted-signal path.)
 const oneCategoryDeps = {
-  listMembership: async () => ["uniswap-default"],
-  fetchSecurity: async () => null,
+  listMembership: async () => [],
+  fetchSecurity: async () => ({ trust_list: "1" }),
 };
 
 beforeEach(async () => {
