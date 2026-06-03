@@ -3,6 +3,8 @@ import {getServerSession} from "next-auth";
 
 import {authOptions} from "./auth/[...nextauth]";
 import prisma from '../../lib/prisma';
+import {isVerifiedStatus} from "../../lib/status";
+import {promoteTokensToVerified} from "../../lib/tokenStatus";
 import {ExtendedSessionUser, TokenPairStatus, VerificationMethod} from "../../types/types";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -43,6 +45,11 @@ export default async function handler(
             verificationComment: fields.comment[0],
         },
     })
+
+    // A manually-verified pair promotes its tokens too (same as the auto path).
+    if (isVerifiedStatus(pair.status as TokenPairStatus)) {
+        await promoteTokensToVerified([pair.token0Id, pair.token1Id])
+    }
 
     return res.status(200).json({ success: true, data: {new_status: pair.status, id: pair.id } })
 

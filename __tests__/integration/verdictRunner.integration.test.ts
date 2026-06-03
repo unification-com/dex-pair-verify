@@ -49,6 +49,23 @@ describe("runVerdictForPair", () => {
     expect(row?.verificationMethod).toBe(VerificationMethod.Auto);
     expect(row?.verdictAt).toBe(NOW);
     expect(row?.confidence).toBe(1);
+
+    // A verified pair promotes its tokens to AutoVerified too.
+    expect((await testPrisma.token.findUnique({ where: { id: t0.id } }))?.status).toBe(TokenPairStatus.AutoVerified);
+    expect((await testPrisma.token.findUnique({ where: { id: t1.id } }))?.status).toBe(TokenPairStatus.AutoVerified);
+  });
+
+  it("does not promote tokens when the pair isn't verified", async () => {
+    const t0 = await seedToken({ contractAddress: WETH, coingeckoCoinId: "weth" });
+    const t1 = await seedToken({ contractAddress: USDC, coingeckoCoinId: "usd-coin", decimals: 6 });
+    await seedCanonical("weth", "eth", WETH);
+    await seedCanonical("usd-coin", "eth", USDC);
+    // 20% price deviation → NeedsReview (mid-band rule), so no token promotion.
+    const pair = await seedPair(t0.id, t1.id, { token0PriceDex: 2400 });
+
+    const out = await runVerdictForPair(pair.id, { now: NOW });
+    expect(out.result?.verdict).toBe(TokenPairStatus.NeedsReview);
+    expect((await testPrisma.token.findUnique({ where: { id: t0.id } }))?.status).toBe(TokenPairStatus.Unverified);
   });
 
   it("never overrides an operator (Manual*) status — rule R6", async () => {

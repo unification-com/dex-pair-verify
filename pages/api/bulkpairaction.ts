@@ -2,6 +2,7 @@ import {getServerSession} from "next-auth";
 
 import {authOptions} from "./auth/[...nextauth]";
 import prisma from "../../lib/prisma";
+import {promoteTokensToVerified} from "../../lib/tokenStatus";
 import {runVerdictForPair} from "../../lib/verdictRunner";
 import {ExtendedSessionUser, TokenPairStatus, VerificationMethod} from "../../types/types";
 
@@ -40,6 +41,18 @@ export default async function handler(
                     verificationComment: `bulk ${action} by operator`,
                 },
             })
+
+            // Approving pairs promotes their tokens too (same as the auto path).
+            if (action === "approve") {
+                const pairs = await prisma.pair.findMany({ where: { id: { in: ids } }, select: { token0Id: true, token1Id: true } })
+                const tokenIds = new Set<string>()
+                for (const p of pairs) {
+                    tokenIds.add(p.token0Id)
+                    tokenIds.add(p.token1Id)
+                }
+                await promoteTokensToVerified(Array.from(tokenIds))
+            }
+
             return res.status(200).json({ success: true, count: result.count })
         }
 
