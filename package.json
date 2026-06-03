@@ -16,6 +16,7 @@
     "db:push:test": "dotenv -e .env.test -- prisma db push --skip-generate",
     "find-duplicates": "tsx import/find_duplicates.ts",
     "dump": "tsx import/dump.ts",
+    "revalidate": "tsx import/revalidate.ts",
     "postinstall": "simple-git-hooks",
     "verify-gt": "tsx import/verify_gt.ts"
   },

@@ -4,7 +4,7 @@ import { NotificationManager } from "react-notifications";
 
 import Layout from "../../components/Layout";
 import prisma from "../../lib/prisma";
-import { getSourceByIndex, sourceCount } from "../../lib/sourceConfig";
+import { getSourceByIndex, sourceCount, thresholdSeedData } from "../../lib/sourceConfig";
 
 type ThresholdRow = {
   id: string;
@@ -44,9 +44,7 @@ export const getServerSideProps: GetServerSideProps = async () => {
     }
     const existing = await prisma.threshold.findFirst({ where: { chain: s.chain, dex: s.dex } });
     if (!existing) {
-      await prisma.threshold.create({
-        data: { chain: s.chain, dex: s.dex, minLiquidityUsd: 0, minTxCount: 0 },
-      });
+      await prisma.threshold.create({ data: thresholdSeedData(s.chain, s.dex) });
     }
   }
 

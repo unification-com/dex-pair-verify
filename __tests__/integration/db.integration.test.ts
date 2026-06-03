@@ -10,6 +10,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { resetDb, testPrisma } from "./helpers";
 import * as db from "../../import/db";
+import { thresholdSeedData } from "../../lib/sourceConfig";
 import { TokenPairStatus, VerificationMethod } from "../../types/types";
 
 const T0 = "0x1111111111111111111111111111111111111111";
@@ -97,7 +98,11 @@ describe("getOrCreateEmptyThresholds (B14 regression)", () => {
     const [threshold, created] = await db.getOrCreateEmptyThresholds("eth", "uniswap_v2");
     // B14: before the fix this returned `false` even on a fresh insert.
     expect(created).toBe(true);
-    expect(threshold.minLiquidityUsd).toBe(0);
+    // A.8: a fresh row carries the source's matrix floors (DRY — same builder
+    // every seed site uses), not a bare zero.
+    const seed = thresholdSeedData("eth", "uniswap_v2");
+    expect(threshold.minLiquidityUsd).toBe(seed.minLiquidityUsd);
+    expect(threshold.hardMinLiquidityUsd).toBe(seed.hardMinLiquidityUsd);
     expect(threshold.minTxCount).toBe(0);
   });
 

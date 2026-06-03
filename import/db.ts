@@ -6,6 +6,7 @@
 import { DuplicatePairs, DuplicateTokenSymbols, Pair, PairStaging, PrismaClient, Threshold, Token } from "@prisma/client";
 import { utils as web3Utils } from "web3";
 
+import { thresholdSeedData } from "../lib/sourceConfig";
 import { TokenPairStatus, VerificationMethod } from "../types/types";
 
 const prisma = new PrismaClient();
@@ -204,9 +205,7 @@ export const getOrCreateEmptyThresholds = async (
   let thresholds = await prisma.threshold.findFirst({ where: { chain, dex } });
 
   if (thresholds === null) {
-    thresholds = await prisma.threshold.create({
-      data: { chain, dex, minLiquidityUsd: 0, minTxCount: 0 },
-    });
+    thresholds = await prisma.threshold.create({ data: thresholdSeedData(chain, dex) });
     created = true;
   }
 

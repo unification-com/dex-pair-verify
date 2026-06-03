@@ -11,6 +11,7 @@ import Pagination from "../components/Pagination";
 import SortableTable from "../components/SortableTable/SortableTable";
 import Status from "../components/Status";
 import prisma from '../lib/prisma';
+import {thresholdSeedData} from "../lib/sourceConfig";
 import {isVerifiedStatus} from "../lib/status";
 import {PairProps, ThresholdProps} from "../types/props";
 import {TokenPairStatus} from "../types/types";
@@ -86,14 +87,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params: _params, 
     })
 
     if(thresholds === null) {
-        thresholds = await prisma.threshold.create({
-            data: {
-                chain,
-                dex,
-                minLiquidityUsd: 0,
-                minTxCount: 0,
-            }
-        })
+        thresholds = await prisma.threshold.create({ data: thresholdSeedData(chain, dex) })
     }
 
     const pairsWithDuplicates = (pairs as unknown as PairProps[])
