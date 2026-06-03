@@ -20,6 +20,7 @@
     "identitycheck": "tsx import/identitycheck.ts",
     "factorycheck": "tsx import/factorycheck.ts",
     "canonicalcheck": "tsx import/canonicalcheck.ts",
+    "scancheck": "tsx import/scancheck.ts",
     "postinstall": "simple-git-hooks",
     "verify-gt": "tsx import/verify_gt.ts"
   },
