@@ -14,6 +14,8 @@
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "db:push:test": "dotenv -e .env.test -- prisma db push --skip-generate",
+    "find-duplicates": "tsx import/find_duplicates.ts",
+    "dump": "tsx import/dump.ts",
     "postinstall": "simple-git-hooks"
   },
   "simple-git-hooks": {
@@ -52,6 +54,7 @@
     "lint-staged": "^15.3.0",
     "prisma": "^5.15.0",
     "simple-git-hooks": "^2.11.1",
+    "tsx": "^4.22.4",
     "typescript": "^5.4.5",
     "vitest": "^2"
   }

@@ -9,13 +9,8 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { resetDb, testPrisma } from "./helpers";
-import dbModule from "../../import/db.js";
+import * as db from "../../import/db";
 import { TokenPairStatus, VerificationMethod } from "../../types/types";
-
-// db.js is a CommonJS module (module.exports) with no .d.ts; esModuleInterop
-// synthesises the default. Cast to a loose record so the `[entity, created]`
-// tuples destructure cleanly — these are plain async helpers under test.
-const db = dbModule as unknown as Record<string, (...args: any[]) => Promise<[any, boolean]>>;
 
 const T0 = "0x1111111111111111111111111111111111111111";
 const T1 = "0x2222222222222222222222222222222222222222";
@@ -84,7 +79,7 @@ describe("getOrAddPair", () => {
   it("is idempotent on repeat", async () => {
     const [t0] = await db.getOrAddToken("eth", T0, "Token Zero", "TKN0", 100, TokenPairStatus.Unverified, VerificationMethod.Import);
     const [t1] = await db.getOrAddToken("eth", T1, "Token One", "TKN1", 200, TokenPairStatus.Unverified, VerificationMethod.Import);
-    const args = [
+    const args: Parameters<typeof db.getOrAddPair> = [
       "eth", "uniswap_v2", PAIR, "TKN0-TKN1",
       t0.id, t1.id,
       "1000000", "500", "10", "20", "999", "12345",
