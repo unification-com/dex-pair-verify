@@ -29,6 +29,7 @@ type PairTokenRow = {
   decimals: number;
   deploymentTimestamp: number | null;
   isScamFlagged: boolean;
+  identityConfirmed: boolean;
 };
 export type PairWithTokens = {
   id: string;
@@ -166,6 +167,7 @@ export async function buildVerdictContext(
       priceCg: pair.token0PriceCg,
       priceDex: pair.token0PriceDex,
       canonicalAddress: token0CanonicalAddress,
+      identityConfirmed: pair.token0.identityConfirmed,
     },
     token1: {
       contractAddress: pair.token1.contractAddress,
@@ -175,6 +177,7 @@ export async function buildVerdictContext(
       priceCg: pair.token1PriceCg,
       priceDex: pair.token1PriceDex,
       canonicalAddress: token1CanonicalAddress,
+      identityConfirmed: pair.token1.identityConfirmed,
     },
   };
 

@@ -184,6 +184,14 @@ model Token {
   isScamFlagged         Boolean                 @default(false)
   scamReason            String                  @default("")
   scamCheckedAt         Int                     @default(0)
+  // Multi-source token identity (Phase 5, T1). identityData is the raw per-source
+  // evidence (which lists/signals confirmed the token); identityConfirmed is the
+  // derived "≥2 independent sources agree this is a real token" flag that lets a
+  // non-CoinGecko-listed token still take the auto-verify path. Mirrors the
+  // goPlusData/isScamFlagged/scamCheckedAt shape above.
+  identityData          Json?
+  identityConfirmed     Boolean                 @default(false)
+  identityCheckedAt     Int                     @default(0)
   pairsToken0           Pair[]                  @relation("Token0")
   pairsToken1           Pair[]                  @relation("Token1")
   duplicateTokenSymbols DuplicateTokenSymbols[] @relation("OriginalToken")

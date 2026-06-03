@@ -35,6 +35,7 @@ export type Fence = {
 // these; A.3 may later make them per-(chain, dex) tunable.
 export const FENCE_WEIGHTS = {
   bothTokensHaveCgId: 3,
+  bothTokensIdentified: 3,
   tokenAddressesMatchCanonical: 3,
   dexFactoryMatchesCanonical: 2,
   meetsLiquidity: 2,
@@ -51,21 +52,57 @@ const SECONDS_PER_HOUR = 3600;
 const addressesEqual = (a: string, b: string): boolean =>
   a.length > 0 && b.length > 0 && a.toLowerCase() === b.toLowerCase();
 
+// A token is "known to CoinGecko" when it has a non-empty coin id. cgId is still
+// the precondition for canonical keying (cross-source sibling detection), so this
+// primitive is retained even though the adjudication gate is now the broader
+// bothTokensIdentified below.
+export const hasCgId = (cgId: string | null | undefined): boolean => (cgId ?? "").trim().length > 0;
+
+// A token is "identified" when CoinGecko lists it OR ≥2 independent identity
+// sources confirmed it (Phase 5 T1). identityConfirmed is resolved off the hot
+// path in the context builder and arrives here as a pure boolean.
+export const tokenIdentified = (cgId: string | null | undefined, identityConfirmed: boolean): boolean =>
+  hasCgId(cgId) || identityConfirmed;
+
 // Both tokens must resolve to a non-empty CoinGecko coin id — the precondition
-// for canonical keying. Foundational: a pair that fails this can't be
-// auto-verified (routes to NeedsReview, not AutoRejected).
+// for canonical keying.
 export function bothTokensHaveCgId(
   token0CgId: string | null | undefined,
   token1CgId: string | null | undefined,
   weight: number = FENCE_WEIGHTS.bothTokensHaveCgId,
 ): Fence {
-  const present = [token0CgId, token1CgId].filter((id) => (id ?? "").trim().length > 0).length;
+  const present = [token0CgId, token1CgId].filter(hasCgId).length;
   const ok = present === 2;
   return {
     ok,
     observed: present,
     threshold: 2,
     reason: ok ? "both tokens have a CoinGecko coin id" : "one or both tokens lack a CoinGecko coin id",
+    weight,
+  };
+}
+
+// Foundational identity gate: both tokens must be *identifiable* — CoinGecko-
+// listed OR independently identity-confirmed (T1). A pair that fails this can't
+// be auto-verified (routes to NeedsReview, not AutoRejected — a legit-new token
+// no source recognises yet is the operator's call, not a reject). When no
+// identity source has run (identityConfirmed = false everywhere) this is exactly
+// equivalent to bothTokensHaveCgId, so it's behaviour-preserving until T1's
+// sources land.
+export function bothTokensIdentified(
+  token0: { cgId: string | null | undefined; identityConfirmed: boolean },
+  token1: { cgId: string | null | undefined; identityConfirmed: boolean },
+  weight: number = FENCE_WEIGHTS.bothTokensIdentified,
+): Fence {
+  const identified = [token0, token1].filter((t) => tokenIdentified(t.cgId, t.identityConfirmed)).length;
+  const ok = identified === 2;
+  return {
+    ok,
+    observed: identified,
+    threshold: 2,
+    reason: ok
+      ? "both tokens identified (CoinGecko or ≥2 independent sources)"
+      : "one or both tokens are neither CoinGecko-listed nor independently identity-confirmed",
     weight,
   };
 }
@@ -262,6 +299,7 @@ export type VerdictTokenInput = {
   priceCg: number; // this token's CoinGecko price (Pair.token{0,1}PriceCg)
   priceDex: number; // this token's DEX price (Pair.token{0,1}PriceDex)
   canonicalAddress: string | null; // from fetchCanonicalContract, or null/unknown
+  identityConfirmed: boolean; // T1: ≥2 independent identity sources agree (resolved in the context builder)
 };
 
 export type VerdictPairInput = {
@@ -321,7 +359,10 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   const { config, now } = ctx;
 
   const f = {
-    bothCgId: bothTokensHaveCgId(pair.token0.coingeckoCoinId, pair.token1.coingeckoCoinId),
+    identified: bothTokensIdentified(
+      { cgId: pair.token0.coingeckoCoinId, identityConfirmed: pair.token0.identityConfirmed },
+      { cgId: pair.token1.coingeckoCoinId, identityConfirmed: pair.token1.identityConfirmed },
+    ),
     liquidity: meetsLiquidity(pair.reserveUsd, config.minLiquidityUsd),
     txCount: meetsTxCount(pair.txCount, config.minTxCount),
     age0: meetsAge(pair.token0.deploymentTimestamp, now, config.minAgeHours),
@@ -387,9 +428,10 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
     return result(TokenPairStatus.AutoRejected, "token decimals look bogus");
   }
 
-  // 3. Cannot canonically key (a token lacks a CG id) → operator decides.
-  if (!f.bothCgId.ok) {
-    return result(TokenPairStatus.NeedsReview, "one or both tokens lack a CoinGecko coin id");
+  // 3. A token that is neither CoinGecko-listed NOR independently identity-
+  //    confirmed (T1) → operator decides (legit-new vs scam).
+  if (!f.identified.ok) {
+    return result(TokenPairStatus.NeedsReview, f.identified.reason);
   }
 
   // 3b. A scam-list flag (A.7) blocks auto-verify outright — even a verified

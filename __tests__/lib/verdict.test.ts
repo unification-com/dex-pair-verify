@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   bothTokensHaveCgId,
+  bothTokensIdentified,
   cgPriceWithinTolerance,
   decimalsLookSane,
   DEFAULT_VERDICT_CONFIG,
@@ -37,6 +38,33 @@ describe("bothTokensHaveCgId", () => {
 
   it("treats whitespace-only ids as missing", () => {
     expect(bothTokensHaveCgId("  ", "usd-coin").ok).toBe(false);
+  });
+});
+
+describe("bothTokensIdentified", () => {
+  const tok = (cgId: string | null, identityConfirmed: boolean) => ({ cgId, identityConfirmed });
+
+  it("passes when both tokens have a CoinGecko id (cgId path)", () => {
+    expect(bothTokensIdentified(tok("weth", false), tok("usd-coin", false)).ok).toBe(true);
+  });
+
+  it("passes when a no-cgId token is independently identity-confirmed", () => {
+    expect(bothTokensIdentified(tok("", true), tok("usd-coin", false)).ok).toBe(true);
+    expect(bothTokensIdentified(tok(null, true), tok(null, true)).ok).toBe(true);
+  });
+
+  it("fails when a token is neither CG-listed nor identity-confirmed", () => {
+    const f = bothTokensIdentified(tok("", false), tok("usd-coin", false));
+    expect(f.ok).toBe(false);
+    expect(f.observed).toBe(1);
+    expect(f.reason).toMatch(/identity-confirmed/i);
+  });
+
+  it("is equivalent to bothTokensHaveCgId when no identity source has run", () => {
+    // Behaviour-preservation: identityConfirmed=false everywhere ⇒ same gate.
+    for (const [a, b] of [["weth", "usd-coin"], ["weth", ""], ["", ""]] as [string, string][]) {
+      expect(bothTokensIdentified(tok(a, false), tok(b, false)).ok).toBe(bothTokensHaveCgId(a, b).ok);
+    }
   });
 });
 
@@ -168,6 +196,7 @@ const makeToken = (over: Partial<VerdictTokenInput> = {}): VerdictTokenInput => 
   priceCg: 2000,
   priceDex: 2000,
   canonicalAddress: WETH,
+  identityConfirmed: false,
   ...over,
 });
 
@@ -238,11 +267,49 @@ describe("evaluatePair", () => {
     expect(r.verdict).toBe(TokenPairStatus.NotCurrentlyUsable);
   });
 
-  it("routes a token with no CG id to NeedsReview (legit-new vs scam)", () => {
+  it("routes an unidentified token (no CG id, not identity-confirmed) to NeedsReview", () => {
     const pair = makePair({ token0: makeToken({ coingeckoCoinId: "", canonicalAddress: null }) });
     const r = evaluatePair(pair, makeCtx({ canonicalKey: null }));
     expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
-    expect(r.reason).toMatch(/coingecko coin id/i);
+    expect(r.reason).toMatch(/identity-confirmed/i);
+  });
+
+  it("T1: auto-verifies a no-CG-id pair when both tokens are identity-confirmed", () => {
+    // Neither token is on CoinGecko, but ≥2 independent identity sources have
+    // confirmed each (identityConfirmed=true) — the identity gate passes and the
+    // pair clears on the remaining fences.
+    const pair = makePair({
+      token0: makeToken({ coingeckoCoinId: "", canonicalAddress: null, identityConfirmed: true }),
+      token1: makeToken({
+        contractAddress: USDC,
+        coingeckoCoinId: "",
+        decimals: 6,
+        priceCg: 1,
+        priceDex: 1,
+        canonicalAddress: null,
+        identityConfirmed: true,
+      }),
+    });
+    const r = evaluatePair(pair, makeCtx({ canonicalKey: null }));
+    expect(r.verdict).toBe(TokenPairStatus.AutoVerified);
+  });
+
+  it("T1: still reviews when only one of the two no-CG-id tokens is identity-confirmed", () => {
+    const pair = makePair({
+      token0: makeToken({ coingeckoCoinId: "", canonicalAddress: null, identityConfirmed: true }),
+      token1: makeToken({
+        contractAddress: USDC,
+        coingeckoCoinId: "",
+        decimals: 6,
+        priceCg: 1,
+        priceDex: 1,
+        canonicalAddress: null,
+        identityConfirmed: false,
+      }),
+    });
+    const r = evaluatePair(pair, makeCtx({ canonicalKey: null }));
+    expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
+    expect(r.reason).toMatch(/identity-confirmed/i);
   });
 
   it("routes a price-deviating-but-not-impostor pair to NeedsReview", () => {
