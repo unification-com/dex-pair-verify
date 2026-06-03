@@ -176,6 +176,14 @@ model Token {
   // unix seconds, seeded from the oldest pool's pool_created_at. Nullable
   // until first populated.
   deploymentTimestamp   Int?
+  // Scam-list metadata from GoPlus (A.7), stored alongside the other token
+  // metadata. goPlusData is the raw security response (auditable); the derived
+  // fields drive the verdict-engine scam fence + UI. A flagged token demotes
+  // AutoVerified pairs to NeedsReview (never auto-rejected).
+  goPlusData            Json?
+  isScamFlagged         Boolean                 @default(false)
+  scamReason            String                  @default("")
+  scamCheckedAt         Int                     @default(0)
   pairsToken0           Pair[]                  @relation("Token0")
   pairsToken1           Pair[]                  @relation("Token1")
   duplicateTokenSymbols DuplicateTokenSymbols[] @relation("OriginalToken")

@@ -27,6 +27,7 @@ type PairTokenRow = {
   coingeckoCoinId: string;
   decimals: number;
   deploymentTimestamp: number | null;
+  isScamFlagged: boolean;
 };
 export type PairWithTokens = {
   id: string;
@@ -134,6 +135,7 @@ export async function buildVerdictContext(
     canonicalKey: key,
     hasVerifiedSibling,
     intraChainImpostorLoser,
+    tokenScamFlagged: pair.token0.isScamFlagged || pair.token1.isScamFlagged,
     pairFactoryAddress: null, // populated by the A.4.1 ingest RPC read
     canonicalFactoryAddress: getCanonicalFactoryAddress(pair.chain, pair.dex),
   };

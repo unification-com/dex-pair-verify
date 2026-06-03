@@ -189,6 +189,7 @@ const makeCtx = (over: Partial<VerdictContext> = {}): VerdictContext => ({
   canonicalKey: "usd-coin:weth",
   hasVerifiedSibling: false,
   intraChainImpostorLoser: false,
+  tokenScamFlagged: false,
   pairFactoryAddress: null,
   canonicalFactoryAddress: UNI_V3_FACTORY,
   ...over,
@@ -280,6 +281,12 @@ describe("evaluatePair", () => {
     });
     const r = evaluatePair(pair, makeCtx({ config: cfg }));
     expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
+  });
+
+  it("routes a scam-flagged token to NeedsReview, even with a verified sibling", () => {
+    const r = evaluatePair(makePair(), makeCtx({ tokenScamFlagged: true, hasVerifiedSibling: true }));
+    expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
+    expect(r.reason).toMatch(/scam/i);
   });
 
   it("surfaces the canonical key and confidence in the evidence", () => {

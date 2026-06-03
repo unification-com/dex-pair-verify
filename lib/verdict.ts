@@ -286,6 +286,8 @@ export type VerdictContext = {
   // the same canonical key on the same (chain, dex) matches the canonical token
   // addresses and this one doesn't.
   intraChainImpostorLoser: boolean;
+  // Either token is flagged by the scam-list (GoPlus, A.7) — route to review.
+  tokenScamFlagged: boolean;
   pairFactoryAddress: string | null; // unknown until A.4.1 RPC read
   canonicalFactoryAddress: string | null; // from lib/sources.js
 };
@@ -388,6 +390,12 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   // 3. Cannot canonically key (a token lacks a CG id) → operator decides.
   if (!f.bothCgId.ok) {
     return result(TokenPairStatus.NeedsReview, "one or both tokens lack a CoinGecko coin id");
+  }
+
+  // 3b. A scam-list flag (A.7) blocks auto-verify outright — even a verified
+  //     sibling can't vouch past it; the operator decides.
+  if (ctx.tokenScamFlagged) {
+    return result(TokenPairStatus.NeedsReview, "a token is flagged by the scam-list");
   }
 
   // 4. A verified cross-source sibling vouches for the key (+ liquidity passes)
