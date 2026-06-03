@@ -66,6 +66,12 @@ const CG_PLATFORM_BY_CHAIN: Record<string, string | null> = {
 export const cgPlatformForChain = (chain: string): string | null =>
   CG_PLATFORM_BY_CHAIN[chain] ?? null;
 
+// Chains CoinGecko can resolve a canonical contract on — scopes the
+// canonical-check batch query (T3).
+export const CG_SUPPORTED_CHAINS: string[] = Object.keys(CG_PLATFORM_BY_CHAIN).filter(
+  (chain) => CG_PLATFORM_BY_CHAIN[chain] !== null,
+);
+
 const THIRTY_DAYS_SECONDS = 30 * 24 * 60 * 60;
 
 // The platforms map from CoinGecko, keyed by CG asset-platform id. Injectable
@@ -84,6 +90,22 @@ const defaultPlatformsFetcher: PlatformsFetcher = async (cgId) => {
   const json = await res.json();
   return (json?.platforms as Record<string, string>) ?? null;
 };
+
+// Read-only cached canonical address (T3). Returns the cached contract address
+// for (cgId, chain), or null when there's no cache entry or it's a negative
+// ("") entry. No network — the canonical-check pass keeps the cache warm so the
+// impostor fence can run on EVERY pair, not just intra-chain conflicts. Stale
+// entries are still returned (a slightly-stale canonical beats none; the batch
+// pass refreshes on its 30-day TTL).
+export async function getCachedCanonicalAddress(cgId: string, chain: string): Promise<string | null> {
+  if (!cgId || !cgPlatformForChain(chain)) {
+    return null;
+  }
+  const cached = await prisma.canonicalAddress.findUnique({
+    where: { coingeckoCoinId_chain: { coingeckoCoinId: cgId, chain } },
+  });
+  return cached?.contractAddress || null;
+}
 
 // Resolve the canonical (CoinGecko-blessed) contract address for a coin on a
 // chain, or null when the chain isn't on CoinGecko / the coin has no contract

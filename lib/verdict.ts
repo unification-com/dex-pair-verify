@@ -415,12 +415,6 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
 
   // 2. Hard fences — short-circuit to AutoRejected (bypasses operator review).
   //    A fence only fails (vs skips) when it had the data to fail on.
-  if (!f.canon0.ok) {
-    return result(TokenPairStatus.AutoRejected, "token0 is a possible impostor (address != CoinGecko canonical)");
-  }
-  if (!f.canon1.ok) {
-    return result(TokenPairStatus.AutoRejected, "token1 is a possible impostor (address != CoinGecko canonical)");
-  }
   if (pair.reserveUsd < config.hardMinLiquidityUsd) {
     return result(TokenPairStatus.AutoRejected, `liquidity below hard floor ($${config.hardMinLiquidityUsd})`);
   }
@@ -448,6 +442,20 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   //     until the factory-check pass reads it.
   if (!f.factory.ok) {
     return result(TokenPairStatus.NeedsReview, f.factory.reason);
+  }
+
+  // 3d. Token-address impostor (T3): a token's contract address does not match
+  //     the CoinGecko-canonical contract for its coin id. Routed to review (not
+  //     auto-reject) — a mismatch is usually an impostor but can be a legit
+  //     multi-contract/bridged variant CoinGecko maps differently, so the
+  //     operator decides. Skips when the canonical address is unknown (cache
+  //     miss), so this is inert until the canonical-check pass warms the cache.
+  //     The harder intra-chain conflict loser is already caught at step 1.
+  if (!f.canon0.ok || !f.canon1.ok) {
+    return result(
+      TokenPairStatus.NeedsReview,
+      "a token address does not match the CoinGecko-canonical contract (possible impostor)",
+    );
   }
 
   // 4. A verified cross-source sibling vouches for the key (+ liquidity passes)

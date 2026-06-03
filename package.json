@@ -19,6 +19,7 @@
     "revalidate": "tsx import/revalidate.ts",
     "identitycheck": "tsx import/identitycheck.ts",
     "factorycheck": "tsx import/factorycheck.ts",
+    "canonicalcheck": "tsx import/canonicalcheck.ts",
     "postinstall": "simple-git-hooks",
     "verify-gt": "tsx import/verify_gt.ts"
   },

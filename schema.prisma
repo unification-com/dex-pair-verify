@@ -198,6 +198,10 @@ model Token {
   identityData          Json?
   identityConfirmed     Boolean                 @default(false)
   identityCheckedAt     Int                     @default(0)
+  // Tracks the proactive canonical-address resolution pass (T3): when this
+  // token's (coingeckoCoinId, chain) canonical contract was last resolved into
+  // the CanonicalAddress cache, so the impostor fence can run on every pair.
+  canonicalCheckedAt    Int                     @default(0)
   pairsToken0           Pair[]                  @relation("Token0")
   pairsToken1           Pair[]                  @relation("Token1")
   duplicateTokenSymbols DuplicateTokenSymbols[] @relation("OriginalToken")

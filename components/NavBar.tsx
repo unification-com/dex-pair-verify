@@ -95,6 +95,12 @@ function Navbar() {
                             <a data-active={isActive("/admin/factorycheck")}>Factory Check</a>
                         </Link>
                     </span>
+                    &nbsp;&nbsp;&nbsp;
+                    <span key={"navbar_admin_canonicalcheck"}>
+                        <Link href="/admin/canonicalcheck">
+                            <a data-active={isActive("/admin/canonicalcheck")}>Canonical Check</a>
+                        </Link>
+                    </span>
                     &nbsp;
                 </>
             )}

@@ -6,7 +6,7 @@
 // ingest, the re-verify cron and the UI rescan button all call (DRY — one
 // engine, three call sites).
 
-import { canonicalKey, fetchCanonicalContract } from "./canonical";
+import { canonicalKey, fetchCanonicalContract, getCachedCanonicalAddress } from "./canonical";
 import prisma from "./prisma";
 import { getCanonicalFactoryAddress } from "./sourceConfig";
 import { isVerifiedStatus, VERIFIED_STATUSES } from "./status";
@@ -67,13 +67,17 @@ export async function buildVerdictContext(
   const now = opts.now ?? nowSeconds();
   const key = canonicalKey({ token0: pair.token0, token1: pair.token1 });
 
-  // Canonical addresses are only fetched lazily, when an intra-chain conflict
-  // needs adjudicating (below). GeckoTerminal already validates each token's
-  // coingeckoCoinId, so a per-pair CoinGecko lookup here would be redundant —
-  // and slow (it rate-limits the ingest). Default to "unknown" → the impostor
-  // fence simply skips for the common, no-conflict case.
-  let token0CanonicalAddress: string | null = null;
-  let token1CanonicalAddress: string | null = null;
+  // Canonical addresses are read from the CanonicalAddress CACHE for every pair
+  // (T3) — a cheap DB read, no CoinGecko call on the hot path. The proactive
+  // canonical-check pass keeps the cache warm, so the impostor fence runs on
+  // every pair, not just intra-chain conflicts. Unknown (cache miss) → null →
+  // the fence skips, as before.
+  let token0CanonicalAddress: string | null = pair.token0.coingeckoCoinId
+    ? await getCachedCanonicalAddress(pair.token0.coingeckoCoinId, pair.chain)
+    : null;
+  let token1CanonicalAddress: string | null = pair.token1.coingeckoCoinId
+    ? await getCachedCanonicalAddress(pair.token1.coingeckoCoinId, pair.chain)
+    : null;
 
   const threshold = await prisma.threshold.findFirst({
     where: { chain: pair.chain, dex: pair.dex },
@@ -124,15 +128,15 @@ export async function buildVerdictContext(
         !sameTokenSet(thisAddrs, [o.token0.contractAddress, o.token1.contractAddress]),
     );
     if (hasIntraConflict) {
-      // Conflict path only: now resolve the canonical addresses (CoinGecko) to
-      // decide which pair is the real one. Rare, so the CG lookups don't slow
-      // the common case.
-      token0CanonicalAddress = pair.token0.coingeckoCoinId
-        ? await fetchCanonicalContract(pair.token0.coingeckoCoinId, pair.chain, { now })
-        : null;
-      token1CanonicalAddress = pair.token1.coingeckoCoinId
-        ? await fetchCanonicalContract(pair.token1.coingeckoCoinId, pair.chain, { now })
-        : null;
+      // Conflict adjudication needs both canonical addresses for certain — if the
+      // cache didn't have them, fetch live now (rare path, so the CG lookups
+      // don't slow the common case).
+      if (!token0CanonicalAddress && pair.token0.coingeckoCoinId) {
+        token0CanonicalAddress = await fetchCanonicalContract(pair.token0.coingeckoCoinId, pair.chain, { now });
+      }
+      if (!token1CanonicalAddress && pair.token1.coingeckoCoinId) {
+        token1CanonicalAddress = await fetchCanonicalContract(pair.token1.coingeckoCoinId, pair.chain, { now });
+      }
       const canonicalKnown = !!token0CanonicalAddress && !!token1CanonicalAddress;
       const thisMatchesCanonical =
         addrEq(pair.token0.contractAddress, token0CanonicalAddress) &&

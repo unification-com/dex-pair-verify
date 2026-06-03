@@ -241,11 +241,18 @@ describe("evaluatePair", () => {
     expect(r.reason).toMatch(/sibling/i);
   });
 
-  it("auto-rejects an impostor token0 (address != canonical)", () => {
+  it("T3: routes an impostor token0 (address != canonical) to NeedsReview", () => {
     const pair = makePair({ token0: makeToken({ contractAddress: "0x0000000000000000000000000000000000000bad" }) });
     const r = evaluatePair(pair, makeCtx());
-    expect(r.verdict).toBe(TokenPairStatus.AutoRejected);
+    expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
     expect(r.reason).toMatch(/impostor/i);
+  });
+
+  it("T3: a matching canonical address does not block auto-verify", () => {
+    // makeToken's contractAddress already equals its canonicalAddress (match).
+    const r = evaluatePair(makePair(), makeCtx());
+    expect(r.verdict).toBe(TokenPairStatus.AutoVerified);
+    expect(r.evidence.token0MatchesCanonical).toBe(true);
   });
 
   it("auto-rejects below the hard liquidity floor", () => {
