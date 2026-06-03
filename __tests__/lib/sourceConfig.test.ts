@@ -40,7 +40,7 @@ describe("thresholdSeedData", () => {
       dex: "bsc_pancakeswap_v3",
       minLiquidityUsd: 35000,
       hardMinLiquidityUsd: 5000,
-      minTxCount: 0,
+      minTxCount: 5,
     });
   });
 

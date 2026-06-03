@@ -13,6 +13,7 @@ import {
   evaluatePair,
   meetsAge,
   meetsLiquidity,
+  meetsTurnover,
   meetsTxCount,
   tokenAddressesMatchCanonical,
   VerdictContext,
@@ -80,6 +81,27 @@ describe("meetsLiquidity / meetsTxCount", () => {
     expect(f.observed).toBe(999);
     expect(f.threshold).toBe(1000);
     expect(meetsTxCount(5, 10).ok).toBe(false);
+  });
+});
+
+describe("meetsTurnover", () => {
+  it("passes when 24h turnover meets the ratio", () => {
+    // volume 600k / liquidity 1M = 0.6 turnover, threshold 0.5.
+    const f = meetsTurnover(600_000, 1_000_000, 0.5);
+    expect(f.ok).toBe(true);
+    expect(f.observed).toBe(0.6);
+  });
+
+  it("fails when turnover is below the ratio (low activity)", () => {
+    const f = meetsTurnover(50_000, 1_000_000, 0.5); // 0.05 turnover
+    expect(f.ok).toBe(false);
+    expect(f.reason).toMatch(/low activity/i);
+  });
+
+  it("skips (weight 0) when volume or liquidity is zero", () => {
+    expect(meetsTurnover(0, 1_000_000, 0.5).weight).toBe(0);
+    expect(meetsTurnover(500_000, 0, 0.5).weight).toBe(0);
+    expect(meetsTurnover(0, 1_000_000, 0.5).ok).toBe(true);
   });
 });
 
@@ -206,6 +228,7 @@ const makePair = (over: Partial<VerdictPairInput> = {}): VerdictPairInput => ({
   chain: "eth",
   dex: "uniswap_v3",
   reserveUsd: 1_000_000,
+  volumeUsd: 500_000,
   txCount: 5000,
   token0: makeToken(),
   token1: makeToken({ contractAddress: USDC, coingeckoCoinId: "usd-coin", decimals: 6, priceCg: 1, priceDex: 1, canonicalAddress: USDC }),
@@ -346,6 +369,12 @@ describe("evaluatePair", () => {
     });
     const r = evaluatePair(pair, makeCtx());
     expect(r.verdict).toBe(TokenPairStatus.AutoVerified);
+  });
+
+  it("T7: holds a dormant pool (24h trades below the floor) for review", () => {
+    const cfg = { ...DEFAULT_VERDICT_CONFIG, minTxCount: 10 };
+    const r = evaluatePair(makePair({ txCount: 2 }), makeCtx({ config: cfg }));
+    expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
   });
 
   it("holds a too-young pair for review when age gate fails", () => {

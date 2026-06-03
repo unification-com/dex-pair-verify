@@ -37,6 +37,7 @@ export default async function handler(
             data: {
                 minLiquidityUsd: toInt(b.minLiquidityUsd, 0),
                 minTxCount: toInt(b.minTxCount, 0),
+                minTurnoverRatio: toFloat(b.minTurnoverRatio, 0),
                 minAgeHours: toInt(b.minAgeHours, 24),
                 maxPriceDeviationPercent: toFloat(b.maxPriceDeviationPercent, 5),
                 minDecimals: toInt(b.minDecimals, 0),

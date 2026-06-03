@@ -40,6 +40,7 @@ export const FENCE_WEIGHTS = {
   dexFactoryMatchesCanonical: 2,
   meetsLiquidity: 2,
   meetsTxCount: 1,
+  meetsTurnover: 1,
   meetsAge: 1,
   decimalsLookSane: 1,
   cgPriceWithinTolerance: 2,
@@ -133,6 +134,30 @@ export function meetsTxCount(
     observed: txCount,
     threshold: minTxCount,
     reason: ok ? "tx count meets threshold" : "tx count below threshold",
+    weight,
+  };
+}
+
+// 24h turnover (volume ÷ liquidity) — the second activity axis (T7). A deep pool
+// with little volume relative to its size has a stale, less reliable price.
+// Skips (ok, weight 0) when liquidity or volume is zero/unknown (can't compute).
+// minTurnoverRatio 0 ⇒ always ok for an active pool (the lever is off by default).
+export function meetsTurnover(
+  volumeUsd: number,
+  reserveUsd: number,
+  minTurnoverRatio: number,
+  weight: number = FENCE_WEIGHTS.meetsTurnover,
+): Fence {
+  if (reserveUsd <= 0 || volumeUsd <= 0) {
+    return { ok: true, observed: "unavailable", threshold: minTurnoverRatio, reason: "turnover unavailable — skipped", weight: 0 };
+  }
+  const turnover = volumeUsd / reserveUsd;
+  const ok = turnover >= minTurnoverRatio;
+  return {
+    ok,
+    observed: Math.round(turnover * 1e4) / 1e4,
+    threshold: minTurnoverRatio,
+    reason: ok ? "turnover meets threshold" : "turnover below threshold (low activity)",
     weight,
   };
 }
@@ -272,6 +297,7 @@ export function dexFactoryMatchesCanonical(
 export type VerdictConfig = {
   minLiquidityUsd: number; // soft gate (Threshold.minLiquidityUsd)
   minTxCount: number; // soft gate (Threshold.minTxCount)
+  minTurnoverRatio: number; // weighted activity signal (Threshold.minTurnoverRatio)
   minAgeHours: number;
   maxPriceDeviationPercent: number;
   minDecimals: number;
@@ -283,6 +309,7 @@ export type VerdictConfig = {
 export const DEFAULT_VERDICT_CONFIG: VerdictConfig = {
   minLiquidityUsd: 0, // operator tightens per (chain, dex) via Threshold
   minTxCount: 0,
+  minTurnoverRatio: 0,
   minAgeHours: 24,
   maxPriceDeviationPercent: 5,
   minDecimals: 0, // 0 passes (unfetched); only absurdly high decimals reject
@@ -306,6 +333,7 @@ export type VerdictPairInput = {
   chain: string;
   dex: string;
   reserveUsd: number;
+  volumeUsd: number; // 24h volume — feeds the turnover fence (T7)
   txCount: number;
   token0: VerdictTokenInput;
   token1: VerdictTokenInput;
@@ -365,6 +393,7 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
     ),
     liquidity: meetsLiquidity(pair.reserveUsd, config.minLiquidityUsd),
     txCount: meetsTxCount(pair.txCount, config.minTxCount),
+    turnover: meetsTurnover(pair.volumeUsd, pair.reserveUsd, config.minTurnoverRatio),
     age0: meetsAge(pair.token0.deploymentTimestamp, now, config.minAgeHours),
     age1: meetsAge(pair.token1.deploymentTimestamp, now, config.minAgeHours),
     decimals0: decimalsLookSane(pair.token0.decimals, config.minDecimals, config.maxDecimals),
@@ -384,6 +413,7 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
     confidence,
     reserveUsd: pair.reserveUsd,
     txCount: pair.txCount,
+    turnover: f.turnover.observed,
     hasVerifiedSibling: ctx.hasVerifiedSibling,
     token0MatchesCanonical: f.canon0.ok,
     token1MatchesCanonical: f.canon1.ok,

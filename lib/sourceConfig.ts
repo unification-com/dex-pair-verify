@@ -5,9 +5,15 @@
 import { dataSources } from "./sources";
 
 // Per-source cold-start floors for the verdict engine, seeded into a fresh
-// Threshold row (A.8). minLiquidityUsd is the soft gate; hardMinLiquidityUsd
-// the auto-reject floor. Operator-tunable per (chain, dex) thereafter.
-export type ThresholdDefaults = { minLiquidityUsd: number; hardMinLiquidityUsd: number };
+// Threshold row (A.8 / T7). minLiquidityUsd is the soft gate; hardMinLiquidityUsd
+// the auto-reject floor; minTxCount the 24h-activity gate; minTurnoverRatio the
+// (opt-in) turnover signal. Operator-tunable per (chain, dex) thereafter.
+export type ThresholdDefaults = {
+  minLiquidityUsd: number;
+  hardMinLiquidityUsd: number;
+  minTxCount?: number;
+  minTurnoverRatio?: number;
+};
 
 export type SourceEntry = {
   chain: string;
@@ -51,13 +57,21 @@ export const getCanonicalFactoryAddress = (chain: string, dex: string): string |
 export const thresholdSeedData = (
   chain: string,
   dex: string,
-): { chain: string; dex: string; minLiquidityUsd: number; minTxCount: number; hardMinLiquidityUsd?: number } => {
+): {
+  chain: string;
+  dex: string;
+  minLiquidityUsd: number;
+  minTxCount: number;
+  hardMinLiquidityUsd?: number;
+  minTurnoverRatio?: number;
+} => {
   const d = getSource(chain, dex)?.defaultThresholds;
   return {
     chain,
     dex,
     minLiquidityUsd: d?.minLiquidityUsd ?? 0,
-    minTxCount: 0,
+    minTxCount: d?.minTxCount ?? 0,
     ...(d ? { hardMinLiquidityUsd: d.hardMinLiquidityUsd } : {}),
+    ...(d?.minTurnoverRatio !== undefined ? { minTurnoverRatio: d.minTurnoverRatio } : {}),
   };
 };

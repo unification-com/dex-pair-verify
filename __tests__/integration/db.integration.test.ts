@@ -103,7 +103,7 @@ describe("getOrCreateEmptyThresholds (B14 regression)", () => {
     const seed = thresholdSeedData("eth", "uniswap_v2");
     expect(threshold.minLiquidityUsd).toBe(seed.minLiquidityUsd);
     expect(threshold.hardMinLiquidityUsd).toBe(seed.hardMinLiquidityUsd);
-    expect(threshold.minTxCount).toBe(0);
+    expect(threshold.minTxCount).toBe(seed.minTxCount);
   });
 
   it("reports created=false when the row already exists", async () => {

@@ -36,6 +36,7 @@ export type PairWithTokens = {
   chain: string;
   dex: string;
   reserveUsd: number;
+  volumeUsd: number;
   txCount: number;
   factoryAddress: string | null;
   status: TokenPairStatus;
@@ -86,6 +87,7 @@ export async function buildVerdictContext(
     ...DEFAULT_VERDICT_CONFIG,
     minLiquidityUsd: threshold?.minLiquidityUsd ?? DEFAULT_VERDICT_CONFIG.minLiquidityUsd,
     minTxCount: threshold?.minTxCount ?? DEFAULT_VERDICT_CONFIG.minTxCount,
+    minTurnoverRatio: threshold?.minTurnoverRatio ?? DEFAULT_VERDICT_CONFIG.minTurnoverRatio,
     minAgeHours: threshold?.minAgeHours ?? DEFAULT_VERDICT_CONFIG.minAgeHours,
     maxPriceDeviationPercent: threshold?.maxPriceDeviationPercent ?? DEFAULT_VERDICT_CONFIG.maxPriceDeviationPercent,
     minDecimals: threshold?.minDecimals ?? DEFAULT_VERDICT_CONFIG.minDecimals,
@@ -163,6 +165,7 @@ export async function buildVerdictContext(
     chain: pair.chain,
     dex: pair.dex,
     reserveUsd: pair.reserveUsd,
+    volumeUsd: pair.volumeUsd,
     txCount: pair.txCount,
     token0: {
       contractAddress: pair.token0.contractAddress,

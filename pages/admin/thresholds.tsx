@@ -12,6 +12,7 @@ type ThresholdRow = {
   dex: string;
   minLiquidityUsd: number;
   minTxCount: number;
+  minTurnoverRatio: number;
   minAgeHours: number;
   maxPriceDeviationPercent: number;
   minDecimals: number;
@@ -26,6 +27,7 @@ type ThresholdRow = {
 const NUM_FIELDS: { key: keyof ThresholdRow; label: string; step?: string }[] = [
   { key: "minLiquidityUsd", label: "Min Liquidity $" },
   { key: "minTxCount", label: "Min Tx (24h)" },
+  { key: "minTurnoverRatio", label: "Min Turnover", step: "any" },
   { key: "minAgeHours", label: "Min Age (h)" },
   { key: "maxPriceDeviationPercent", label: "Max Price Dev %", step: "any" },
   { key: "minDecimals", label: "Min Dec" },

@@ -272,6 +272,9 @@ model Threshold {
   hardMinLiquidityUsd      Int     @default(500)
   // Confidence a pair must clear (with core gates) to auto-VERIFY.
   autoVerifyConfidence     Float   @default(0.85)
+  // Minimum 24h turnover (volumeUsd / reserveUsd) for the T7 activity fence —
+  // catches deep-but-dormant pools whose price is stale. 0 = off (opt-in lever).
+  minTurnoverRatio         Float   @default(0)
 }
 
 // Canonical token contract address per (CoinGecko coin id, chain), resolved
