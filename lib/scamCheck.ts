@@ -11,6 +11,7 @@ import { evmChainId, EVM_SUPPORTED_CHAINS } from "./chains";
 import { fetchWithBackoff } from "./httpBackoff";
 import prisma from "./prisma";
 import { VERIFIED_STATUSES } from "./status";
+import { runVerdictForPair } from "./verdictRunner";
 import { TokenPairStatus } from "../types/types";
 
 // GoPlus indexes by EVM chain id (as a string). null = not an EVM chain we map
@@ -149,17 +150,22 @@ export async function runScamCheckForToken(
 
   let demotedPairs = 0;
   if (flagged) {
-    const demote = await prisma.pair.updateMany({
-      where: {
-        status: TokenPairStatus.AutoVerified,
-        OR: [{ token0Id: token.id }, { token1Id: token.id }],
-      },
-      data: {
-        status: TokenPairStatus.NeedsReview,
-        verificationComment: `scam flag (${token.symbol}): ${scamReason}`,
-      },
+    // Re-run the verdict for each of the token's pairs — now that isScamFlagged
+    // is set, the scam fence routes them to NeedsReview AND the review-tier /
+    // confidence are recomputed. Consistent with the identity/canonical/factory
+    // passes (all use runVerdictForPair), so no separate revalidate is needed.
+    // R6-safe inside runVerdictForPair (Manual* pairs untouched).
+    const pairs = await prisma.pair.findMany({
+      where: { OR: [{ token0Id: token.id }, { token1Id: token.id }] },
+      select: { id: true, status: true },
     });
-    demotedPairs = demote.count;
+    for (const p of pairs) {
+      const wasVerified = p.status === TokenPairStatus.AutoVerified;
+      const out = await runVerdictForPair(p.id, { now });
+      if (wasVerified && out.result?.verdict === TokenPairStatus.NeedsReview) {
+        demotedPairs += 1;
+      }
+    }
   }
 
   return { checked: true, flagged, reasons, demotedPairs };

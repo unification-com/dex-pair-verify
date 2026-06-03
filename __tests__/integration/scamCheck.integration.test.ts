@@ -39,8 +39,11 @@ describe("runScamCheckForToken", () => {
     expect(token?.scamCheckedAt).toBe(NOW);
     expect(token?.goPlusData).toBeTruthy(); // raw response stored
 
-    // AutoVerified demoted to NeedsReview; ManualVerified left alone (R6).
-    expect((await testPrisma.pair.findUnique({ where: { id: autoPair.id } }))?.status).toBe(TokenPairStatus.NeedsReview);
+    // AutoVerified demoted to NeedsReview + triaged as spam; ManualVerified left
+    // alone (R6).
+    const demoted = await testPrisma.pair.findUnique({ where: { id: autoPair.id } });
+    expect(demoted?.status).toBe(TokenPairStatus.NeedsReview);
+    expect(demoted?.reviewTier).toBe("spam"); // scam flag → likely spam (T9), no revalidate needed
     expect((await testPrisma.pair.findUnique({ where: { id: manualPair.id } }))?.status).toBe(TokenPairStatus.ManualVerified);
   });
 
