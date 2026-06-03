@@ -9,16 +9,31 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export const RATE_LIMIT_BACKOFF_MS = 65_000;
 
+// fetch() that never throws — a network error (DNS failure, connection reset,
+// flaky gateway) becomes null rather than a thrown exception, so a single bad
+// endpoint can't crash a whole batch pass.
+async function tryFetch(url: string, init: RequestInit | undefined, label: string): Promise<Response | null> {
+  try {
+    return await fetch(url, init);
+  } catch (e) {
+    console.warn(`[${label}] network error: ${String(e)}`);
+    return null;
+  }
+}
+
 export async function fetchWithBackoff(
   url: string,
   init: RequestInit | undefined,
   label: string,
 ): Promise<Response | null> {
-  let res = await fetch(url, init);
-  if (res.status === 429) {
+  let res = await tryFetch(url, init, label);
+  if (res && res.status === 429) {
     console.warn(`[${label}] rate limited (429) — waiting 65s for the window to clear`);
     await sleep(RATE_LIMIT_BACKOFF_MS);
-    res = await fetch(url, init);
+    res = await tryFetch(url, init, label);
+  }
+  if (!res) {
+    return null;
   }
   if (!res.ok) {
     // 404 is an expected "not found" for some lookups (e.g. a coin not on a

@@ -14,11 +14,15 @@ import { IdentitySignal } from "../types";
 type TokenListEntry = { chainId?: number; address?: string };
 type TokenListDoc = { tokens?: TokenListEntry[] };
 
-// Curated lists, all Uniswap-token-list-standard. CoinGecko publishes one per
-// asset platform; the Uniswap default list is multi-chain (filtered by chainId).
-// Tune/extend freely — a wrong URL just yields no membership for that list.
+// Curated lists, all Uniswap-token-list-standard (multi-chain lists are filtered
+// by chainId). Mix of NON-CoinGecko curations (Uniswap, 1inch — independent of
+// CG, so they can vouch for a token GeckoTerminal never gave a cgId) + CoinGecko
+// per-network lists (comprehensive coverage). Tune/extend freely — a dead or
+// non-JSON URL just yields no membership for that list (never crashes the pass).
+// NB: `tokens.uniswap.org` 302-redirects to HTML; the real JSON is the IPNS URL.
 export const TOKEN_LISTS: { name: string; url: string }[] = [
-  { name: "uniswap-default", url: "https://tokens.uniswap.org" },
+  { name: "uniswap-default", url: "https://ipfs.io/ipns/tokens.uniswap.org" },
+  { name: "1inch", url: "https://tokens.1inch.eth.link" },
   { name: "coingecko-eth", url: "https://tokens.coingecko.com/ethereum/all.json" },
   { name: "coingecko-bsc", url: "https://tokens.coingecko.com/binance-smart-chain/all.json" },
   { name: "coingecko-polygon", url: "https://tokens.coingecko.com/polygon-pos/all.json" },
@@ -35,7 +39,14 @@ const defaultListFetcher: ListFetcher = async (url) => {
   if (!res) {
     return null;
   }
-  return (await res.json()) as TokenListDoc;
+  try {
+    // Guard the parse: a 200 response can still be HTML (a redirected landing /
+    // error page), which must degrade to "no membership", not crash the pass.
+    return (await res.json()) as TokenListDoc;
+  } catch {
+    console.warn(`[tokenlist ${url}] non-JSON response — skipping this list`);
+    return null;
+  }
 };
 
 type CachedList = { keys: Set<string>; fetchedAt: number };
