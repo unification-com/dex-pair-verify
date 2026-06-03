@@ -9,8 +9,8 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 
 // Session-gated manual export (the GitHub-upload path). Operator clicks "Export
 // Verified", downloads the JSON, commits it to the GitHub repo go-ooo polls.
-// Emits the same v2 shape as the bearer-token API endpoint (lib/export.ts) so
-// the two paths stay identical.
+// Emits the same shape as the bearer-token API endpoint (the shared
+// lib/export.ts builder) so the two paths stay identical.
 export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse

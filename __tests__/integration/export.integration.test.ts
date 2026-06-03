@@ -5,7 +5,13 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { resetDb, seedPair, seedToken, testPrisma } from "./helpers";
-import { buildExportIndex, buildExportV2, EXPORT_SCHEMA_VERSION, exportLastModified } from "../../lib/export";
+import {
+  buildExportIndex,
+  buildExportV2,
+  EXPORT_MANIFEST_SCHEMA_VERSION,
+  EXPORT_PAIR_SCHEMA_VERSION,
+  exportLastModified,
+} from "../../lib/export";
 import { TokenPairStatus, VerificationMethod } from "../../types/types";
 
 const NOW = 1_700_000_000;
@@ -41,9 +47,11 @@ describe("buildExportV2", () => {
 
     const out = await buildExportV2("eth", "uniswap_v3", { now: NOW });
 
-    expect(out.schemaVersion).toBe(EXPORT_SCHEMA_VERSION);
+    expect(out.schemaVersion).toBe(EXPORT_PAIR_SCHEMA_VERSION);
+    expect(out.schemaVersion).toBe(3);
     expect(out.generatedAt).toBe(NOW);
     expect(out.chain).toBe("eth");
+    expect(out.minLiquidityUsd).toBe(0); // no Threshold row seeded → default floor
     expect(out.pairs).toHaveLength(1);
     const p = out.pairs[0];
     expect(p.pair).toBe("WETH-USDC");
@@ -53,11 +61,29 @@ describe("buildExportV2", () => {
     expect(p.token1?.symbol).toBe("USDC");
   });
 
-  it("includes ManualVerified pairs too (both count as verified)", async () => {
-    await seedVerifiedPair({ status: TokenPairStatus.ManualVerified, verificationMethod: VerificationMethod.Manual });
+  it("exports the engine confidence as the trust score for an AutoVerified pair", async () => {
+    await seedVerifiedPair({ confidence: 0.91234 });
+    const out = await buildExportV2("eth", "uniswap_v3", { now: NOW });
+    expect(out.pairs[0].confidence).toBe(0.9123); // rounded to 4dp
+  });
+
+  it("exports trust score 1 for a ManualVerified pair regardless of confidence", async () => {
+    await seedVerifiedPair({
+      status: TokenPairStatus.ManualVerified,
+      verificationMethod: VerificationMethod.Manual,
+      confidence: null,
+    });
     const out = await buildExportV2("eth", "uniswap_v3", { now: NOW });
     expect(out.pairs).toHaveLength(1);
     expect(out.pairs[0].verdict).toBe(TokenPairStatus.ManualVerified);
+    expect(out.pairs[0].confidence).toBe(1);
+  });
+
+  it("includes the per-(chain,dex) curation floor from the Threshold row", async () => {
+    await testPrisma.threshold.create({ data: { chain: "eth", dex: "uniswap_v3", minLiquidityUsd: 30000, minTxCount: 0 } });
+    await seedVerifiedPair();
+    const out = await buildExportV2("eth", "uniswap_v3", { now: NOW });
+    expect(out.minLiquidityUsd).toBe(30000);
   });
 
   it("orders pairs by reserveUsd descending", async () => {
@@ -76,7 +102,8 @@ describe("buildExportIndex", () => {
 
     const idx = await buildExportIndex({ now: NOW });
 
-    expect(idx.schemaVersion).toBe(EXPORT_SCHEMA_VERSION);
+    expect(idx.schemaVersion).toBe(EXPORT_MANIFEST_SCHEMA_VERSION);
+    expect(idx.schemaVersion).toBe(2); // manifest stays at 2 (Phase 4 bumps it)
     const eth = idx.chains.find((c) => c.chain === "eth");
     const uni = eth?.dexs.find((d) => d.dex === "uniswap_v3");
     expect(uni?.pairCount).toBe(2);
