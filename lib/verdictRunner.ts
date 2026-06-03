@@ -77,6 +77,10 @@ export async function buildVerdictContext(
     ...DEFAULT_VERDICT_CONFIG,
     minLiquidityUsd: threshold?.minLiquidityUsd ?? DEFAULT_VERDICT_CONFIG.minLiquidityUsd,
     minTxCount: threshold?.minTxCount ?? DEFAULT_VERDICT_CONFIG.minTxCount,
+    minAgeHours: threshold?.minAgeHours ?? DEFAULT_VERDICT_CONFIG.minAgeHours,
+    maxPriceDeviationPercent: threshold?.maxPriceDeviationPercent ?? DEFAULT_VERDICT_CONFIG.maxPriceDeviationPercent,
+    minDecimals: threshold?.minDecimals ?? DEFAULT_VERDICT_CONFIG.minDecimals,
+    maxDecimals: threshold?.maxDecimals ?? DEFAULT_VERDICT_CONFIG.maxDecimals,
   };
 
   let hasVerifiedSibling = false;

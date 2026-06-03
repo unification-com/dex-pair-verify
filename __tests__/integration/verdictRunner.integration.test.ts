@@ -133,4 +133,21 @@ describe("runVerdictForPair", () => {
     expect(out.found).toBe(false);
     expect(out.result).toBeNull();
   });
+
+  it("honours a per-(chain,dex) Threshold row (A.3) — high min liquidity holds an otherwise-clean pair for review", async () => {
+    const t0 = await seedToken({ contractAddress: WETH, coingeckoCoinId: "weth" });
+    const t1 = await seedToken({ contractAddress: USDC, coingeckoCoinId: "usd-coin", decimals: 6 });
+    await seedCanonical("weth", "eth", WETH);
+    await seedCanonical("usd-coin", "eth", USDC);
+    // Reserve is 1,000,000 (seedPair default); set the floor above it.
+    await testPrisma.threshold.create({
+      data: { chain: "eth", dex: "uniswap_v3", minLiquidityUsd: 5_000_000, minTxCount: 0 },
+    });
+    const pair = await seedPair(t0.id, t1.id);
+
+    const out = await runVerdictForPair(pair.id, { now: NOW });
+
+    // Without the threshold it would auto-verify; the liquidity gate now fails.
+    expect(out.result?.verdict).toBe(TokenPairStatus.NeedsReview);
+  });
 });

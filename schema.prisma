@@ -235,6 +235,13 @@ model Threshold {
   dex             String
   minLiquidityUsd Int
   minTxCount      Int
+  // Verdict-engine knobs (A.3), per (chain, dex). Defaults mirror
+  // DEFAULT_VERDICT_CONFIG in lib/verdict.ts so existing rows behave unchanged.
+  minAgeHours              Int     @default(24)
+  maxPriceDeviationPercent Float   @default(5)
+  minDecimals              Int     @default(0)
+  maxDecimals              Int     @default(36)
+  requireCgListed          Boolean @default(false)
 }
 
 // Canonical token contract address per (CoinGecko coin id, chain), resolved

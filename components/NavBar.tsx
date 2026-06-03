@@ -71,6 +71,12 @@ function Navbar() {
                             <a data-active={isActive("/admin/revalidate")}>Re-validate</a>
                         </Link>
                     </span>
+                    &nbsp;&nbsp;&nbsp;
+                    <span key={"navbar_admin_thresholds"}>
+                        <Link href="/admin/thresholds">
+                            <a data-active={isActive("/admin/thresholds")}>Thresholds</a>
+                        </Link>
+                    </span>
                     &nbsp;
                 </>
             )}
