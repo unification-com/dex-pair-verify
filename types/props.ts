@@ -121,6 +121,10 @@ export type TokenProps = {
     lastChecked: number;
     verificationMethod: string;
     verificationComment: string;
+    isScamFlagged: boolean;
+    scamReason: string;
+    scamCheckedAt: number;
+    goPlusData: Record<string, unknown> | null;
     duplicateCount: number
     pairsToken0: AssociatedPairProps[] | null;
     pairsToken1: AssociatedPairProps[] | null;

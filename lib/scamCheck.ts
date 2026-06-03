@@ -8,6 +8,7 @@
 import { Prisma } from "@prisma/client";
 
 import prisma from "./prisma";
+import { VERIFIED_STATUSES } from "./status";
 import { TokenPairStatus } from "../types/types";
 
 // GoPlus numeric chain id per our chain key. null = GoPlus doesn't index it
@@ -21,6 +22,39 @@ const GOPLUS_CHAIN_ID: Record<string, string | null> = {
 };
 
 export const goplusChainId = (chain: string): string | null => GOPLUS_CHAIN_ID[chain] ?? null;
+
+// Chains GoPlus indexes — used to scope the scan-check batch query.
+export const GOPLUS_SUPPORTED_CHAINS: string[] = Object.entries(GOPLUS_CHAIN_ID)
+  .filter(([, id]) => id !== null)
+  .map(([chain]) => chain);
+
+// Tokens worth scam-checking: those belonging to a verified pair, on a
+// GoPlus-supported chain, not yet checked this job (scamCheckedAt <
+// jobStartedAt). Only verified-pair tokens matter — a flag only acts by
+// demoting AutoVerified pairs, so unverified tokens aren't worth the quota.
+const scamCheckWhere = (jobStartedAt: number): Prisma.TokenWhereInput => ({
+  chain: { in: GOPLUS_SUPPORTED_CHAINS },
+  scamCheckedAt: { lt: jobStartedAt },
+  OR: [
+    { pairsToken0: { some: { status: { in: [...VERIFIED_STATUSES] } } } },
+    { pairsToken1: { some: { status: { in: [...VERIFIED_STATUSES] } } } },
+  ],
+});
+
+// The next batch of token ids to scam-check.
+export async function tokensToScamCheck(jobStartedAt: number, batch: number): Promise<string[]> {
+  const rows = await prisma.token.findMany({
+    where: scamCheckWhere(jobStartedAt),
+    select: { id: true },
+    take: batch,
+  });
+  return rows.map((r) => r.id);
+}
+
+// How many tokens still need checking this job — backs the progress UI.
+export async function countTokensToScamCheck(jobStartedAt: number): Promise<number> {
+  return prisma.token.count({ where: scamCheckWhere(jobStartedAt) });
+}
 
 // Buy/sell tax above this is treated as a scam signal.
 const HIGH_TAX = 0.1;

@@ -175,6 +175,33 @@ const Token: React.FC<Props> = (props) => {
                     ALL
                     associated pairs to Fake/Dupe</p>
 
+                {
+                    props.token.scamCheckedAt > 0 &&
+                    <>
+                        <h4>Scam check (GoPlus)</h4>
+                        {
+                            props.token.isScamFlagged
+                                ? <p style={{ color: "red", fontWeight: "bold" }}>⚠ Flagged: {props.token.scamReason}</p>
+                                : <p style={{ color: "green" }}>No scam signals</p>
+                        }
+                        {
+                            props.token.goPlusData &&
+                            <table>
+                                <thead>
+                                    <tr><th>Signal</th><th>Value</th></tr>
+                                </thead>
+                                <tbody>
+                                    {Object.entries(props.token.goPlusData)
+                                        .filter(([, v]) => typeof v === "string" || typeof v === "number")
+                                        .map(([k, v]) => (
+                                            <tr key={`gp_${k}`}><td>{k}</td><td>{String(v)}</td></tr>
+                                        ))}
+                                </tbody>
+                            </table>
+                        }
+                    </>
+                }
+
                 <h4>Stats</h4>
                 <table>
                     <thead>

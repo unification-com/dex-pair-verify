@@ -77,6 +77,12 @@ function Navbar() {
                             <a data-active={isActive("/admin/thresholds")}>Thresholds</a>
                         </Link>
                     </span>
+                    &nbsp;&nbsp;&nbsp;
+                    <span key={"navbar_admin_scancheck"}>
+                        <Link href="/admin/scancheck">
+                            <a data-active={isActive("/admin/scancheck")}>Scam Check</a>
+                        </Link>
+                    </span>
                     &nbsp;
                 </>
             )}

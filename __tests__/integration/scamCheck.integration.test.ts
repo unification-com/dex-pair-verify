@@ -5,7 +5,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { resetDb, seedPair, seedToken, testPrisma } from "./helpers";
-import { runScamCheckForToken } from "../../lib/scamCheck";
+import { runScamCheckForToken, tokensToScamCheck } from "../../lib/scamCheck";
 import { TokenPairStatus } from "../../types/types";
 
 const NOW = 1_700_000_000;
@@ -64,5 +64,38 @@ describe("runScamCheckForToken", () => {
     expect(out.checked).toBe(false);
     const token = await testPrisma.token.findUnique({ where: { id: t0.id } });
     expect(token?.isScamFlagged).toBe(false);
+  });
+});
+
+describe("tokensToScamCheck", () => {
+  it("returns verified-pair tokens not yet checked this job", async () => {
+    const t0 = await seedToken({ coingeckoCoinId: "weth" });
+    const t1 = await seedToken({ coingeckoCoinId: "usd-coin", decimals: 6 });
+    await seedPair(t0.id, t1.id, { status: TokenPairStatus.AutoVerified });
+
+    const ids = await tokensToScamCheck(NOW, 50);
+    expect(ids.sort()).toEqual([t0.id, t1.id].sort());
+  });
+
+  it("excludes tokens whose pairs are not verified", async () => {
+    const t0 = await seedToken({ coingeckoCoinId: "weth" });
+    const t1 = await seedToken({ coingeckoCoinId: "usd-coin", decimals: 6 });
+    await seedPair(t0.id, t1.id, { status: TokenPairStatus.Unverified });
+
+    expect(await tokensToScamCheck(NOW, 50)).toEqual([]);
+  });
+
+  it("excludes tokens already checked this job and unsupported chains", async () => {
+    const checked = await seedToken({ coingeckoCoinId: "weth", scamCheckedAt: NOW });
+    const fresh = await seedToken({ coingeckoCoinId: "usd-coin", decimals: 6 });
+    await seedPair(checked.id, fresh.id, { status: TokenPairStatus.AutoVerified });
+
+    const q1 = await seedToken({ chain: "qom", coingeckoCoinId: "qom-a" });
+    const q2 = await seedToken({ chain: "qom", coingeckoCoinId: "qom-b" });
+    await seedPair(q1.id, q2.id, { chain: "qom", dex: "qomswap_v2", status: TokenPairStatus.AutoVerified });
+
+    // `checked` excluded (scamCheckedAt == jobStartedAt, not <); qom tokens
+    // excluded (unsupported chain). Only the fresh eth token remains.
+    expect(await tokensToScamCheck(NOW, 50)).toEqual([fresh.id]);
   });
 });
