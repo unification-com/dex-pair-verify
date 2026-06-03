@@ -37,9 +37,11 @@ export const getServerSideProps: GetServerSideProps = async ({ params: _params, 
     const dex = String(query?.dex)
     const page = Math.max(1, Number(query?.page || 1))
 
-    const where = { chain, dex, status: qStatus }
+    // Review-queue triage sub-filter (T9) — only meaningful on the NeedsReview tab.
+    const tier = qStatus === TokenPairStatus.NeedsReview && query?.tier ? String(query.tier) : undefined
+    const where = { chain, dex, status: qStatus, ...(tier ? { reviewTier: tier } : {}) }
 
-    const [pairs, totalCount, statusGroups, pairGroups] = await Promise.all([
+    const [pairs, totalCount, statusGroups, pairGroups, tierGroups] = await Promise.all([
         prisma.pair.findMany({
             where,
             include: {
@@ -67,11 +69,20 @@ export const getServerSideProps: GetServerSideProps = async ({ params: _params, 
         // Count per pair-symbol across the FULL status set so the "Dupes"
         // column stays accurate even though rows are paginated.
         prisma.pair.groupBy({ by: ['pair'], where, _count: { pair: true } }),
+        // Per-tier counts for the NeedsReview triage sub-filter (across all tiers).
+        prisma.pair.groupBy({ by: ['reviewTier'], where: { chain, dex, status: TokenPairStatus.NeedsReview }, _count: { _all: true } }),
     ]);
 
     const statusCounts: Record<string, number> = {}
     for (const g of statusGroups) {
         statusCounts[g.status] = g._count._all
+    }
+
+    const tierCounts: Record<string, number> = {}
+    for (const g of tierGroups) {
+        if (g.reviewTier) {
+            tierCounts[g.reviewTier] = g._count._all
+        }
     }
 
     const pairCounts: Record<string, number> = {}
@@ -93,6 +104,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params: _params, 
     const pairsWithDuplicates = (pairs as unknown as PairProps[])
     for (const p of pairsWithDuplicates) {
         p.duplicateCount = (pairCounts[p.pair] ?? 1) - 1
+        p.reviewTierLabel = p.reviewTier === "spam" ? "🚩 Likely spam" : p.reviewTier === "review" ? "👀 Worth a look" : ""
     }
 
     return {
@@ -101,10 +113,12 @@ export const getServerSideProps: GetServerSideProps = async ({ params: _params, 
             chain,
             dex,
             status: qStatus,
+            tier: tier ?? "",
             thresholds,
             page,
             totalPages: Math.max(1, Math.ceil(totalCount / PAGE_SIZE)),
             statusCounts,
+            tierCounts,
         },
     };
 }
@@ -114,10 +128,12 @@ type Props = {
     chain: string,
     dex: string,
     status: TokenPairStatus,
+    tier: string,
     thresholds: ThresholdProps;
     page: number,
     totalPages: number,
     statusCounts: Record<string, number>,
+    tierCounts: Record<string, number>,
 }
 
 const ListPairs: React.FC<Props> = (props) => {
@@ -206,6 +222,14 @@ const ListPairs: React.FC<Props> = (props) => {
         {label: "Total Dupes", accessor: "_count.duplicatePairs", sortable: true, cellType: "number"},
     ];
 
+    // Triage tier column on the Needs Review queue (T9).
+    if (props.status === TokenPairStatus.NeedsReview) {
+        columns = [
+            ...columns,
+            { label: "Triage", accessor: "reviewTierLabel", sortable: true, cellType: "display" },
+        ]
+    }
+
     columns = [
         // @ts-ignore — column literals' `selected`/`onToggle` widen the union; TS infers narrower
         { label: "", accessor: "id", sortable: false, cellType: "checkbox", selected, onToggle: toggleSelected },
@@ -270,6 +294,25 @@ const ListPairs: React.FC<Props> = (props) => {
                         </span>
                     ))}
                 </h3>
+                {props.status === TokenPairStatus.NeedsReview && (() => {
+                    const base = `/list-pairs?chain=${encodeURIComponent(props.chain)}&dex=${encodeURIComponent(props.dex)}&status=${TokenPairStatus.NeedsReview}`
+                    const spam = props.tierCounts.spam ?? 0
+                    const review = props.tierCounts.review ?? 0
+                    const link = (href: string, label: string, active: boolean) => (
+                        <Link href={href}><a style={{ fontWeight: active ? 700 : 400 }}>{label}</a></Link>
+                    )
+                    return (
+                        <h4>
+                            Triage:&nbsp;
+                            {link(base, `All (${spam + review})`, props.tier === "")}
+                            &nbsp;|&nbsp;
+                            {link(`${base}&tier=spam`, `🚩 Likely spam (${spam})`, props.tier === "spam")}
+                            &nbsp;|&nbsp;
+                            {link(`${base}&tier=review`, `👀 Worth a look (${review})`, props.tier === "review")}
+                            &nbsp;&nbsp;<small style={{ opacity: 0.7 }}>— filter to &quot;Likely spam&quot; then select-all + Reject to clear junk in bulk.</small>
+                        </h4>
+                    )
+                })()}
                 <main>
                     {
                         (props.status === TokenPairStatus.Duplicate) && <>

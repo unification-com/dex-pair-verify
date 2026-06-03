@@ -19,11 +19,13 @@ import { TokenPairStatus } from "../types/types";
 const addrEq = (a: string | null | undefined, b: string | null | undefined): boolean =>
   !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
-// Pairs worth a factory read: on an EVM chain we have an RPC for, not yet checked
-// this job. (Every such (chain, dex) has a curated canonical factory except
-// parked qomswap, which isn't on an EVM-RPC chain here anyway.)
+// Pairs worth a factory read: on an EVM chain, with no factory resolved YET
+// (factory is immutable, so once read we never re-read), not yet checked this
+// job. The `factoryAddress: null` clause means a re-run only retries the ones a
+// failed/dead RPC left unread — it won't re-read the ones already resolved.
 const factoryCheckWhere = (jobStartedAt: number): Prisma.PairWhereInput => ({
   chain: { in: EVM_SUPPORTED_CHAINS },
+  factoryAddress: null,
   factoryCheckedAt: { lt: jobStartedAt },
 });
 

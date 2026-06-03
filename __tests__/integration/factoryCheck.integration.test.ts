@@ -74,9 +74,10 @@ describe("runFactoryCheckForPair", () => {
 });
 
 describe("pairsToFactoryCheck", () => {
-  it("selects only EVM pairs not yet checked", async () => {
+  it("selects only EVM pairs with no factory resolved yet", async () => {
     const eth = await seedCleanPair();
     const checkedPair = await seedCleanPair({ factoryCheckedAt: NOW });
+    const alreadyRead = await seedCleanPair({ factoryAddress: UNI_V3_FACTORY });
 
     const q0 = await seedToken({ chain: "qom", coingeckoCoinId: "q0" });
     const q1 = await seedToken({ chain: "qom", coingeckoCoinId: "q1" });
@@ -85,6 +86,7 @@ describe("pairsToFactoryCheck", () => {
     const ids = await pairsToFactoryCheck(NOW, 50);
     expect(ids).toContain(eth.id);
     expect(ids).not.toContain(checkedPair.id); // already checked this job
+    expect(ids).not.toContain(alreadyRead.id); // factory already resolved — never re-read
     expect(ids).not.toContain(qom.id); // non-EVM chain
   });
 });

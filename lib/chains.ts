@@ -10,11 +10,13 @@ export type ChainInfo = { rpc: string; blocksPerMin: number };
 
 export const chainInfo: Record<string, ChainInfo> = {
   eth: {
-    rpc: "https://rpc.mevblocker.io",
+    // publicnode — reliable public read RPC (mevblocker is a tx relay that
+    // rate-limits eth_call, polygon-rpc.com's free tenant is disabled).
+    rpc: "https://ethereum-rpc.publicnode.com",
     blocksPerMin: 5,
   },
   polygon_pos: {
-    rpc: "https://polygon-rpc.com",
+    rpc: "https://polygon-bor-rpc.publicnode.com",
     blocksPerMin: 12,
   },
   bsc: {

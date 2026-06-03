@@ -149,6 +149,10 @@ model Pair {
   // until the factory-check pass reads it. factoryCheckedAt records the attempt.
   factoryAddress           String?
   factoryCheckedAt         Int @default(0)
+  // Review-queue triage (T9): for a NeedsReview pair, "spam" (clear-bad —
+  // impostor / scam-flagged / exact-symbol spoof → bulk-rejectable) or "review"
+  // (genuine-but-uncertain → manual look). null when not in NeedsReview.
+  reviewTier               String?
   duplicatePairs           DuplicatePairs[] @relation("OriginalPair")
   dp2                      DuplicatePairs[] @relation("DuplicatePair")
 

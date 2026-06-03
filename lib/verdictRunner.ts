@@ -8,6 +8,7 @@
 
 import { canonicalKey, fetchCanonicalContract, getCachedCanonicalAddress } from "./canonical";
 import prisma from "./prisma";
+import { computeReviewTier } from "./reviewTier";
 import { getCanonicalFactoryAddress } from "./sourceConfig";
 import { isVerifiedStatus, VERIFIED_STATUSES } from "./status";
 import { promoteTokensToVerified } from "./tokenStatus";
@@ -228,6 +229,13 @@ export async function runVerdictForPair(
   const result = evaluatePair(input, context);
 
   if (persist) {
+    // Triage NeedsReview pairs into spam / review for the queue (T9); clear the
+    // tier for any other verdict.
+    const reviewTier =
+      result.verdict === TokenPairStatus.NeedsReview
+        ? await computeReviewTier(result.reason, pair.token0, pair.token1)
+        : null;
+
     await prisma.pair.update({
       where: { id: pairId },
       data: {
@@ -238,6 +246,7 @@ export async function runVerdictForPair(
         verificationMethod: VerificationMethod.Auto,
         verificationComment: result.reason,
         verdictEvidence: result.evidence,
+        reviewTier,
       },
     });
 

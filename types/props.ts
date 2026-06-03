@@ -48,6 +48,8 @@ export type PairProps = {
     verdictEvidence: Record<string, number | string | boolean> | null;
     duplicatePairs: { duplicatePair: PairPropsNoToken }[] | null
     duplicateCount: number | null;
+    reviewTier: string | null;
+    reviewTierLabel: string;
     token0Id: string;
     token1Id: string;
     createdAt: number;
