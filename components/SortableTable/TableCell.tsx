@@ -40,6 +40,13 @@ const TableCell = ({ data, column }) => {
         case "status":
             cellData = <><Status status={d} method={""} /></>
             break
+        case "checkbox":
+            cellData = <input
+                type="checkbox"
+                checked={column.selected ? column.selected.has(d) : false}
+                onChange={() => { if (column.onToggle) column.onToggle(d) }}
+            />
+            break
         case "cgcoin":
             cellData = <><CoinGeckoCoinLink coingeckoId={d} /></>
             break;

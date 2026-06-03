@@ -1,5 +1,6 @@
 import { GetServerSideProps} from "next"
 import Link from "next/link";
+import {useRouter} from "next/router";
 import React, {FormEvent, useEffect, useState} from "react"
 import {NotificationManager} from 'react-notifications';
 
@@ -130,6 +131,8 @@ const ListPairs: React.FC<Props> = (props) => {
     const [thresholdMinLiquidity, setThresholdMinLiquidity] = useState((props.thresholds.minLiquidityUsd === null) ? 0 : props.thresholds.minLiquidityUsd)
     const [thresholdMinTxCount, setThresholdMinTxCount] = useState((props.thresholds.minTxCount === null) ? 0 : props.thresholds.minTxCount)
 
+    const router = useRouter()
+
     // Re-sync the editable threshold state when the route's (chain, dex)
     // changes — the pages router re-renders this same component instance
     // with new props rather than remounting it.
@@ -137,6 +140,44 @@ const ListPairs: React.FC<Props> = (props) => {
         setThresholdMinLiquidity(props.thresholds.minLiquidityUsd ?? 0)
         setThresholdMinTxCount(props.thresholds.minTxCount ?? 0)
     }, [props.thresholds.minLiquidityUsd, props.thresholds.minTxCount])
+
+    // Bulk-selection state for the review queue. Cleared whenever the route
+    // (chain / dex / status / page) changes so a stale selection can't carry
+    // across views.
+    const [selected, setSelected] = useState<Set<string>>(new Set())
+    useEffect(() => {
+        setSelected(new Set())
+    }, [props.chain, props.dex, props.status, props.page])
+
+    const toggleSelected = (id: string) => {
+        setSelected((prev) => {
+            const next = new Set(prev)
+            if (next.has(id)) {
+                next.delete(id)
+            } else {
+                next.add(id)
+            }
+            return next
+        })
+    }
+
+    async function bulkAction(action: "approve" | "reject" | "rescan") {
+        if (selected.size === 0) {
+            return
+        }
+        const response = await fetch('/api/bulkpairaction', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: Array.from(selected), action }),
+        })
+        const res = await response.json()
+        if (res.success) {
+            NotificationManager.success("Done", `${action} applied to ${res.count} pair(s)`, 5000)
+            router.reload()
+        } else {
+            NotificationManager.error("Error", `${res.err}`, 5000)
+        }
+    }
 
     async function onSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
@@ -170,6 +211,12 @@ const ListPairs: React.FC<Props> = (props) => {
         {label: `Dupes (status ${props.status})`, accessor: "duplicateCount", sortable: true, cellType: "number"},
         {label: "Total Dupes", accessor: "_count.duplicatePairs", sortable: true, cellType: "number"},
     ];
+
+    columns = [
+        // @ts-ignore — column literals' `selected`/`onToggle` widen the union; TS infers narrower
+        { label: "", accessor: "id", sortable: false, cellType: "checkbox", selected, onToggle: toggleSelected },
+        ...columns,
+    ]
 
     if(props.status === TokenPairStatus.Unverified) {
         columns = [
@@ -238,6 +285,24 @@ const ListPairs: React.FC<Props> = (props) => {
                             </p>
                         </>
                     }
+                    <div className="bulk-bar">
+                        <strong>{selected.size}</strong> selected&nbsp;&nbsp;
+                        <button type="button" disabled={selected.size === 0} onClick={() => bulkAction("approve")}>Approve</button>
+                        &nbsp;
+                        <button type="button" disabled={selected.size === 0} onClick={() => bulkAction("reject")}>Reject</button>
+                        &nbsp;
+                        <button type="button" disabled={selected.size === 0} onClick={() => bulkAction("rescan")}>Re-run verdict</button>
+                        &nbsp;
+                        <button type="button" disabled={selected.size === 0} onClick={() => setSelected(new Set())}>Clear</button>
+                        <style jsx>{`
+                            .bulk-bar {
+                                margin: 0.5rem 0;
+                                padding: 0.5rem;
+                                background: #f4f4f4;
+                                border: 1px solid #ddd;
+                            }
+                        `}</style>
+                    </div>
                     <Pagination
                         page={props.page}
                         totalPages={props.totalPages}
