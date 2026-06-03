@@ -17,16 +17,21 @@ type ThresholdRow = {
   minDecimals: number;
   maxDecimals: number;
   requireCgListed: boolean;
+  hardMinLiquidityUsd: number;
+  autoVerifyConfidence: number;
 };
 
-// Editable numeric columns, in display order.
-const NUM_FIELDS: { key: keyof ThresholdRow; label: string }[] = [
+// Editable numeric columns, in display order. `step` allows decimals for the
+// confidence band.
+const NUM_FIELDS: { key: keyof ThresholdRow; label: string; step?: string }[] = [
   { key: "minLiquidityUsd", label: "Min Liquidity $" },
   { key: "minTxCount", label: "Min Tx (24h)" },
   { key: "minAgeHours", label: "Min Age (h)" },
-  { key: "maxPriceDeviationPercent", label: "Max Price Dev %" },
+  { key: "maxPriceDeviationPercent", label: "Max Price Dev %", step: "any" },
   { key: "minDecimals", label: "Min Dec" },
   { key: "maxDecimals", label: "Max Dec" },
+  { key: "hardMinLiquidityUsd", label: "Hard Min Liq $ (reject)" },
+  { key: "autoVerifyConfidence", label: "Auto-Verify Conf (0-1)", step: "any" },
 ];
 
 export const getServerSideProps: GetServerSideProps = async () => {
@@ -100,6 +105,7 @@ const Thresholds: React.FC<{ thresholds: ThresholdRow[] }> = ({ thresholds }) =>
                   <td key={f.key}>
                     <input
                       type="number"
+                      step={f.step}
                       value={row[f.key] as number}
                       style={{ width: "6rem" }}
                       onChange={(e) => update(row.id, f.key, Number(e.target.value))}

@@ -250,6 +250,10 @@ model Threshold {
   minDecimals              Int     @default(0)
   maxDecimals              Int     @default(36)
   requireCgListed          Boolean @default(false)
+  // Below this reserve a pair is auto-REJECTED (bypasses review).
+  hardMinLiquidityUsd      Int     @default(500)
+  // Confidence a pair must clear (with core gates) to auto-VERIFY.
+  autoVerifyConfidence     Float   @default(0.85)
 }
 
 // Canonical token contract address per (CoinGecko coin id, chain), resolved

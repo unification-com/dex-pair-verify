@@ -42,6 +42,8 @@ export default async function handler(
                 minDecimals: toInt(b.minDecimals, 0),
                 maxDecimals: toInt(b.maxDecimals, 36),
                 requireCgListed: Boolean(b.requireCgListed),
+                hardMinLiquidityUsd: toInt(b.hardMinLiquidityUsd, 500),
+                autoVerifyConfidence: toFloat(b.autoVerifyConfidence, 0.85),
             },
         })
         return res.status(200).json({ success: true, data: threshold })
