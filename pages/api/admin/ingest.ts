@@ -42,7 +42,10 @@ export default async function handler(
     }
 
     try {
-        const result = await ingestPoolPage(source.chain, source.dex, page)
+        const result = await ingestPoolPage(source.chain, source.dex, page, {
+            gtNetwork: source.gtNetwork,
+            gtDex: source.gtDex,
+        })
 
         const lastPage = source.last_page ?? 1
         let nextSourceIndex = idx

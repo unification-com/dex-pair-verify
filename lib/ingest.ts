@@ -241,13 +241,18 @@ export async function ingestPoolPage(
   chain: string,
   dex: string,
   page: number,
-  opts: { now?: number; poolFetcher?: PoolPageFetcher; tokensFetcher?: TokensFetcher } = {},
+  opts: { now?: number; poolFetcher?: PoolPageFetcher; tokensFetcher?: TokensFetcher; gtNetwork?: string; gtDex?: string } = {},
 ): Promise<IngestPageResult> {
   const now = opts.now ?? Math.floor(Date.now() / 1000);
   const poolFetcher = opts.poolFetcher ?? defaultPoolPageFetcher;
   const tokensFetcher = opts.tokensFetcher ?? defaultTokensFetcher;
+  // Our internal chain/dex ids (stored on the row) can differ from
+  // GeckoTerminal's slugs (e.g. bsc_pancakeswap_v3 vs pancakeswap-v3-bsc) —
+  // query GT by the slug, store by the internal id.
+  const gtNetwork = opts.gtNetwork ?? chain;
+  const gtDex = opts.gtDex ?? dex;
 
-  const pools = await poolFetcher(chain, dex, page);
+  const pools = await poolFetcher(gtNetwork, gtDex, page);
   if (pools.length === 0) {
     return { hadData: false, pairs: 0, tallies: {} };
   }
@@ -260,7 +265,7 @@ export async function ingestPoolPage(
     if (b) tokenAddrs.add(b);
     if (q) tokenAddrs.add(q);
   }
-  const gtTokens = await tokensFetcher(chain, Array.from(tokenAddrs));
+  const gtTokens = await tokensFetcher(gtNetwork, Array.from(tokenAddrs));
   const tokenMap = new Map<string, GtTokenData>();
   for (const t of gtTokens) {
     const addr = addressFromGtId(t.attributes.address) ?? web3Utils.toChecksumAddress(t.attributes.address);

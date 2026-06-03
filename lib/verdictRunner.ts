@@ -64,12 +64,13 @@ export async function buildVerdictContext(
   const now = opts.now ?? nowSeconds();
   const key = canonicalKey({ token0: pair.token0, token1: pair.token1 });
 
-  const token0CanonicalAddress = pair.token0.coingeckoCoinId
-    ? await fetchCanonicalContract(pair.token0.coingeckoCoinId, pair.chain, { now })
-    : null;
-  const token1CanonicalAddress = pair.token1.coingeckoCoinId
-    ? await fetchCanonicalContract(pair.token1.coingeckoCoinId, pair.chain, { now })
-    : null;
+  // Canonical addresses are only fetched lazily, when an intra-chain conflict
+  // needs adjudicating (below). GeckoTerminal already validates each token's
+  // coingeckoCoinId, so a per-pair CoinGecko lookup here would be redundant —
+  // and slow (it rate-limits the ingest). Default to "unknown" → the impostor
+  // fence simply skips for the common, no-conflict case.
+  let token0CanonicalAddress: string | null = null;
+  let token1CanonicalAddress: string | null = null;
 
   const threshold = await prisma.threshold.findFirst({
     where: { chain: pair.chain, dex: pair.dex },
@@ -118,6 +119,15 @@ export async function buildVerdictContext(
         !sameTokenSet(thisAddrs, [o.token0.contractAddress, o.token1.contractAddress]),
     );
     if (hasIntraConflict) {
+      // Conflict path only: now resolve the canonical addresses (CoinGecko) to
+      // decide which pair is the real one. Rare, so the CG lookups don't slow
+      // the common case.
+      token0CanonicalAddress = pair.token0.coingeckoCoinId
+        ? await fetchCanonicalContract(pair.token0.coingeckoCoinId, pair.chain, { now })
+        : null;
+      token1CanonicalAddress = pair.token1.coingeckoCoinId
+        ? await fetchCanonicalContract(pair.token1.coingeckoCoinId, pair.chain, { now })
+        : null;
       const canonicalKnown = !!token0CanonicalAddress && !!token1CanonicalAddress;
       const thisMatchesCanonical =
         addrEq(pair.token0.contractAddress, token0CanonicalAddress) &&

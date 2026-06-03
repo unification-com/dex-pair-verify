@@ -16,7 +16,8 @@
     "db:push:test": "dotenv -e .env.test -- prisma db push --skip-generate",
     "find-duplicates": "tsx import/find_duplicates.ts",
     "dump": "tsx import/dump.ts",
-    "postinstall": "simple-git-hooks"
+    "postinstall": "simple-git-hooks",
+    "verify-gt": "tsx import/verify_gt.ts"
   },
   "simple-git-hooks": {
     "pre-commit": "yarn lint-staged"

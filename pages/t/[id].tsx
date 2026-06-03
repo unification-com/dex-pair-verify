@@ -58,6 +58,10 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
         },
     });
 
+    if (token === null) {
+        return { notFound: true }
+    }
+
     const similarTokens = await prisma.token.findMany({
         where: {
             symbol: token.symbol,

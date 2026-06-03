@@ -10,7 +10,17 @@ export type SourceEntry = {
   canonicalFactoryAddress?: string;
   onCoinGeckoTerminal?: boolean;
   last_page?: number;
+  // GeckoTerminal slugs — only needed when they differ from our internal
+  // chain/dex ids (e.g. dex `bsc_pancakeswap_v3` → GT `pancakeswap-v3-bsc`).
+  // Verified against GT's /networks + /networks/{n}/dexes via `yarn verify-gt`.
+  gtNetwork?: string;
+  gtDex?: string;
 };
+
+// The GeckoTerminal network slug for a source (defaults to our chain id).
+export const gtNetworkFor = (s: SourceEntry): string => s.gtNetwork ?? s.chain;
+// The GeckoTerminal dex slug for a source (defaults to our dex id).
+export const gtDexFor = (s: SourceEntry): string => s.gtDex ?? s.dex;
 
 const sources = dataSources as SourceEntry[];
 

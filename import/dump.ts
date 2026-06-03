@@ -5,6 +5,10 @@
 //
 // Commands:
 //   truncate-all                 Truncate EVERY table. Irreversible.
+//   truncate-dex                 Truncate the DEX + cache tables (pairs, tokens,
+//                                thresholds, duplicates, staging, canonical
+//                                addresses) but NOT the auth tables — a clean
+//                                reset for re-ingest without losing your login.
 //   truncate-staging             Truncate only the PairStaging table.
 //   delete-pairs <chain> <dex>   Delete pairs (+ duplicate links + staging) for one (chain, dex).
 //   delete-tokens <chain>        Delete tokens (+ duplicate-symbol links) for one chain.
@@ -42,6 +46,23 @@ const truncateAll = async (): Promise<void> => {
 
   console.log("Truncating", tables);
   await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${tables} CASCADE;`);
+};
+
+// DEX + cache tables — everything except the next-auth tables.
+const DEX_TABLES = [
+  "DuplicatePairs",
+  "DuplicateTokenSymbols",
+  "Pair",
+  "PairStaging",
+  "Token",
+  "Threshold",
+  "CanonicalAddress",
+];
+
+const truncateDex = async (): Promise<void> => {
+  const tables = DEX_TABLES.map((name) => `"public"."${name}"`).join(", ");
+  console.log("Truncating", tables);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${tables} RESTART IDENTITY CASCADE;`);
 };
 
 const truncateStaging = async (): Promise<void> => {
@@ -87,6 +108,7 @@ const usage = (): void => {
 
 Commands:
   truncate-all                 Truncate EVERY table. Irreversible.
+  truncate-dex                 Truncate DEX + cache tables (keeps auth/login).
   truncate-staging             Truncate only PairStaging.
   delete-pairs <chain> <dex>   Delete pairs for one (chain, dex).
   delete-tokens <chain>        Delete tokens for one chain.
@@ -104,6 +126,15 @@ const main = async (): Promise<void> => {
         return;
       }
       await truncateAll();
+      console.log("Done.");
+      break;
+    }
+    case "truncate-dex": {
+      if (!(await confirm(`Truncate the DEX + cache tables in "${db}" (keeps auth/login)?`))) {
+        console.log("Aborted.");
+        return;
+      }
+      await truncateDex();
       console.log("Done.");
       break;
     }

@@ -24,6 +24,10 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
     },
   });
 
+  if (pair === null) {
+    return { notFound: true };
+  }
+
   const pairs = await prisma.pair.findMany({
     where: {
       OR: [

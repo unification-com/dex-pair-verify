@@ -285,7 +285,7 @@ const ListPairs: React.FC<Props> = (props) => {
                             </p>
                         </>
                     }
-                    <div className="bulk-bar">
+                    <div style={{ margin: "0.5rem 0", padding: "0.5rem", background: "#f4f4f4", border: "1px solid #ddd" }}>
                         <strong>{selected.size}</strong> selected&nbsp;&nbsp;
                         <button type="button" disabled={selected.size === 0} onClick={() => bulkAction("approve")}>Approve</button>
                         &nbsp;
@@ -294,14 +294,6 @@ const ListPairs: React.FC<Props> = (props) => {
                         <button type="button" disabled={selected.size === 0} onClick={() => bulkAction("rescan")}>Re-run verdict</button>
                         &nbsp;
                         <button type="button" disabled={selected.size === 0} onClick={() => setSelected(new Set())}>Clear</button>
-                        <style jsx>{`
-                            .bulk-bar {
-                                margin: 0.5rem 0;
-                                padding: 0.5rem;
-                                background: #f4f4f4;
-                                border: 1px solid #ddd;
-                            }
-                        `}</style>
                     </div>
                     <Pagination
                         page={props.page}
