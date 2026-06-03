@@ -8,10 +8,20 @@
 
 import { utils as web3Utils } from "web3";
 
+import { fetchWithBackoff } from "./httpBackoff";
 import prisma from "./prisma";
 import { runVerdictForPair } from "./verdictRunner";
 
-const GT_BASE = "https://api.geckoterminal.com/api/v2";
+// With a (free Demo) CoinGecko API key, use CoinGecko's keyed on-chain
+// endpoints — same data as GeckoTerminal, but a dedicated rate limit instead of
+// the shared-IP public one. Without a key, fall back to the public GT API.
+const GECKO_API_KEY = process.env.GECKO_API_KEY ?? "";
+const GT_BASE = GECKO_API_KEY
+  ? "https://api.coingecko.com/api/v3/onchain"
+  : "https://api.geckoterminal.com/api/v2";
+const GT_HEADERS: Record<string, string> | undefined = GECKO_API_KEY
+  ? { "x-cg-demo-api-key": GECKO_API_KEY }
+  : undefined;
 
 // --- GeckoTerminal response shapes (only the fields we consume) ----------
 
@@ -40,37 +50,35 @@ type GtToken = {
     symbol: string | null;
     decimals: number | null;
     coingecko_coin_id: string | null;
-    price_usd: string | null;
-    market_cap_usd: string | null;
-    total_supply: string | null;
-    volume_usd: { h24: string | null } | null;
+    // Only present on the standalone /tokens endpoint, not the embedded
+    // include= tokens — optional so both shapes type-check.
+    price_usd?: string | null;
+    market_cap_usd?: string | null;
+    total_supply?: string | null;
+    volume_usd?: { h24: string | null } | null;
   };
 };
 
-export type PoolPageFetcher = (chain: string, dex: string, page: number) => Promise<GtPool[]>;
-export type TokensFetcher = (chain: string, addresses: string[]) => Promise<GtToken[]>;
+// One GeckoTerminal call per page returns the pools AND (via `include`) their
+// base/quote tokens embedded — so we don't make a second tokens call. Halves
+// the request rate against GT's free-tier limit.
+export type PoolPage = { pools: GtPool[]; tokens: GtToken[] };
+export type PoolPageFetcher = (chain: string, dex: string, page: number) => Promise<PoolPage>;
+
+async function gtFetch(url: string, label: string): Promise<{ data?: unknown[]; included?: unknown[] } | null> {
+  const res = await fetchWithBackoff(url, { headers: GT_HEADERS }, `ingest ${label}`);
+  if (!res) {
+    return null;
+  }
+  return (await res.json()) as { data?: unknown[]; included?: unknown[] };
+}
 
 const defaultPoolPageFetcher: PoolPageFetcher = async (chain, dex, page) => {
-  const url = `${GT_BASE}/networks/${chain}/dexes/${dex}/pools?page=${page}&sort=h24_tx_count_desc`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    return [];
-  }
-  const json = await res.json();
-  return (json?.data as GtPool[]) ?? [];
-};
-
-const defaultTokensFetcher: TokensFetcher = async (chain, addresses) => {
-  if (addresses.length === 0) {
-    return [];
-  }
-  const url = `${GT_BASE}/networks/${chain}/tokens/multi/${addresses.join("%2C")}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    return [];
-  }
-  const json = await res.json();
-  return (json?.data as GtToken[]) ?? [];
+  const url = `${GT_BASE}/networks/${chain}/dexes/${dex}/pools?page=${page}&sort=h24_tx_count_desc&include=base_token,quote_token`;
+  const json = await gtFetch(url, `pools ${chain}/${dex} p${page}`);
+  const pools = (json?.data as GtPool[]) ?? [];
+  const tokens = ((json?.included as ({ type?: string } & GtToken)[]) ?? []).filter((r) => r.type === "token");
+  return { pools, tokens };
 };
 
 // --- helpers -------------------------------------------------------------
@@ -230,6 +238,7 @@ async function upsertPair(
 
 export type IngestPageResult = {
   hadData: boolean;
+  poolCount: number;
   pairs: number;
   tallies: Record<string, number>;
 };
@@ -241,33 +250,24 @@ export async function ingestPoolPage(
   chain: string,
   dex: string,
   page: number,
-  opts: { now?: number; poolFetcher?: PoolPageFetcher; tokensFetcher?: TokensFetcher; gtNetwork?: string; gtDex?: string } = {},
+  opts: { now?: number; poolFetcher?: PoolPageFetcher; gtNetwork?: string; gtDex?: string } = {},
 ): Promise<IngestPageResult> {
   const now = opts.now ?? Math.floor(Date.now() / 1000);
   const poolFetcher = opts.poolFetcher ?? defaultPoolPageFetcher;
-  const tokensFetcher = opts.tokensFetcher ?? defaultTokensFetcher;
   // Our internal chain/dex ids (stored on the row) can differ from
   // GeckoTerminal's slugs (e.g. bsc_pancakeswap_v3 vs pancakeswap-v3-bsc) —
   // query GT by the slug, store by the internal id.
   const gtNetwork = opts.gtNetwork ?? chain;
   const gtDex = opts.gtDex ?? dex;
 
-  const pools = await poolFetcher(gtNetwork, gtDex, page);
+  const { pools, tokens } = await poolFetcher(gtNetwork, gtDex, page);
   if (pools.length === 0) {
-    return { hadData: false, pairs: 0, tallies: {} };
+    return { hadData: false, poolCount: 0, pairs: 0, tallies: {} };
   }
 
-  // Collect the distinct token addresses on this page and hydrate them once.
-  const tokenAddrs = new Set<string>();
-  for (const p of pools) {
-    const b = addressFromGtId(p.relationships.base_token?.data?.id);
-    const q = addressFromGtId(p.relationships.quote_token?.data?.id);
-    if (b) tokenAddrs.add(b);
-    if (q) tokenAddrs.add(q);
-  }
-  const gtTokens = await tokensFetcher(gtNetwork, Array.from(tokenAddrs));
+  // Tokens arrive embedded in the pools response (via GT `include`).
   const tokenMap = new Map<string, GtTokenData>();
-  for (const t of gtTokens) {
+  for (const t of tokens) {
     const addr = addressFromGtId(t.attributes.address) ?? web3Utils.toChecksumAddress(t.attributes.address);
     tokenMap.set(addr, mapGtToken(t));
   }
@@ -308,5 +308,5 @@ export async function ingestPoolPage(
     pairs += 1;
   }
 
-  return { hadData: true, pairs, tallies };
+  return { hadData: true, poolCount: pools.length, pairs, tallies };
 }

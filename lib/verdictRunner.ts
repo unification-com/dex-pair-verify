@@ -9,7 +9,7 @@
 import { canonicalKey, fetchCanonicalContract } from "./canonical";
 import prisma from "./prisma";
 import { getCanonicalFactoryAddress } from "./sourceConfig";
-import { VERIFIED_STATUSES } from "./status";
+import { isVerifiedStatus, VERIFIED_STATUSES } from "./status";
 import {
   DEFAULT_VERDICT_CONFIG,
   evaluatePair,
@@ -226,6 +226,20 @@ export async function runVerdictForPair(
         verdictEvidence: result.evidence,
       },
     });
+
+    // A verified pair implies its tokens are legit — promote them to
+    // AutoVerified so the token views reflect it. Forward-only (never demote,
+    // since a token may live in other good pairs) and R6-safe (operator-set
+    // Manual* token statuses are left alone).
+    if (isVerifiedStatus(result.verdict)) {
+      await prisma.token.updateMany({
+        where: {
+          id: { in: [pair.token0Id, pair.token1Id] },
+          status: { notIn: [TokenPairStatus.ManualVerified, TokenPairStatus.ManualRejected] },
+        },
+        data: { status: TokenPairStatus.AutoVerified, verificationMethod: VerificationMethod.Auto },
+      });
+    }
   }
 
   return { found: true, persisted: persist, skippedManual: false, result };

@@ -5,8 +5,10 @@ import Layout from "../../components/Layout";
 import Status from "../../components/Status";
 import { TokenPairStatus } from "../../types/types";
 
-// Pace between GeckoTerminal calls to stay under the free-tier rate limit.
-const CALL_DELAY_MS = 2000;
+// Each page makes one GeckoTerminal call (pools with embedded tokens). 4.5s
+// pacing ≈ 13 req/min — well under the free-tier 30/min, with margin for the
+// shared-IP throttle when no GECKO_API_KEY is set.
+const CALL_DELAY_MS = 4500;
 
 const TALLY_ORDER: string[] = [
   TokenPairStatus.AutoVerified,

@@ -5,8 +5,10 @@ import Layout from "../../components/Layout";
 import Status from "../../components/Status";
 import { TokenPairStatus } from "../../types/types";
 
-// Pace between batches so we don't burst CoinGecko's rate limit on first run.
-const BATCH_DELAY_MS = 1500;
+// Pace between batches, matching the ingest cadence. Re-validate only hits
+// CoinGecko on an intra-chain conflict (rare), and those calls share the
+// ingest's 65s 429 back-off (lib/httpBackoff) — so this is mostly headroom.
+const BATCH_DELAY_MS = 4500;
 const BATCH_SIZE = 25;
 
 // Verdict buckets shown in the live tally, in a sensible reading order.

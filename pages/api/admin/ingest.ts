@@ -47,6 +47,8 @@ export default async function handler(
             gtDex: source.gtDex,
         })
 
+        console.log(`[ingest] ${source.chain}/${source.dex} p${page}: ${result.poolCount} pools, ${result.pairs} stored`, result.tallies)
+
         const lastPage = source.last_page ?? 1
         let nextSourceIndex = idx
         let nextPage = page + 1

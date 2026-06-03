@@ -14,6 +14,7 @@
 
 import { utils as web3Utils } from "web3";
 
+import { fetchWithBackoff } from "./httpBackoff";
 import prisma from "./prisma";
 
 // Minimal structural input — deliberately not PairProps/Prisma-shaped so the
@@ -76,8 +77,8 @@ const defaultPlatformsFetcher: PlatformsFetcher = async (cgId) => {
     `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(cgId)}` +
     `?localization=false&tickers=false&market_data=false` +
     `&community_data=false&developer_data=false&sparkline=false`;
-  const res = await fetch(url);
-  if (!res.ok) {
+  const res = await fetchWithBackoff(url, undefined, `canonical ${cgId}`);
+  if (!res) {
     return null;
   }
   const json = await res.json();

@@ -60,8 +60,7 @@ async function seedCanonical() {
 
 const opts = () => ({
   now: NOW,
-  poolFetcher: async () => onePool() as never,
-  tokensFetcher: async () => tokensFor() as never,
+  poolFetcher: async () => ({ pools: onePool(), tokens: tokensFor() }) as never,
 });
 
 beforeEach(async () => {
@@ -101,7 +100,7 @@ describe("ingestPoolPage", () => {
   it("reports hadData=false for an empty page (end of pagination)", async () => {
     const result = await ingestPoolPage("eth", "uniswap_v3", 99, {
       ...opts(),
-      poolFetcher: async () => [],
+      poolFetcher: async () => ({ pools: [], tokens: [] }) as never,
     });
     expect(result.hadData).toBe(false);
     expect(result.pairs).toBe(0);
@@ -119,7 +118,7 @@ describe("ingestPoolPage", () => {
   it("skips a pool when GeckoTerminal returns no token data for it", async () => {
     const result = await ingestPoolPage("eth", "uniswap_v3", 1, {
       ...opts(),
-      tokensFetcher: async () => [], // no token data
+      poolFetcher: async () => ({ pools: onePool(), tokens: [] }) as never, // no token data
     });
     expect(result.pairs).toBe(0);
     expect(await testPrisma.pair.count()).toBe(0);

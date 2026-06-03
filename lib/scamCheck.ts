@@ -7,6 +7,7 @@
 
 import { Prisma } from "@prisma/client";
 
+import { fetchWithBackoff } from "./httpBackoff";
 import prisma from "./prisma";
 import { VERIFIED_STATUSES } from "./status";
 import { TokenPairStatus } from "../types/types";
@@ -64,8 +65,8 @@ export type SecurityFetcher = (chainId: string, address: string) => Promise<Toke
 
 const defaultFetcher: SecurityFetcher = async (chainId, address) => {
   const url = `https://api.gopluslabs.io/api/v1/token_security/${chainId}?contract_addresses=${address}`;
-  const res = await fetch(url);
-  if (!res.ok) {
+  const res = await fetchWithBackoff(url, undefined, `scamcheck ${chainId}`);
+  if (!res) {
     return null;
   }
   const json = await res.json();
