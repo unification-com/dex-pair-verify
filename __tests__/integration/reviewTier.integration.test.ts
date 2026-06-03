@@ -20,36 +20,40 @@ afterAll(async () => {
 });
 
 describe("computeReviewTier", () => {
-  it("flags an impostor reason as spam", async () => {
-    const t0 = await seedToken();
-    const t1 = await seedToken();
-    const tier = await computeReviewTier("a token address does not match the canonical contract (possible impostor)", t0, t1);
-    expect(tier).toBe("spam");
+  const tok = (over: Partial<{ symbol: string; coingeckoCoinId: string; isScamFlagged: boolean }> = {}) => ({
+    id: "t",
+    chain: "eth",
+    symbol: "AAA",
+    coingeckoCoinId: "",
+    isScamFlagged: false,
+    ...over,
   });
 
-  it("flags a scam-flagged token as spam", async () => {
-    const t0 = await seedToken({ isScamFlagged: true });
-    const t1 = await seedToken();
-    expect(await computeReviewTier(NEEDS_REVIEW_REASON, t0, t1)).toBe("spam");
+  it("flags an impostor reason as spam", () => {
+    expect(computeReviewTier("a token address does not match the canonical contract (possible impostor)", tok(), tok())).toBe("spam");
   });
 
-  it("flags an exact-symbol spoof of a known cgId token as spam", async () => {
-    await seedToken({ symbol: "USDC", coingeckoCoinId: "usd-coin" }); // the real one (has cgId)
-    const fake = await seedToken({ symbol: "USDC", coingeckoCoinId: "" }); // no-cgId impostor
-    const other = await seedToken({ coingeckoCoinId: "weth" });
-    expect(await computeReviewTier(NEEDS_REVIEW_REASON, fake, other)).toBe("spam");
+  it("flags a scam-flagged token as spam", () => {
+    expect(computeReviewTier(NEEDS_REVIEW_REASON, tok({ isScamFlagged: true }), tok())).toBe("spam");
   });
 
-  it("does not treat a cgId token as a spoof of itself", async () => {
-    const real = await seedToken({ symbol: "USDC", coingeckoCoinId: "usd-coin" });
-    const other = await seedToken({ coingeckoCoinId: "weth" });
-    expect(await computeReviewTier(NEEDS_REVIEW_REASON, real, other)).toBe("review");
+  it("flags a no-cgId token faking a MAJOR token (USDC/WETH) as spam, case-insensitively", () => {
+    expect(computeReviewTier(NEEDS_REVIEW_REASON, tok({ symbol: "USDC" }), tok())).toBe("spam");
+    expect(computeReviewTier(NEEDS_REVIEW_REASON, tok({ symbol: "weth" }), tok())).toBe("spam");
   });
 
-  it("defaults a genuine-but-uncertain pair to review", async () => {
-    const t0 = await seedToken({ symbol: "AAA" });
-    const t1 = await seedToken({ symbol: "BBB" });
-    expect(await computeReviewTier(NEEDS_REVIEW_REASON, t0, t1)).toBe("review");
+  it("does NOT flag the real (cgId-bearing) major token", () => {
+    expect(computeReviewTier(NEEDS_REVIEW_REASON, tok({ symbol: "USDC", coingeckoCoinId: "usd-coin" }), tok())).toBe("review");
+  });
+
+  it("does NOT flag a generic ticker collision (SPCX / AI / ROBO)", () => {
+    for (const symbol of ["SPCX", "AI", "ROBO", "PAW"]) {
+      expect(computeReviewTier(NEEDS_REVIEW_REASON, tok({ symbol }), tok())).toBe("review");
+    }
+  });
+
+  it("defaults a genuine-but-uncertain pair to review", () => {
+    expect(computeReviewTier(NEEDS_REVIEW_REASON, tok({ symbol: "AAA" }), tok({ symbol: "BBB" }))).toBe("review");
   });
 });
 

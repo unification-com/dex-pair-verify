@@ -7,9 +7,7 @@
 // Honest limitation: obscure meme tokens (ETHERIUM, FLOKIUS…) look real to GoPlus
 // (open-source, real holders), so they CAN'T be auto-separated from genuine small
 // pools and correctly land in "review". The triage reliably clears only the
-// clear-cut spam (impostor / scam-flagged / exact-symbol spoof of a known token).
-
-import prisma from "./prisma";
+// clear-cut spam (impostor / scam-flagged / fake-major-token).
 
 export type ReviewTier = "spam" | "review";
 
@@ -24,25 +22,22 @@ export type TierToken = {
 
 const hasCgId = (cgId: string): boolean => cgId.trim().length > 0;
 
-// A no-cgId token whose symbol exactly matches a DIFFERENT cgId-bearing token on
-// the same chain — i.e. a fake "USDC"/"WETH"/… of a token CoinGecko knows. The
-// real one has the cgId; this impostor doesn't.
-async function spoofsKnownSymbol(t: TierToken): Promise<boolean> {
-  if (hasCgId(t.coingeckoCoinId) || !t.symbol) {
-    return false;
-  }
-  const knownTwins = await prisma.token.count({
-    where: { chain: t.chain, symbol: t.symbol, coingeckoCoinId: { not: "" }, id: { not: t.id } },
-  });
-  return knownTwins > 0;
-}
+// Symbols reserved by convention for blue-chip tokens (stablecoins + wrapped
+// natives + BTC/ETH/BNB). A NO-cgId token using one of these is almost certainly
+// a fake of the real token (the genuine ones always carry a CoinGecko id). We
+// deliberately exclude short/generic tickers (AI, ROBO, SPCX, …) that many
+// unrelated tokens legitimately reuse — flagging those mislabels genuine pools.
+const MAJOR_TOKEN_SYMBOLS = new Set([
+  "USDC", "USDT", "DAI", "BUSD", "TUSD", "FRAX", "USDD", "USDP", "GUSD", "USDC.E",
+  "WETH", "ETH", "WBTC", "BTC", "WBNB", "BNB", "WMATIC", "WPOL", "WXDAI", "WAVAX",
+]);
+
+// A no-cgId token impersonating a major token by symbol (e.g. a fake "USDC").
+const fakesMajorToken = (t: TierToken): boolean =>
+  !hasCgId(t.coingeckoCoinId) && MAJOR_TOKEN_SYMBOLS.has(t.symbol.trim().toUpperCase());
 
 // Triage a NeedsReview pair. `reason` is the verdict's verificationComment.
-export async function computeReviewTier(
-  reason: string,
-  token0: TierToken,
-  token1: TierToken,
-): Promise<ReviewTier> {
+export function computeReviewTier(reason: string, token0: TierToken, token1: TierToken): ReviewTier {
   // Impostor: a token address ≠ its CoinGecko-canonical contract (T3).
   if (reason.toLowerCase().includes("impostor")) {
     return "spam";
@@ -51,8 +46,8 @@ export async function computeReviewTier(
   if (token0.isScamFlagged || token1.isScamFlagged) {
     return "spam";
   }
-  // Exact-symbol spoof of a known (cgId-bearing) token.
-  if ((await spoofsKnownSymbol(token0)) || (await spoofsKnownSymbol(token1))) {
+  // A no-cgId token faking a major token by symbol.
+  if (fakesMajorToken(token0) || fakesMajorToken(token1)) {
     return "spam";
   }
   return "review";

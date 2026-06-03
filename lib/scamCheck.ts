@@ -131,7 +131,10 @@ export async function runScamCheckForToken(
 
   const security = await fetcher(chainId, token.contractAddress);
   if (security === null) {
-    // Transient failure / no data — don't clobber existing metadata.
+    // No GoPlus data (address not indexed) or a transient miss. Stamp the attempt
+    // so the batch loop terminates instead of re-fetching this token forever — a
+    // later job (newer jobStartedAt) re-checks. Don't clobber existing metadata.
+    await prisma.token.update({ where: { id: token.id }, data: { scamCheckedAt: now } });
     return { checked: false, flagged: false, reasons: [], demotedPairs: 0 };
   }
 

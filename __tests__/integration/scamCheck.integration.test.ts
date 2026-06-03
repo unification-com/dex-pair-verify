@@ -68,6 +68,15 @@ describe("runScamCheckForToken", () => {
     const token = await testPrisma.token.findUnique({ where: { id: t0.id } });
     expect(token?.isScamFlagged).toBe(false);
   });
+
+  it("stamps the attempt when GoPlus returns no data, so the batch can't loop", async () => {
+    const t0 = await seedToken({ coingeckoCoinId: "weth" });
+    const out = await runScamCheckForToken(t0.id, { now: NOW, fetcher: async () => null });
+    expect(out.checked).toBe(false);
+    const token = await testPrisma.token.findUnique({ where: { id: t0.id } });
+    expect(token?.scamCheckedAt).toBe(NOW); // stamped → drops out of the to-check set
+    expect(token?.isScamFlagged).toBe(false); // metadata untouched
+  });
 });
 
 describe("tokensToScamCheck", () => {
