@@ -10,6 +10,7 @@ import { utils as web3Utils } from "web3";
 
 import { fetchWithBackoff } from "./httpBackoff";
 import prisma from "./prisma";
+import { thresholdSeedData } from "./sourceConfig";
 import { runVerdictForPair } from "./verdictRunner";
 
 // With a (free Demo) CoinGecko API key, use CoinGecko's keyed on-chain
@@ -259,6 +260,13 @@ export async function ingestPoolPage(
   // query GT by the slug, store by the internal id.
   const gtNetwork = opts.gtNetwork ?? chain;
   const gtDex = opts.gtDex ?? dex;
+
+  // Ensure the per-(chain, dex) Threshold row exists so the verdict applies this
+  // source's tuned floors (liquidity + minTxCount) INLINE at ingest — not only
+  // after a /admin/thresholds visit. Idempotent; creates once per source.
+  if (!(await prisma.threshold.findFirst({ where: { chain, dex } }))) {
+    await prisma.threshold.create({ data: thresholdSeedData(chain, dex) });
+  }
 
   const { pools, tokens } = await poolFetcher(gtNetwork, gtDex, page);
   if (pools.length === 0) {
