@@ -7,27 +7,21 @@
 
 import { Prisma } from "@prisma/client";
 
+import { evmChainId, EVM_SUPPORTED_CHAINS } from "./chains";
 import { fetchWithBackoff } from "./httpBackoff";
 import prisma from "./prisma";
 import { VERIFIED_STATUSES } from "./status";
 import { TokenPairStatus } from "../types/types";
 
-// GoPlus numeric chain id per our chain key. null = GoPlus doesn't index it
+// GoPlus indexes by EVM chain id (as a string). null = not an EVM chain we map
 // (e.g. qom), so the check is skipped — same posture as its CG/GT coverage.
-const GOPLUS_CHAIN_ID: Record<string, string | null> = {
-  eth: "1",
-  bsc: "56",
-  polygon_pos: "137",
-  xdai: "100",
-  qom: null,
+export const goplusChainId = (chain: string): string | null => {
+  const id = evmChainId(chain);
+  return id === null ? null : String(id);
 };
 
-export const goplusChainId = (chain: string): string | null => GOPLUS_CHAIN_ID[chain] ?? null;
-
 // Chains GoPlus indexes — used to scope the scan-check batch query.
-export const GOPLUS_SUPPORTED_CHAINS: string[] = Object.entries(GOPLUS_CHAIN_ID)
-  .filter(([, id]) => id !== null)
-  .map(([chain]) => chain);
+export const GOPLUS_SUPPORTED_CHAINS: string[] = EVM_SUPPORTED_CHAINS;
 
 // Tokens worth scam-checking: those belonging to a verified pair, on a
 // GoPlus-supported chain, not yet checked this job (scamCheckedAt <
@@ -63,7 +57,9 @@ const HIGH_TAX = 0.1;
 export type TokenSecurity = Record<string, unknown>;
 export type SecurityFetcher = (chainId: string, address: string) => Promise<TokenSecurity | null>;
 
-const defaultFetcher: SecurityFetcher = async (chainId, address) => {
+// The default GoPlus token-security fetch. Exported so the identity resolver
+// (T1) reuses the exact same call + back-off rather than duplicating it (DRY).
+export const fetchTokenSecurity: SecurityFetcher = async (chainId, address) => {
   const url = `https://api.gopluslabs.io/api/v1/token_security/${chainId}?contract_addresses=${address}`;
   const res = await fetchWithBackoff(url, undefined, `scamcheck ${chainId}`);
   if (!res) {
@@ -120,7 +116,7 @@ export async function runScamCheckForToken(
   opts: { now?: number; fetcher?: SecurityFetcher } = {},
 ): Promise<ScamCheckOutcome> {
   const now = opts.now ?? Math.floor(Date.now() / 1000);
-  const fetcher = opts.fetcher ?? defaultFetcher;
+  const fetcher = opts.fetcher ?? fetchTokenSecurity;
 
   const token = await prisma.token.findUnique({ where: { id: tokenId } });
   if (!token) {
