@@ -350,6 +350,19 @@ describe("evaluatePair", () => {
     expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
   });
 
+  it("T2: routes a factory mismatch to NeedsReview (not auto-reject)", () => {
+    // Pool's on-chain factory differs from the canonical uniswap_v3 factory.
+    const r = evaluatePair(makePair(), makeCtx({ pairFactoryAddress: "0x000000000000000000000000000000000000fac7" }));
+    expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
+    expect(r.reason).toMatch(/factory/i);
+  });
+
+  it("T2: auto-verifies when the on-chain factory matches the canonical factory", () => {
+    const r = evaluatePair(makePair(), makeCtx({ pairFactoryAddress: UNI_V3_FACTORY }));
+    expect(r.verdict).toBe(TokenPairStatus.AutoVerified);
+    expect(r.confidence).toBe(1); // the factory fence now passes too
+  });
+
   it("routes a scam-flagged token to NeedsReview, even with a verified sibling", () => {
     const r = evaluatePair(makePair(), makeCtx({ tokenScamFlagged: true, hasVerifiedSibling: true }));
     expect(r.verdict).toBe(TokenPairStatus.NeedsReview);

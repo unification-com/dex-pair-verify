@@ -37,6 +37,7 @@ export type PairWithTokens = {
   dex: string;
   reserveUsd: number;
   txCount: number;
+  factoryAddress: string | null;
   status: TokenPairStatus;
   token0PriceCg: number;
   token0PriceDex: number;
@@ -150,7 +151,7 @@ export async function buildVerdictContext(
     hasVerifiedSibling,
     intraChainImpostorLoser,
     tokenScamFlagged: pair.token0.isScamFlagged || pair.token1.isScamFlagged,
-    pairFactoryAddress: null, // populated by the A.4.1 ingest RPC read
+    pairFactoryAddress: pair.factoryAddress, // read on-chain by the factory-check pass (T2)
     canonicalFactoryAddress: getCanonicalFactoryAddress(pair.chain, pair.dex),
   };
 

@@ -18,6 +18,7 @@
     "dump": "tsx import/dump.ts",
     "revalidate": "tsx import/revalidate.ts",
     "identitycheck": "tsx import/identitycheck.ts",
+    "factorycheck": "tsx import/factorycheck.ts",
     "postinstall": "simple-git-hooks",
     "verify-gt": "tsx import/verify_gt.ts"
   },

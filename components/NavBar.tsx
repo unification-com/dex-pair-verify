@@ -83,6 +83,18 @@ function Navbar() {
                             <a data-active={isActive("/admin/scancheck")}>Scam Check</a>
                         </Link>
                     </span>
+                    &nbsp;&nbsp;&nbsp;
+                    <span key={"navbar_admin_identitycheck"}>
+                        <Link href="/admin/identitycheck">
+                            <a data-active={isActive("/admin/identitycheck")}>Identity Check</a>
+                        </Link>
+                    </span>
+                    &nbsp;&nbsp;&nbsp;
+                    <span key={"navbar_admin_factorycheck"}>
+                        <Link href="/admin/factorycheck">
+                            <a data-active={isActive("/admin/factorycheck")}>Factory Check</a>
+                        </Link>
+                    </span>
                     &nbsp;
                 </>
             )}

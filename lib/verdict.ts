@@ -440,6 +440,16 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
     return result(TokenPairStatus.NeedsReview, "a token is flagged by the scam-list");
   }
 
+  // 3c. Factory mismatch (T2): the pool's on-chain factory() does not match the
+  //     canonical DEX factory — a possible impostor, OR a legit pool from the
+  //     DEX's secondary factory. Ambiguous, so route to review rather than
+  //     hard-reject (cf. the token-address impostor fence, which IS a reject).
+  //     Skips when the factory is unknown (fence weight 0 ⇒ ok), so this is inert
+  //     until the factory-check pass reads it.
+  if (!f.factory.ok) {
+    return result(TokenPairStatus.NeedsReview, f.factory.reason);
+  }
+
   // 4. A verified cross-source sibling vouches for the key (+ liquidity passes)
   //    — a strong enough signal to auto-verify even past the mid-band rule.
   if (ctx.hasVerifiedSibling && f.liquidity.ok) {

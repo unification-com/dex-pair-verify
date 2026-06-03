@@ -143,6 +143,12 @@ model Pair {
   // The verdict engine's per-fence evidence (observed values vs thresholds),
   // surfaced on the pair detail page so the operator can audit a verdict.
   verdictEvidence          Json?
+  // On-chain factory address read from the pool contract's factory() (T2),
+  // compared against the canonical factory for the (chain, dex) to catch pools
+  // not deployed by the real DEX. Immutable per pool, so read once; nullable
+  // until the factory-check pass reads it. factoryCheckedAt records the attempt.
+  factoryAddress           String?
+  factoryCheckedAt         Int @default(0)
   duplicatePairs           DuplicatePairs[] @relation("OriginalPair")
   dp2                      DuplicatePairs[] @relation("DuplicatePair")
 
