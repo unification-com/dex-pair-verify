@@ -183,3 +183,114 @@ export async function buildExportIndex(opts: { now?: number } = {}): Promise<Exp
 export async function exportLastModified(chain: string, dex: string): Promise<number> {
   return pairsModifiedAt({ chain, dex });
 }
+
+// --- Public supported-pairs catalogue (T10) ------------------------------
+//
+// The PUBLIC, ungated "menu" of pairs an OoO user can query (e.g. WETH.USDC.AD)
+// — distinct from the gated provider feeds (buildExportV2 / buildExportIndex).
+// Carries NO trust internals (per-pool confidence, verdict reasons, contract
+// addresses, the curation floor) — only what's queryable, deduped by canonical
+// key across chains/DEXs. Safe to expose; cacheable.
+
+export const PUBLIC_CATALOGUE_SCHEMA_VERSION = 1;
+const CATALOGUE_QUERY_FORMAT = "BASE.TARGET.AD";
+
+export type PublicPairEntry = {
+  base: string; // symbols a user queries with (canonical order; queryable either way)
+  target: string;
+  canonicalKey: string | null; // cross-source group key; null for unkeyable (no-cgId) pairs
+  sources: number; // number of verified pools backing it
+  chains: string[]; // distinct chains it's available on
+  totalLiquidityUsd: number; // aggregate backing depth (a public reliability hint)
+};
+
+export type PublicCatalogue = {
+  schemaVersion: number;
+  generatedAt: number;
+  queryFormat: string;
+  pairs: PublicPairEntry[];
+};
+
+const cgNorm = (id: string | null | undefined): string => (id ?? "").trim().toLowerCase();
+
+// Build the public catalogue: every verified pair, grouped to one entry per
+// logical pair. Keyed pairs group by canonicalKey (so the same pair across
+// chains/DEXs collapses to one row); unkeyable verified pairs (no cgId) fall back
+// to grouping by their symbol pair so they still appear (no silent drop). Deepest
+// liquidity first.
+export async function buildPublicPairsCatalogue(opts: { now?: number } = {}): Promise<PublicCatalogue> {
+  const rows = await prisma.pair.findMany({
+    where: { status: { in: VERIFIED } },
+    select: {
+      chain: true,
+      reserveUsd: true,
+      canonicalKey: true,
+      token0: { select: { symbol: true, coingeckoCoinId: true } },
+      token1: { select: { symbol: true, coingeckoCoinId: true } },
+    },
+  });
+
+  type Group = {
+    base: string;
+    target: string;
+    canonicalKey: string | null;
+    chains: Set<string>;
+    sources: number;
+    totalLiquidityUsd: number;
+  };
+  const groups = new Map<string, Group>();
+
+  for (const r of rows) {
+    let groupKey: string;
+    let base: string;
+    let target: string;
+    if (r.canonicalKey) {
+      // base = the token whose cgId is the FIRST half of the key (the canonical
+      // key is "cgIdA:cgIdB", sorted; cgIds never contain ":"). Deterministic, so
+      // every pool in the group resolves the same base/target.
+      const cgA = r.canonicalKey.split(":")[0];
+      const t0First = cgNorm(r.token0.coingeckoCoinId) === cgA;
+      base = t0First ? r.token0.symbol : r.token1.symbol;
+      target = t0First ? r.token1.symbol : r.token0.symbol;
+      groupKey = r.canonicalKey;
+    } else {
+      // No cgId → group by the order-independent symbol pair.
+      base = r.token0.symbol;
+      target = r.token1.symbol;
+      groupKey = `sym:${[base.toLowerCase(), target.toLowerCase()].sort().join("|")}`;
+    }
+
+    let g = groups.get(groupKey);
+    if (!g) {
+      g = { base, target, canonicalKey: r.canonicalKey, chains: new Set(), sources: 0, totalLiquidityUsd: 0 };
+      groups.set(groupKey, g);
+    }
+    g.chains.add(r.chain);
+    g.sources += 1;
+    g.totalLiquidityUsd += r.reserveUsd;
+  }
+
+  const pairs: PublicPairEntry[] = Array.from(groups.values())
+    .map((g) => ({
+      base: g.base,
+      target: g.target,
+      canonicalKey: g.canonicalKey,
+      sources: g.sources,
+      chains: Array.from(g.chains).sort(),
+      totalLiquidityUsd: Math.round(g.totalLiquidityUsd),
+    }))
+    .sort((a, b) => b.totalLiquidityUsd - a.totalLiquidityUsd);
+
+  return {
+    schemaVersion: PUBLIC_CATALOGUE_SCHEMA_VERSION,
+    generatedAt: opts.now ?? nowSeconds(),
+    queryFormat: CATALOGUE_QUERY_FORMAT,
+    pairs,
+  };
+}
+
+// Last-modified for the public catalogue — any verdict change anywhere can add or
+// remove a verified pair, so it's the max over ALL pairs (see pairsModifiedAt).
+export async function publicCatalogueLastModified(): Promise<number> {
+  return pairsModifiedAt({});
+}
