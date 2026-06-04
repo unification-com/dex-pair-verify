@@ -114,13 +114,26 @@ describe("buildExportIndex", () => {
 });
 
 describe("exportLastModified", () => {
-  it("returns the max lastChecked across verified pairs", async () => {
+  it("returns the latest lastChecked / verdictAt across the (chain,dex)'s pairs", async () => {
     await seedVerifiedPair({ lastChecked: 1500 });
     await seedVerifiedPair({ lastChecked: 4200 });
     expect(await exportLastModified("eth", "uniswap_v3")).toBe(4200);
   });
 
-  it("returns 0 when there are no verified pairs", async () => {
+  it("advances when a pair is DEMOTED out of the verified set, not just on ingest", async () => {
+    // A still-verified pair (old lastChecked) plus a pair just demoted to
+    // NeedsReview with a fresh verdictAt. The verified export's contents changed,
+    // so the modified-time must move — even though the demoted pair is no longer
+    // verified. Regression: a verified-only max(lastChecked) returned 1000 here
+    // and go-ooo would 304 past the demotion, still trusting the delisted pair.
+    await seedVerifiedPair({ lastChecked: 1000 });
+    const t0 = await seedToken({ symbol: "SCAM" });
+    const t1 = await seedToken({ symbol: "USDC", coingeckoCoinId: "usd-coin", decimals: 6 });
+    await seedPair(t0.id, t1.id, { status: TokenPairStatus.NeedsReview, lastChecked: 1000, verdictAt: 5000 });
+    expect(await exportLastModified("eth", "uniswap_v3")).toBe(5000);
+  });
+
+  it("returns 0 when there are no pairs", async () => {
     expect(await exportLastModified("eth", "uniswap_v3")).toBe(0);
   });
 });

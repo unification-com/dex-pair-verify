@@ -12,15 +12,16 @@ export const GECKO_API_KEY = process.env.GECKO_API_KEY ?? "";
 export const cgDemoHeaders = (): Record<string, string> | undefined =>
   GECKO_API_KEY ? { "x-cg-demo-api-key": GECKO_API_KEY } : undefined;
 
-// Minimum spacing between consecutive keyed CoinGecko calls. The budget is
-// SHARED across every keyed endpoint — ingest's on-chain pages AND canonical's
-// /api/v3 lookups both draw from it — so the binding limit is the tighter of the
-// two. Empirically the on-chain (/onchain) endpoint 429s well below the /api/v3
-// 30/min ceiling, so we pace at 4s (~15/min) to stay under it and never trip a
-// 429 at all: a single 429 costs a 65s back-off (RATE_LIMIT_BACKOFF_MS), which
-// dwarfs the extra ~1.5s/call, and both passes run unattended so the slower pace
-// is a non-cost. Without a key the public limit is lower still, so pace harder.
-export const CG_KEYED_CALL_SPACING_MS = GECKO_API_KEY ? 4000 : 8000;
+// Minimum spacing between consecutive keyed CoinGecko calls. The Demo key allows
+// 100 calls/min, SHARED across every keyed endpoint (ingest's /onchain pages +
+// canonical's /api/v3 lookups draw from one budget). We pace at 1s (~60/min) —
+// comfortably under 100/min with headroom for burst/jitter — so we proactively
+// avoid the 65s 429 back-off (RATE_LIMIT_BACKOFF_MS) without throttling need-
+// lessly. CRITICAL: this only holds if the key is actually applied — the header
+// must be present at request time (see lib/env.ts; the key is read eagerly here
+// at module load, so .env MUST be loaded first). Without a key, requests fall
+// back to the keyless ~30/min shared-IP public limit, so we pace far harder.
+export const CG_KEYED_CALL_SPACING_MS = GECKO_API_KEY ? 1000 : 8000;
 
 // The single choke-point for ALL keyed CoinGecko traffic (ingest + canonical) —
 // one paced fetcher so the two passes share one schedule and can't collectively

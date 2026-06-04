@@ -4,6 +4,8 @@
 // can never drift. Only verified pairs (operator-confirmed OR engine-auto-
 // verified) are ever emitted — see VERIFIED_STATUSES.
 
+import { Prisma } from "@prisma/client";
+
 import prisma from "./prisma";
 import { VERIFIED_STATUSES } from "./status";
 import { TokenPairStatus } from "../types/types";
@@ -60,6 +62,17 @@ const VERIFIED = [...VERIFIED_STATUSES];
 const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 
 const round4 = (n: number): number => Math.round(n * 1e4) / 1e4;
+
+// The "anything changed" timestamp for a set of pairs: the later of any verdict
+// transition (verdictAt — bumps on promote AND demote) or re-ingest
+// (lastChecked). Aggregated over ALL pairs in scope, not just verified, so a
+// DEMOTION still advances the signal — the demoted pair carries the change
+// timestamp but is no longer verified, so a verified-only max would miss it and
+// a polling go-ooo would keep serving the delisted pair on a stale 304.
+const pairsModifiedAt = async (where: Prisma.PairWhereInput): Promise<number> => {
+  const agg = await prisma.pair.aggregate({ where, _max: { lastChecked: true, verdictAt: true } });
+  return Math.max(agg._max.lastChecked ?? 0, agg._max.verdictAt ?? 0);
+};
 
 // The export-ready trust score: operator-vouched pairs are max trust; otherwise
 // the engine confidence (null → 0, e.g. a legacy verified pair never re-run).
@@ -120,15 +133,26 @@ export type ExportIndex = {
 // The discovery manifest (A.6.2): which (chain, dex) exports exist, their pair
 // counts + last-updated, so go-ooo can poll without a hardcoded source list.
 export async function buildExportIndex(opts: { now?: number } = {}): Promise<ExportIndex> {
-  const groups = await prisma.pair.groupBy({
-    by: ["chain", "dex"],
-    where: { status: { in: VERIFIED } },
-    _count: { _all: true },
-    _max: { lastChecked: true },
-  });
+  const [verifiedGroups, modifiedGroups] = await Promise.all([
+    prisma.pair.groupBy({
+      by: ["chain", "dex"],
+      where: { status: { in: VERIFIED } },
+      _count: { _all: true },
+    }),
+    // Modified-time over ALL pairs (see pairsModifiedAt) so a demotion counts.
+    prisma.pair.groupBy({
+      by: ["chain", "dex"],
+      _max: { lastChecked: true, verdictAt: true },
+    }),
+  ]);
+
+  const modifiedAt = new Map<string, number>();
+  for (const g of modifiedGroups) {
+    modifiedAt.set(`${g.chain}/${g.dex}`, Math.max(g._max.lastChecked ?? 0, g._max.verdictAt ?? 0));
+  }
 
   const byChain = new Map<string, ExportIndexDex[]>();
-  for (const g of groups) {
+  for (const g of verifiedGroups) {
     if (!byChain.has(g.chain)) {
       byChain.set(g.chain, []);
     }
@@ -136,7 +160,7 @@ export async function buildExportIndex(opts: { now?: number } = {}): Promise<Exp
       dex: g.dex,
       url: `/api/export/${g.chain}/${g.dex}`,
       pairCount: g._count._all,
-      lastUpdated: g._max.lastChecked ?? 0,
+      lastUpdated: modifiedAt.get(`${g.chain}/${g.dex}`) ?? 0,
     });
   }
 
@@ -152,12 +176,10 @@ export async function buildExportIndex(opts: { now?: number } = {}): Promise<Exp
   };
 }
 
-// Max lastChecked across a (chain, dex)'s verified pairs — backs the
-// ?ifModifiedSince= 304 short-circuit on the API endpoint.
+// The (chain, dex)'s last-modified time — backs the ?ifModifiedSince= 304
+// short-circuit on the API endpoint. Over ALL pairs (not just verified) so a
+// promotion OR demotion advances it (see pairsModifiedAt); a verified-only max
+// would let go-ooo 304 past a pair we just demoted and keep trusting it.
 export async function exportLastModified(chain: string, dex: string): Promise<number> {
-  const agg = await prisma.pair.aggregate({
-    where: { chain, dex, status: { in: VERIFIED } },
-    _max: { lastChecked: true },
-  });
-  return agg._max.lastChecked ?? 0;
+  return pairsModifiedAt({ chain, dex });
 }
