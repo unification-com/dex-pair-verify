@@ -3,14 +3,10 @@ import {NumericFormat} from "react-number-format";
 import {Web3} from "web3";
 
 import {
-    removeOutliersChauvenet,
-    removeOutliersIQD,
-    removeOutliersMAD,
-    removeOutliersPeirceCriterion,
-    robustAggregate,
-    calculateMean,
+    aggregatePrices,
     getStats,
-    scientificToDecimal
+    scientificToDecimal,
+    OutlierMethod
 } from "../../lib/stats"
 import {PairProps} from "../../types/props";
 import NoneSortableTable from "../SortableTable/NoneSortableTable";
@@ -38,12 +34,22 @@ const PriceData: React.FC<{
     const OUT_CHAUVENET = "Chauvenet"
     const OUT_MAD = "MAD"
 
+    // Map the UI label to the lib's OutlierMethod key.
+    const methodKey = (m: string): OutlierMethod => {
+        switch (m) {
+            case OUT_MAD: return "mad"
+            case OUT_CHAUVENET: return "chauvenet"
+            case OUT_IDQ: return "iqd"
+            case OUT_PEIRCE_CRITERION: return "peirce"
+            default: return "none"
+        }
+    }
+
     const [isFetching, setIsFetching] = useState(true)
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
     const [priceTableData, setPriceTableData] = useState([]);
-    const [originalPrices, setOriginalPrices] = useState<number[]>([])
     const [removedPrices, setRemovedPrices] = useState<number[]>([])
-    const [meanPrice, setMeanPrice] = useState(0)
+    const [finalPrice, setFinalPrice] = useState(0)
     const [statsBefore, setStatsBefore] = useState<StatRow>(
         {
             id: "stats-before",
@@ -64,13 +70,11 @@ const PriceData: React.FC<{
             variance: 0,
         }
     )
-    const [outlierMethod, setOutlierMethod] = useState(OUT_CHAUVENET)
+    const [outlierMethod, setOutlierMethod] = useState(OUT_MAD) // MAD is the robust default
     const [dMax, setDMax] = useState(1)
     const [minsOfData, setMinsOfData] = useState(0)
-    // The proposed go-ooo aggregation (MAD outlier reject → liquidity-weighted
-    // mean), computed alongside the method-selectable plain mean for comparison.
-    const [robustPrice, setRobustPrice] = useState(0)
-    const [robustInfo, setRobustInfo] = useState({ nUsed: 0, nRejected: 0, median: 0, mad: 0 })
+    const [weightByLiquidity, setWeightByLiquidity] = useState(true)
+    const [aggInfo, setAggInfo] = useState({ nUsed: 0, nRejected: 0 })
 
     // Group contract addresses by (chain, dex). Memoised so it isn't rebuilt
     // on every render (and so the fetch effect's dependency is stable).
@@ -179,73 +183,27 @@ const PriceData: React.FC<{
         return () => controller.abort()
     }, [pairs, contractList, minsOfData]);
 
+    // THE single aggregation: build per-pool samples (price + pool liquidity),
+    // remove outliers by the SELECTED method, then take the (liquidity-weighted)
+    // mean of the survivors. One number out. MAD + weighting is the go-ooo default.
     useEffect(() => {
-        const prices = []
         const samples = []
         for(let i = 0; i < priceTableData.length; i += 1) {
             const p = priceTableData[i]
             const price = parseFloat((target === p.token0Symbol) ? p.token0Price : p.token1Price)
-            prices.push(price)
             samples.push({ price, liquidity: p.reserveUsd ?? 0 })
         }
+        const prices = samples.map((s) => s.price)
 
-        setOriginalPrices(prices)
-
-        // Robust go-ooo pipeline on the same live data: MAD outlier reject →
-        // liquidity-weighted mean. Shown next to the plain mean so the two are
-        // directly comparable (this is what we'd port into adhoc.go).
-        if (samples.length > 0) {
-            const r = robustAggregate(samples)
-            setRobustPrice(r.price)
-            setRobustInfo({ nUsed: r.nUsed, nRejected: r.nRejected, median: r.median, mad: r.mad })
-        } else {
-            setRobustPrice(0)
-            setRobustInfo({ nUsed: 0, nRejected: 0, median: 0, mad: 0 })
-        }
-    }, [priceTableData, target]);
-
-    useEffect(() => {
-        function processMean() {
-            let pricesOutliersRemoved = []
-            if(originalPrices.length > 1) {
-                const statsBefore = getStats(originalPrices)
-
-                switch(outlierMethod) {
-                    case OUT_CHAUVENET:
-                        pricesOutliersRemoved = removeOutliersChauvenet(originalPrices, dMax)
-                        break
-                    case OUT_MAD:
-                        pricesOutliersRemoved = removeOutliersMAD(originalPrices)
-                        break
-                    case OUT_IDQ:
-                        pricesOutliersRemoved = removeOutliersIQD(originalPrices)
-                        break
-                    case OUT_PEIRCE_CRITERION:
-                        pricesOutliersRemoved = removeOutliersPeirceCriterion(originalPrices)
-                        break
-                    case OUT_NONE:
-                    default:
-                        pricesOutliersRemoved = originalPrices
-                        break
-                }
-
-                const statsAfter = getStats(pricesOutliersRemoved)
-                const meanPrice = calculateMean(pricesOutliersRemoved)
-
-                const removedPrices =
-                    originalPrices.filter((element) => !pricesOutliersRemoved.includes(element));
-
-                setMeanPrice(meanPrice)
-                setRemovedPrices(removedPrices)
-                setStatsBefore({ ...statsBefore, id: "stats-before" })
-                setStatsAfter({ ...statsAfter, id: "stats-after" })
-            } else {
-                setMeanPrice(originalPrices[0])
-            }
-        }
-
-        processMean()
-    }, [originalPrices, outlierMethod, dMax]);
+        const r = aggregatePrices(samples, { method: methodKey(outlierMethod), weightByLiquidity, chauvenetDMax: dMax })
+        setFinalPrice(r.price)
+        setAggInfo({ nUsed: r.nUsed, nRejected: r.nRejected })
+        setRemovedPrices(r.rejected.map((s) => s.price))
+        setStatsBefore({ ...getStats(prices), id: "stats-before" })
+        setStatsAfter({ ...getStats(r.kept.map((s) => s.price)), id: "stats-after" })
+        // methodKey is pure component-scoped logic; deps mirror the existing pattern.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [priceTableData, target, outlierMethod, dMax, weightByLiquidity]);
 
     const onOutlierMethodChange = (event) => {
         const value = event.target.value;
@@ -259,6 +217,9 @@ const PriceData: React.FC<{
     const onMinutesDataChange = (event) => {
         const value = event.target.value;
         setMinsOfData(parseInt(value))
+    }
+    const onWeightChange = (event) => {
+        setWeightByLiquidity(event.target.checked)
     }
 
 
@@ -341,18 +302,21 @@ const PriceData: React.FC<{
                     </select>
                     </>
                 }
-                <br />
-                Note: OoO AdHoc currently only uses the {OUT_CHAUVENET}, with dMax = 1
+                <br/>
+                <label>
+                    <input type="checkbox" checked={weightByLiquidity} onChange={onWeightChange}/>
+                    &nbsp;Weight by liquidity (deeper pools count more)
+                </label>
+                <br/>
+                Note: go-ooo&apos;s AdHoc currently uses {OUT_CHAUVENET} (dMax 1); the proposed default is {OUT_MAD} + liquidity-weighting.
             </h4>
 
-            <h3>Mean Price: 1 {base} = {meanPrice} {target}</h3>
-
-            <h3 style={{color: "green"}}>
-                Robust (MAD + liquidity-weighted): 1 {base} = {scientificToDecimal(robustPrice)} {target}
-            </h3>
+            <h2 style={{color: "green"}}>
+                Price: 1 {base} = {scientificToDecimal(finalPrice)} {target}
+            </h2>
             <h5 style={{marginTop: 0}}>
-                ↳ proposed go-ooo aggregation · {robustInfo.nUsed} pools used,&nbsp;
-                {robustInfo.nRejected} rejected by MAD · median {robustInfo.median} · MAD {robustInfo.mad}
+                ↳ {outlierMethod} outlier removal{weightByLiquidity ? " + liquidity-weighted mean" : " + plain mean"}
+                &nbsp;· {aggInfo.nUsed} pools used, {aggInfo.nRejected} rejected
             </h5>
 
             <h3>||| Raw Data |||</h3>
@@ -414,7 +378,6 @@ const PriceData: React.FC<{
                 />
             </div>}
 
-            <h1>FINAL MEAN PRICE<br/>1 {base} = {scientificToDecimal(meanPrice)} {target}</h1>
         </div>
     )
 

@@ -11,6 +11,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  aggregatePrices,
   calculateMean,
   cleanseForBn,
   countDecimals,
@@ -22,7 +23,6 @@ import {
   removeOutliersIQD,
   removeOutliersMAD,
   removeOutliersPeirceCriterion,
-  robustAggregate,
   scientificToDecimal,
   weightedMean,
 } from "../../lib/stats";
@@ -221,10 +221,10 @@ describe("removeOutliersIQD", () => {
     expect(cleaned).not.toContain(-100);
   });
 
-  it("sorts the input as a side effect", () => {
+  it("does NOT mutate the caller's array", () => {
     const input = [5, 1, 3, 2, 4];
     removeOutliersIQD(input);
-    expect(input).toEqual([1, 2, 3, 4, 5]);
+    expect(input).toEqual([5, 1, 3, 2, 4]); // unchanged — sorts a copy internally
   });
 });
 
@@ -241,6 +241,18 @@ describe("removeOutliersPeirceCriterion", () => {
   it("removes the gross outlier on a tight dataset", () => {
     const cleaned = removeOutliersPeirceCriterion([10, 11, 12, 13, 100]);
     expect(cleaned).not.toContain(100);
+  });
+
+  it("keeps all + doesn't crash on fewer than 3 points (guarded)", () => {
+    expect(removeOutliersPeirceCriterion([])).toEqual([]);
+    expect(removeOutliersPeirceCriterion([42])).toEqual([42]);
+    expect(removeOutliersPeirceCriterion([10, 1000])).toEqual([10, 1000]);
+  });
+
+  it("does NOT mutate the caller's array", () => {
+    const input = [100, 11, 12, 13, 10];
+    removeOutliersPeirceCriterion(input);
+    expect(input).toEqual([100, 11, 12, 13, 10]);
   });
 });
 
@@ -361,18 +373,19 @@ describe("weightedMean", () => {
   });
 });
 
-describe("robustAggregate", () => {
-  it("rejects a thin manipulated pool and weights the honest deep pools", () => {
-    // Four honest, deep pools near 2000 + one thin pool reporting 3000 (a
-    // manipulation on a shallow pool). MAD rejects the 3000; the liquidity-
-    // weighted mean of the survivors stays ≈ 2000.
-    const r = robustAggregate([
-      { price: 2000, liquidity: 5_000_000 },
-      { price: 2010, liquidity: 4_000_000 },
-      { price: 1995, liquidity: 6_000_000 },
-      { price: 2005, liquidity: 3_000_000 },
-      { price: 3000, liquidity: 5_000 }, // thin + manipulated
-    ]);
+describe("aggregatePrices (the one pipeline — method + optional weighting)", () => {
+  const POOLS = [
+    { price: 2000, liquidity: 5_000_000 },
+    { price: 2010, liquidity: 4_000_000 },
+    { price: 1995, liquidity: 6_000_000 },
+    { price: 2005, liquidity: 3_000_000 },
+    { price: 3000, liquidity: 5_000 }, // thin + manipulated
+  ];
+
+  it("defaults to MAD + liquidity-weighting and rejects the thin manipulated pool", () => {
+    const r = aggregatePrices(POOLS);
+    expect(r.method).toBe("mad");
+    expect(r.weighted).toBe(true);
     expect(r.nRejected).toBe(1);
     expect(r.rejected[0].price).toBe(3000);
     expect(r.nUsed).toBe(4);
@@ -380,9 +393,14 @@ describe("robustAggregate", () => {
     expect(r.price).toBeLessThan(2010);
   });
 
+  it("can disable weighting → plain mean of the survivors", () => {
+    // MAD still drops 3000; plain mean of [2000,2010,1995,2005] = 2002.5.
+    expect(aggregatePrices(POOLS, { weightByLiquidity: false }).price).toBe(2002.5);
+  });
+
   it("liquidity-weighting pulls the estimate toward the deepest pool", () => {
     // n < 3 → no rejection; weighted mean = (2000·9 + 2100·1)/10 = 2010.
-    const r = robustAggregate([
+    const r = aggregatePrices([
       { price: 2000, liquidity: 9_000_000 },
       { price: 2100, liquidity: 1_000_000 },
     ]);
@@ -390,24 +408,20 @@ describe("robustAggregate", () => {
     expect(r.price).toBe(2010);
   });
 
-  it("keeps all when MAD = 0 (at least half the prices identical)", () => {
-    const r = robustAggregate([
-      { price: 100, liquidity: 1 },
-      { price: 100, liquidity: 1 },
-      { price: 100, liquidity: 1 },
-      { price: 250, liquidity: 1 },
-    ]);
-    expect(r.nRejected).toBe(0);
-    expect(r.mad).toBe(0);
-  });
-
-  it("reports the median + MAD diagnostics", () => {
-    const r = robustAggregate([
+  it("the chosen METHOD decides which outliers drop (MAD beats Chauvenet masking)", () => {
+    const masking = [
       { price: 10, liquidity: 1 },
       { price: 11, liquidity: 1 },
       { price: 12, liquidity: 1 },
-    ]);
-    expect(r.median).toBe(11);
-    expect(r.mad).toBe(1);
+      { price: 100, liquidity: 1 }, // lone gross outlier
+    ];
+    expect(aggregatePrices(masking, { method: "mad" }).nRejected).toBe(1); // MAD rejects 100
+    expect(aggregatePrices(masking, { method: "chauvenet" }).nRejected).toBe(0); // Chauvenet masks it
+  });
+
+  it("method 'none' keeps every pool", () => {
+    const r = aggregatePrices(POOLS, { method: "none" });
+    expect(r.nRejected).toBe(0);
+    expect(r.nUsed).toBe(5);
   });
 });

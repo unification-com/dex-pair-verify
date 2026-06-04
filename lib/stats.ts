@@ -8,8 +8,14 @@ export type Stats = {
   stdDev: number;
 };
 
-export const removeOutliersPeirceCriterion = (dataSet: number[]): number[] =>
-  remove_outliers(dataSet);
+export const removeOutliersPeirceCriterion = (dataSet: number[]): number[] => {
+  // Too few points to judge → keep all (mirrors the other methods and guards the
+  // npm package against degenerate input). Pass a COPY so it can't mutate ours.
+  if (dataSet.length < 3) {
+    return [...dataSet];
+  }
+  return remove_outliers([...dataSet]);
+};
 
 export const getQuartile = (arr: number[], q: number): number => {
   const pos = (arr.length - 1) * q;
@@ -22,24 +28,16 @@ export const getQuartile = (arr: number[], q: number): number => {
 };
 
 export const removeOutliersIQD = (dataSet: number[]): number[] => {
-  // sort into ascending order
-  dataSet.sort((a, b) => a - b);
+  // Sort a COPY into ascending order — never mutate the caller's array.
+  const sorted = [...dataSet].sort((a, b) => a - b);
 
   // calculate quartiles and interquartile range
-  const Q1 = getQuartile(dataSet, 0.25);
-  const Q3 = getQuartile(dataSet, 0.75);
+  const Q1 = getQuartile(sorted, 0.25);
+  const Q3 = getQuartile(sorted, 0.75);
   const IQR = Q3 - Q1;
 
-  const noneOutliers: number[] = [];
-  dataSet.forEach((number) => {
-    if (number > Q3 + 1.5 * IQR || number < Q1 - 1.5 * IQR) {
-      // ignore outlier
-    } else {
-      // add to dataset
-      noneOutliers.push(number);
-    }
-  });
-  return noneOutliers;
+  // Tukey fences (1.5·IQR). Keep everything inside the fences.
+  return sorted.filter((n) => !(n > Q3 + 1.5 * IQR || n < Q1 - 1.5 * IQR));
 };
 
 export const calculateMean = (dataSet: number[]): number => {
@@ -188,8 +186,8 @@ export const medianAbsoluteDeviation = (values: number[]): number => {
   return median(values.map((v) => Math.abs(v - med)));
 };
 
-// Per-value reject test (shared by removeOutliersMAD + robustAggregate so the
-// rule lives in one place): the modified z-score 0.6745·|xi − median| / MAD
+// Per-value reject test (the MAD rule in one place): the modified z-score
+// 0.6745·|xi − median| / MAD
 // exceeds the threshold. 0.6745 = Φ⁻¹(0.75) makes MAD a consistent estimator of
 // σ for normal data. MAD = 0 (≥ half the values identical) ⇒ no robust spread to
 // test against ⇒ never an outlier (mirrors the stdDev = 0 guard above).
@@ -226,50 +224,80 @@ export const weightedMean = (values: number[], weights: number[]): number => {
 
 export type PriceSample = { price: number; liquidity: number };
 
-export type RobustAggregate = {
-  price: number; // liquidity-weighted mean of the kept prices
+// The outlier-removal methods, selectable in the pipeline. MAD is the robust
+// DEFAULT (go-ooo should default to it); the others are kept for comparison.
+export type OutlierMethod = "mad" | "chauvenet" | "peirce" | "iqd" | "none";
+
+export type AggregateResult = {
+  price: number; // the (optionally liquidity-weighted) mean of the kept prices
   nUsed: number;
   nRejected: number;
   kept: PriceSample[];
   rejected: PriceSample[];
-  median: number;
-  mad: number;
+  method: OutlierMethod;
+  weighted: boolean;
 };
 
-// The full robust pipeline in one call, the shape go-ooo needs: reject price
-// outliers by MAD modified z-score, then take the liquidity-weighted mean of the
-// survivors. Partitions on the SAMPLES (not just the price array) so each kept
-// price keeps its own pool's liquidity for the weighting.
-export const robustAggregate = (
-  samples: PriceSample[],
-  opts: { threshold?: number } = {},
-): RobustAggregate => {
-  const threshold = opts.threshold ?? MAD_OUTLIER_THRESHOLD;
-  const prices = samples.map((s) => s.price);
-  const med = median(prices);
-  const mad = medianAbsoluteDeviation(prices);
-  const tooFew = samples.length < 3; // mirror removeOutliersMAD: keep all
+// Remove price outliers by the chosen method. `chauvenetDMax` only applies to
+// Chauvenet (the others ignore it).
+const removeOutliersByMethod = (prices: number[], method: OutlierMethod, chauvenetDMax?: number): number[] => {
+  switch (method) {
+    case "mad":
+      return removeOutliersMAD(prices);
+    case "chauvenet":
+      return removeOutliersChauvenet(prices, chauvenetDMax);
+    case "peirce":
+      return removeOutliersPeirceCriterion(prices);
+    case "iqd":
+      return removeOutliersIQD(prices);
+    case "none":
+    default:
+      return [...prices];
+  }
+};
 
+// THE one aggregation pipeline — one number out. Remove price outliers by the
+// chosen METHOD (default MAD — the robust estimator go-ooo should default to),
+// then take the (optionally liquidity-weighted) mean of the survivors. Partitions
+// on the SAMPLES (not just the price array) so each kept price keeps its own
+// pool's liquidity for the weighting. This is the shape go-ooo's adhoc.go mirrors,
+// and the dex-pair-verify price-test UI renders exactly this single result.
+export const aggregatePrices = (
+  samples: PriceSample[],
+  opts: { method?: OutlierMethod; weightByLiquidity?: boolean; chauvenetDMax?: number } = {},
+): AggregateResult => {
+  const method = opts.method ?? "mad";
+  const weighted = opts.weightByLiquidity ?? true;
+
+  const survivors = removeOutliersByMethod(
+    samples.map((s) => s.price),
+    method,
+    opts.chauvenetDMax,
+  );
+  // Multiset of survivor prices so duplicate prices align to distinct samples.
+  const counts = new Map<number, number>();
+  for (const p of survivors) {
+    counts.set(p, (counts.get(p) ?? 0) + 1);
+  }
   const kept: PriceSample[] = [];
   const rejected: PriceSample[] = [];
   for (const s of samples) {
-    if (!tooFew && isMadOutlier(s.price, med, mad, threshold)) {
-      rejected.push(s);
-    } else {
+    const c = counts.get(s.price) ?? 0;
+    if (c > 0) {
       kept.push(s);
+      counts.set(s.price, c - 1);
+    } else {
+      rejected.push(s);
     }
   }
 
-  return {
-    price: weightedMean(
-      kept.map((s) => s.price),
-      kept.map((s) => s.liquidity),
-    ),
-    nUsed: kept.length,
-    nRejected: rejected.length,
-    kept,
-    rejected,
-    median: med,
-    mad,
-  };
+  const keptPrices = kept.map((s) => s.price);
+  const price = weighted
+    ? weightedMean(
+        keptPrices,
+        kept.map((s) => s.liquidity),
+      )
+    : calculateMean(keptPrices);
+
+  return { price, nUsed: kept.length, nRejected: rejected.length, kept, rejected, method, weighted };
 };
