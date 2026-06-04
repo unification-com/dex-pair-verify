@@ -8,8 +8,7 @@
 
 import { utils as web3Utils } from "web3";
 
-import { cgDemoHeaders, GECKO_API_KEY } from "./coingecko";
-import { fetchWithBackoff } from "./httpBackoff";
+import { cgKeyedFetch, GECKO_API_KEY } from "./coingecko";
 import prisma from "./prisma";
 import { thresholdSeedData } from "./sourceConfig";
 import { runVerdictForPair } from "./verdictRunner";
@@ -20,7 +19,6 @@ import { runVerdictForPair } from "./verdictRunner";
 const GT_BASE = GECKO_API_KEY
   ? "https://api.coingecko.com/api/v3/onchain"
   : "https://api.geckoterminal.com/api/v2";
-const GT_HEADERS = cgDemoHeaders();
 
 // --- GeckoTerminal response shapes (only the fields we consume) ----------
 
@@ -65,7 +63,9 @@ export type PoolPage = { pools: GtPool[]; tokens: GtToken[] };
 export type PoolPageFetcher = (chain: string, dex: string, page: number) => Promise<PoolPage>;
 
 async function gtFetch(url: string, label: string): Promise<{ data?: unknown[]; included?: unknown[] } | null> {
-  const res = await fetchWithBackoff(url, { headers: GT_HEADERS }, `ingest ${label}`);
+  // Rate-paced through the shared CoinGecko gate so ingest can't overrun the
+  // keyed per-minute window (the canonical pass shares the same budget).
+  const res = await cgKeyedFetch(url, `ingest ${label}`);
   if (!res) {
     return null;
   }

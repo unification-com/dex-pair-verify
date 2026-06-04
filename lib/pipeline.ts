@@ -3,7 +3,6 @@
 // full-pipeline orchestrator (import/pipeline.ts) — one loop per pass (DRY).
 
 import { countTokensToCanonicalCheck, runCanonicalCheckForToken, tokensToCanonicalCheck } from "./canonicalCheck";
-import { GECKO_API_KEY } from "./coingecko";
 import { countPairsToFactoryCheck, pairsToFactoryCheck, runFactoryCheckForPair } from "./factoryCheck";
 import { countTokensToIdentityCheck, runIdentityCheckForToken, tokensToIdentityCheck } from "./identityCheck";
 import { ingestPoolPage } from "./ingest";
@@ -22,7 +21,6 @@ export const targetDb = (): string => {
   return match ? match[1] : "(unknown)";
 };
 const nowS = (): number => Math.floor(Date.now() / 1000);
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 // Drain a jobStartedAt-based batched pass: keep fetching ids and running
 // `processOne` until empty. The helpers stamp each id as it's processed, so the
@@ -50,9 +48,9 @@ async function drainBatches(
 
 // --- ingest ---------------------------------------------------------------
 
-// Keyed CoinGecko has a dedicated limit, so we can page faster than the shared
-// public GeckoTerminal endpoint.
-const INGEST_PAGE_DELAY_MS = GECKO_API_KEY ? 1500 : 8000;
+// Inter-page pacing is owned by the shared CoinGecko gate (lib/coingecko.ts):
+// each page makes one keyed call through cgKeyedFetch, which spaces calls under
+// the Demo key's per-minute window. No separate page delay needed here.
 
 export type IngestSummary = { pairs: number; tallies: Record<string, number> };
 
@@ -77,7 +75,6 @@ export async function ingestAll(opts: { log?: Logger } = {}): Promise<IngestSumm
       if (!res.hadData) {
         break;
       }
-      await sleep(INGEST_PAGE_DELAY_MS);
     }
   }
   return { pairs, tallies };
