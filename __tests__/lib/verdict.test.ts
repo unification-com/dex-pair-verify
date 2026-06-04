@@ -256,6 +256,47 @@ describe("evaluatePair", () => {
     expect(r.canonicalKey).toBe("usd-coin:weth");
   });
 
+  it("AV-1: auto-verifies a canonical-confirmed pair that misses only a soft liquidity gate", () => {
+    // Real tokens (identity + both canonical addresses matched) in a thin pool
+    // below the soft floor — verifiably real, so auto-verify with a GRADUATED
+    // confidence (< 1.0) rather than parking. The thin-pool risk is go-ooo's to
+    // weight downstream.
+    const cfg = { ...DEFAULT_VERDICT_CONFIG, minLiquidityUsd: 25000 };
+    const r = evaluatePair(makePair({ reserveUsd: 18000 }), makeCtx({ config: cfg }));
+    expect(r.verdict).toBe(TokenPairStatus.AutoVerified);
+    expect(r.reasonCode).toBe(VERDICT_REASON.canonicalConfirmed);
+    expect(r.confidence).toBeGreaterThanOrEqual(0.85);
+    expect(r.confidence).toBeLessThan(1); // graduated, not saturated (fixes Finding B)
+  });
+
+  it("AV-1: a high-confidence pair WITHOUT affirmed canonical addresses still needs the soft gates", () => {
+    // canonical unknown on both tokens (fence skips, weight 0) → no impostor
+    // confirmation → no AV-1 fast-path → stays in review despite high confidence.
+    const cfg = { ...DEFAULT_VERDICT_CONFIG, minLiquidityUsd: 25000 };
+    const pair = makePair({
+      reserveUsd: 18000,
+      token0: makeToken({ canonicalAddress: null }),
+      token1: makeToken({ contractAddress: USDC, coingeckoCoinId: "usd-coin", decimals: 6, priceCg: 1, priceDex: 1, canonicalAddress: null }),
+    });
+    const r = evaluatePair(pair, makeCtx({ config: cfg }));
+    expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
+  });
+
+  it("AV-1: a canonical-confirmed pair below the confidence band still stays in review", () => {
+    // Fails liquidity + tx-count + BOTH age gates → confidence < 0.85 → the band
+    // still gates: too many soft misses keeps even a canonical-confirmed pair out.
+    const cfg = { ...DEFAULT_VERDICT_CONFIG, minLiquidityUsd: 25000, minTxCount: 100 };
+    const pair = makePair({
+      reserveUsd: 18000,
+      txCount: 5,
+      token0: makeToken({ deploymentTimestamp: NOW }),
+      token1: makeToken({ contractAddress: USDC, coingeckoCoinId: "usd-coin", decimals: 6, priceCg: 1, priceDex: 1, canonicalAddress: USDC, deploymentTimestamp: NOW }),
+    });
+    const r = evaluatePair(pair, makeCtx({ config: cfg }));
+    expect(r.confidence).toBeLessThan(0.85);
+    expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
+  });
+
   it("auto-verifies when a verified cross-source sibling shares the key", () => {
     // Drop confidence below the band by deviating one price, but the sibling
     // vouches (and liquidity passes) so it still auto-verifies.
@@ -374,16 +415,25 @@ describe("evaluatePair", () => {
     expect(r.verdict).toBe(TokenPairStatus.AutoVerified);
   });
 
-  it("T7: holds a dormant pool (24h trades below the floor) for review", () => {
+  it("T7: holds a dormant pool (tx-count below the floor) for review when canonical is unconfirmed", () => {
+    // The tx-count gate still parks a pool that ISN'T canonical-confirmed — AV-1
+    // only bypasses the soft gates for verifiably-real, canonical-matched pairs.
+    // (A canonical-confirmed dormant pool now auto-verifies — see the AV-1 tests.)
     const cfg = { ...DEFAULT_VERDICT_CONFIG, minTxCount: 10 };
-    const r = evaluatePair(makePair({ txCount: 2 }), makeCtx({ config: cfg }));
+    const pair = makePair({
+      txCount: 2,
+      token0: makeToken({ canonicalAddress: null }),
+      token1: makeToken({ contractAddress: USDC, coingeckoCoinId: "usd-coin", decimals: 6, priceCg: 1, priceDex: 1, canonicalAddress: null }),
+    });
+    const r = evaluatePair(pair, makeCtx({ config: cfg }));
     expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
   });
 
-  it("holds a too-young pair for review when age gate fails", () => {
+  it("holds a too-young, canonically-unconfirmed pair for review when the age gate fails", () => {
     const cfg = { ...DEFAULT_VERDICT_CONFIG, minAgeHours: 720 }; // 30 days
     const pair = makePair({
-      token0: makeToken({ deploymentTimestamp: NOW - 1 * HOUR }),
+      token0: makeToken({ deploymentTimestamp: NOW - 1 * HOUR, canonicalAddress: null }),
+      token1: makeToken({ contractAddress: USDC, coingeckoCoinId: "usd-coin", decimals: 6, priceCg: 1, priceDex: 1, canonicalAddress: null }),
     });
     const r = evaluatePair(pair, makeCtx({ config: cfg }));
     expect(r.verdict).toBe(TokenPairStatus.NeedsReview);

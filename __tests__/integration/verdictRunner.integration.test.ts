@@ -5,6 +5,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { resetDb, seedPair, seedToken, testPrisma } from "./helpers";
+import { VERDICT_REASON } from "../../lib/verdict";
 import { runVerdictForPair } from "../../lib/verdictRunner";
 import { TokenPairStatus, VerificationMethod } from "../../types/types";
 
@@ -151,7 +152,7 @@ describe("runVerdictForPair", () => {
     expect(out.result).toBeNull();
   });
 
-  it("honours a per-(chain,dex) Threshold row (A.3) — high min liquidity holds an otherwise-clean pair for review", async () => {
+  it("honours a per-(chain,dex) Threshold row (A.3) — a high liquidity floor lowers a canonical-confirmed pair's score (AV-1), not parks it", async () => {
     const t0 = await seedToken({ contractAddress: WETH, coingeckoCoinId: "weth" });
     const t1 = await seedToken({ contractAddress: USDC, coingeckoCoinId: "usd-coin", decimals: 6 });
     await seedCanonical("weth", "eth", WETH);
@@ -164,7 +165,13 @@ describe("runVerdictForPair", () => {
 
     const out = await runVerdictForPair(pair.id, { now: NOW });
 
-    // Without the threshold it would auto-verify; the liquidity gate now fails.
-    expect(out.result?.verdict).toBe(TokenPairStatus.NeedsReview);
+    // AV-1: the pair is identity + canonical confirmed → verifiably real, so the
+    // liquidity floor no longer PARKS it. It auto-verifies with a graduated
+    // confidence (< 1.0) that carries the depth shortfall to go-ooo's weighting
+    // — that's how the threshold is honoured now (score, not park).
+    expect(out.result?.verdict).toBe(TokenPairStatus.AutoVerified);
+    expect(out.result?.reasonCode).toBe(VERDICT_REASON.canonicalConfirmed);
+    expect(out.result?.confidence).toBeLessThan(1);
+    expect(out.result?.confidence).toBeGreaterThanOrEqual(0.85);
   });
 });

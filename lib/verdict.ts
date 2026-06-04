@@ -375,6 +375,7 @@ export const VERDICT_REASON = {
   siblingVouched: "siblingVouched",
   priceDeviation: "priceDeviation",
   highConfidence: "highConfidence",
+  canonicalConfirmed: "canonicalConfirmed",
   belowAutoVerifyBar: "belowAutoVerifyBar",
 } as const;
 
@@ -537,11 +538,32 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
     return result(TokenPairStatus.NeedsReview, VERDICT_REASON.priceDeviation, "CG/DEX price deviation exceeds tolerance");
   }
 
-  // 6. Otherwise auto-verify only when confidence clears the band AND the core
-  //    quantitative gates (liquidity / tx-count / age) all pass.
-  const coreGatesPass = f.liquidity.ok && f.txCount.ok && f.age0.ok && f.age1.ok;
-  if (confidence >= config.autoVerifyConfidence && coreGatesPass) {
-    return result(TokenPairStatus.AutoVerified, VERDICT_REASON.highConfidence, "all fences passed with high confidence");
+  // 6. Auto-verify, once confidence clears the band, by either route:
+  //    (a) the core quantitative gates (liquidity / tx-count / age) all pass — a
+  //        clean, deep, mature pool; or
+  //    (b) AV-1 — both tokens are AFFIRMATIVELY canonical-matched (identity +
+  //        correct contract for the coin id, weight > 0 so the address was known,
+  //        not skipped). Such a pair is verifiably REAL — not an impostor — so the
+  //        remaining soft gates (liquidity / tx-count / age) are DEPTH/ACTIVITY
+  //        quality, not legitimacy. Parking a verifiably-real pair for manual
+  //        review adds little; the thin-pool price risk is handled DOWNSTREAM by
+  //        go-ooo's liquidity-weighting + outlier rejection on the exported
+  //        `confidence` (which here is graduated, < 1.0, carrying the soft-gate
+  //        severity) and `reserveUsd`. A pair WITHOUT affirmed canonical addresses
+  //        still needs the core gates — we won't auto-verify an unconfirmed pair.
+  if (confidence >= config.autoVerifyConfidence) {
+    const coreGatesPass = f.liquidity.ok && f.txCount.ok && f.age0.ok && f.age1.ok;
+    const canonicalConfirmed = f.canon0.ok && f.canon0.weight > 0 && f.canon1.ok && f.canon1.weight > 0;
+    if (coreGatesPass) {
+      return result(TokenPairStatus.AutoVerified, VERDICT_REASON.highConfidence, "all fences passed with high confidence");
+    }
+    if (canonicalConfirmed) {
+      return result(
+        TokenPairStatus.AutoVerified,
+        VERDICT_REASON.canonicalConfirmed,
+        "verifiably real (identity + canonical address) but below the soft depth/activity bar — trust score reflects depth (AV-1)",
+      );
+    }
   }
 
   // 7. Everything else lands in the (shrunken) manual queue.
