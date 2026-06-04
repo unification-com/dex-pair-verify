@@ -149,3 +149,127 @@ export const removeOutliersChauvenet = (dataSet: number[], max?: number): number
   }
   return ret;
 };
+
+// --- Robust aggregation: median + MAD outlier rejection + liquidity weighting ---
+//
+// go-ooo's AdHoc path aggregates DEX prices with Chauvenet's criterion (mean +
+// stdDev) at a hardcoded dMax = 1, which has two failure modes:
+//   1. MASKING — a lone gross outlier inflates the stdDev so its OWN distance
+//      falls under dMax and it survives (see the Chauvenet masking test).
+//   2. Over-rejection — at dMax = 1 a clean normal sample loses ~32% of its
+//      points (everything beyond ±1σ), throwing away good data.
+// median + MAD is the robust replacement: the median (centre) and MAD (spread)
+// have a 50% breakdown point, so a manipulated price is rejected instead of
+// dragging the estimate. Liquidity weighting then trusts deep pools — costlier
+// to manipulate — over thin ones. All pure, so they unit-test trivially here and
+// port directly to go-ooo's adhoc.go (the whole point of this testbed).
+
+// The Iglewicz–Hoaglin modified z-score cutoff. 3.5 is their recommended default.
+export const MAD_OUTLIER_THRESHOLD = 3.5;
+
+// Median of a numeric set (interpolated for even lengths). Does not mutate input.
+export const median = (values: number[]): number => {
+  if (values.length === 0) {
+    return 0;
+  }
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+};
+
+// Median Absolute Deviation: median(|xi − median(x)|). A robust spread estimate
+// that — unlike stdDev — is NOT inflated by the very outliers it exists to
+// detect, which is exactly why it defeats Chauvenet's masking.
+export const medianAbsoluteDeviation = (values: number[]): number => {
+  if (values.length === 0) {
+    return 0;
+  }
+  const med = median(values);
+  return median(values.map((v) => Math.abs(v - med)));
+};
+
+// Per-value reject test (shared by removeOutliersMAD + robustAggregate so the
+// rule lives in one place): the modified z-score 0.6745·|xi − median| / MAD
+// exceeds the threshold. 0.6745 = Φ⁻¹(0.75) makes MAD a consistent estimator of
+// σ for normal data. MAD = 0 (≥ half the values identical) ⇒ no robust spread to
+// test against ⇒ never an outlier (mirrors the stdDev = 0 guard above).
+const isMadOutlier = (v: number, med: number, mad: number, threshold: number): boolean =>
+  mad > 0 && (0.6745 * Math.abs(v - med)) / mad > threshold;
+
+// MAD modified-z-score outlier removal. Fewer than 3 points is too few to judge
+// robustly, so all are kept.
+export const removeOutliersMAD = (values: number[], threshold = MAD_OUTLIER_THRESHOLD): number[] => {
+  if (values.length < 3) {
+    return [...values];
+  }
+  const med = median(values);
+  const mad = medianAbsoluteDeviation(values);
+  return values.filter((v) => !isMadOutlier(v, med, mad, threshold));
+};
+
+// Liquidity-weighted mean: Σ(value·weight) / Σ(weight). Degrades to a plain
+// arithmetic mean when the total weight is 0 (no liquidity data) rather than
+// dividing by zero. A missing weight counts as 0.
+export const weightedMean = (values: number[], weights: number[]): number => {
+  if (values.length === 0) {
+    return 0;
+  }
+  let weightSum = 0;
+  let weightedSum = 0;
+  for (let i = 0; i < values.length; i += 1) {
+    const w = weights[i] ?? 0;
+    weightSum += w;
+    weightedSum += values[i] * w;
+  }
+  return weightSum > 0 ? weightedSum / weightSum : calculateMean(values);
+};
+
+export type PriceSample = { price: number; liquidity: number };
+
+export type RobustAggregate = {
+  price: number; // liquidity-weighted mean of the kept prices
+  nUsed: number;
+  nRejected: number;
+  kept: PriceSample[];
+  rejected: PriceSample[];
+  median: number;
+  mad: number;
+};
+
+// The full robust pipeline in one call, the shape go-ooo needs: reject price
+// outliers by MAD modified z-score, then take the liquidity-weighted mean of the
+// survivors. Partitions on the SAMPLES (not just the price array) so each kept
+// price keeps its own pool's liquidity for the weighting.
+export const robustAggregate = (
+  samples: PriceSample[],
+  opts: { threshold?: number } = {},
+): RobustAggregate => {
+  const threshold = opts.threshold ?? MAD_OUTLIER_THRESHOLD;
+  const prices = samples.map((s) => s.price);
+  const med = median(prices);
+  const mad = medianAbsoluteDeviation(prices);
+  const tooFew = samples.length < 3; // mirror removeOutliersMAD: keep all
+
+  const kept: PriceSample[] = [];
+  const rejected: PriceSample[] = [];
+  for (const s of samples) {
+    if (!tooFew && isMadOutlier(s.price, med, mad, threshold)) {
+      rejected.push(s);
+    } else {
+      kept.push(s);
+    }
+  }
+
+  return {
+    price: weightedMean(
+      kept.map((s) => s.price),
+      kept.map((s) => s.liquidity),
+    ),
+    nUsed: kept.length,
+    nRejected: rejected.length,
+    kept,
+    rejected,
+    median: med,
+    mad,
+  };
+};

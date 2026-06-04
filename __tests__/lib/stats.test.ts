@@ -16,10 +16,15 @@ import {
   countDecimals,
   getQuartile,
   getStats,
+  median,
+  medianAbsoluteDeviation,
   removeOutliersChauvenet,
   removeOutliersIQD,
+  removeOutliersMAD,
   removeOutliersPeirceCriterion,
+  robustAggregate,
   scientificToDecimal,
+  weightedMean,
 } from "../../lib/stats";
 
 // ----------------------------------------------------------------------
@@ -258,5 +263,151 @@ describe("cleanseForBn", () => {
 
   it("passes integers through", () => {
     expect(cleanseForBn(42)).toBe(42);
+  });
+});
+
+// ======================================================================
+// Robust aggregation (median + MAD + liquidity weighting) — the testbed
+// for go-ooo's adhoc.go price aggregation.
+// ======================================================================
+
+describe("median", () => {
+  it("returns the middle of an odd-length set", () => {
+    expect(median([3, 1, 2])).toBe(2);
+  });
+
+  it("interpolates the middle two of an even-length set", () => {
+    expect(median([1, 2, 3, 4])).toBe(2.5);
+  });
+
+  it("does not mutate its input", () => {
+    const input = [3, 1, 2];
+    median(input);
+    expect(input).toEqual([3, 1, 2]);
+  });
+
+  it("returns 0 for an empty set", () => {
+    expect(median([])).toBe(0);
+  });
+
+  it("is unmoved by a gross outlier (unlike the mean)", () => {
+    expect(median([10, 11, 12, 1000])).toBe(11.5); // the mean would be ~258
+  });
+});
+
+describe("medianAbsoluteDeviation", () => {
+  it("is the median of absolute deviations from the median", () => {
+    // median([1,2,3,4,5]) = 3; |dev| = [2,1,0,1,2]; median of those = 1
+    expect(medianAbsoluteDeviation([1, 2, 3, 4, 5])).toBe(1);
+  });
+
+  it("is 0 when at least half the values are identical", () => {
+    expect(medianAbsoluteDeviation([5, 5, 5, 9])).toBe(0);
+  });
+
+  it("is NOT inflated by a lone outlier (the property that beats Chauvenet)", () => {
+    // [10,11,12,100]: median 11.5; |dev| = [1.5,0.5,0.5,88.5]; median = 1.
+    // The same set's stdDev is ≈ 44 — that inflation is exactly what masks the
+    // outlier under Chauvenet; MAD stays ≈ 1.
+    expect(medianAbsoluteDeviation([10, 11, 12, 100])).toBe(1);
+  });
+});
+
+describe("removeOutliersMAD", () => {
+  it("REJECTS the lone gross outlier that Chauvenet MASKS", () => {
+    // The exact set the Chauvenet masking test keeps in full. MAD ≈ 1, so the
+    // 100 scores 0.6745·88.5/1 ≈ 60 ≫ 3.5 and is removed.
+    expect(removeOutliersMAD([10, 11, 12, 100])).toEqual([10, 11, 12]);
+    // Side-by-side: Chauvenet keeps it (documented masking limitation).
+    expect(removeOutliersChauvenet([10, 11, 12, 100])).toEqual([10, 11, 12, 100]);
+  });
+
+  it("does NOT over-reject a clean tight set (unlike Chauvenet dMax=1)", () => {
+    const clean = [100, 101, 99, 100, 102, 98, 101, 99];
+    expect(removeOutliersMAD(clean)).toEqual(clean);
+    // Chauvenet at dMax=1 discards the ±1σ tails of the very same clean data.
+    expect(removeOutliersChauvenet(clean, 1).length).toBeLessThan(clean.length);
+  });
+
+  it("keeps all when at least half the values are identical (MAD = 0)", () => {
+    expect(removeOutliersMAD([5, 5, 5, 9])).toEqual([5, 5, 5, 9]);
+  });
+
+  it("keeps all for fewer than 3 points (too few to judge robustly)", () => {
+    expect(removeOutliersMAD([10, 1000])).toEqual([10, 1000]);
+  });
+
+  it("removes both a high and a low outlier, preserving input order", () => {
+    expect(removeOutliersMAD([-500, 10, 11, 12, 13, 14, 900])).toEqual([10, 11, 12, 13, 14]);
+  });
+});
+
+describe("weightedMean", () => {
+  it("weights values by their weights", () => {
+    // (2000·9 + 2100·1) / 10 = 2010
+    expect(weightedMean([2000, 2100], [9, 1])).toBe(2010);
+  });
+
+  it("equals the plain mean when all weights are equal", () => {
+    expect(weightedMean([1, 2, 3], [5, 5, 5])).toBe(2);
+  });
+
+  it("falls back to the arithmetic mean when total weight is 0", () => {
+    expect(weightedMean([10, 20, 30], [0, 0, 0])).toBe(20);
+  });
+
+  it("returns 0 for an empty set", () => {
+    expect(weightedMean([], [])).toBe(0);
+  });
+});
+
+describe("robustAggregate", () => {
+  it("rejects a thin manipulated pool and weights the honest deep pools", () => {
+    // Four honest, deep pools near 2000 + one thin pool reporting 3000 (a
+    // manipulation on a shallow pool). MAD rejects the 3000; the liquidity-
+    // weighted mean of the survivors stays ≈ 2000.
+    const r = robustAggregate([
+      { price: 2000, liquidity: 5_000_000 },
+      { price: 2010, liquidity: 4_000_000 },
+      { price: 1995, liquidity: 6_000_000 },
+      { price: 2005, liquidity: 3_000_000 },
+      { price: 3000, liquidity: 5_000 }, // thin + manipulated
+    ]);
+    expect(r.nRejected).toBe(1);
+    expect(r.rejected[0].price).toBe(3000);
+    expect(r.nUsed).toBe(4);
+    expect(r.price).toBeGreaterThan(1990);
+    expect(r.price).toBeLessThan(2010);
+  });
+
+  it("liquidity-weighting pulls the estimate toward the deepest pool", () => {
+    // n < 3 → no rejection; weighted mean = (2000·9 + 2100·1)/10 = 2010.
+    const r = robustAggregate([
+      { price: 2000, liquidity: 9_000_000 },
+      { price: 2100, liquidity: 1_000_000 },
+    ]);
+    expect(r.nRejected).toBe(0);
+    expect(r.price).toBe(2010);
+  });
+
+  it("keeps all when MAD = 0 (at least half the prices identical)", () => {
+    const r = robustAggregate([
+      { price: 100, liquidity: 1 },
+      { price: 100, liquidity: 1 },
+      { price: 100, liquidity: 1 },
+      { price: 250, liquidity: 1 },
+    ]);
+    expect(r.nRejected).toBe(0);
+    expect(r.mad).toBe(0);
+  });
+
+  it("reports the median + MAD diagnostics", () => {
+    const r = robustAggregate([
+      { price: 10, liquidity: 1 },
+      { price: 11, liquidity: 1 },
+      { price: 12, liquidity: 1 },
+    ]);
+    expect(r.median).toBe(11);
+    expect(r.mad).toBe(1);
   });
 });
