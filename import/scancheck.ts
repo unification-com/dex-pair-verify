@@ -4,6 +4,8 @@
 //   yarn scancheck
 // GoPlus free tier is 30/min — resumable + cached via scamCheckedAt.
 
+import "../lib/env";
+
 import { scamPass, targetDb } from "../lib/pipeline";
 import prisma from "../lib/prisma";
 

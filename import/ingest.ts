@@ -3,6 +3,8 @@
 // GECKO_API_KEY (free CoinGecko Demo key) for the keyed, faster endpoint.
 //   yarn ingest
 
+import "../lib/env";
+
 import { ingestAll, targetDb } from "../lib/pipeline";
 import prisma from "../lib/prisma";
 

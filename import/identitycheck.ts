@@ -3,6 +3,8 @@
 // promotes confirmed pairs out of Needs Review. Run after an ingest:
 //   yarn identitycheck
 
+import "../lib/env";
+
 import { identityPass, targetDb } from "../lib/pipeline";
 import prisma from "../lib/prisma";
 

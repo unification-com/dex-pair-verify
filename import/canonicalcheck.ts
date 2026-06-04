@@ -4,6 +4,8 @@
 //   yarn canonicalcheck
 // Set GECKO_API_KEY in .env to use the keyed (faster) CoinGecko rate limit.
 
+import "../lib/env";
+
 import { canonicalPass, targetDb } from "../lib/pipeline";
 import prisma from "../lib/prisma";
 

@@ -5,6 +5,8 @@
 // Factory is immutable per pool, so this is a one-time read per pair; a re-run
 // only retries pairs a failed RPC left unread.
 
+import "../lib/env";
+
 import { factoryPass, targetDb } from "../lib/pipeline";
 import prisma from "../lib/prisma";
 

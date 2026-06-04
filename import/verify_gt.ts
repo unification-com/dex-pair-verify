@@ -2,6 +2,8 @@
 // dex lists, so a wrong slug is caught before it ingests nothing. Run with:
 //   yarn verify-gt
 
+import "../lib/env";
+
 import { fetchGtDexes, NetworkDexes, verifySource } from "../lib/gtVerify";
 import { getSourceByIndex, gtNetworkFor, SourceEntry, sourceCount } from "../lib/sourceConfig";
 

@@ -8,6 +8,8 @@
 // bound passes (ingest + canonical). Each pass is idempotent + resumable, so a
 // re-run picks up where it left off.
 
+import "../lib/env";
+
 import {
   canonicalPass,
   factoryPass,

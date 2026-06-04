@@ -4,6 +4,8 @@
 //   yarn revalidate
 // R6-safe (Manual* pairs untouched). Idempotent.
 
+import "../lib/env";
+
 import { revalidatePass, targetDb } from "../lib/pipeline";
 import prisma from "../lib/prisma";
 
