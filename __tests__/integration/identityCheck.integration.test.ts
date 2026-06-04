@@ -70,12 +70,12 @@ describe("runIdentityCheckForToken", () => {
     expect((await testPrisma.pair.findUnique({ where: { id: pair.id } }))?.status).toBe(TokenPairStatus.NeedsReview);
   });
 
-  it("skips a CoinGecko-listed token (already identified via cgId)", async () => {
+  it("skips the identity resolution for a CoinGecko-listed token (already identified via cgId)", async () => {
     const t0 = await seedToken({ coingeckoCoinId: "weth" });
     const out = await runIdentityCheckForToken(t0.id, { now: NOW, deps: confirmingDeps });
-    expect(out.checked).toBe(false);
+    expect(out.checked).toBe(false); // no resolution ran — cgId already identifies it
     const token = await testPrisma.token.findUnique({ where: { id: t0.id } });
-    expect(token?.identityCheckedAt).toBe(0); // untouched
+    expect(token?.identityCheckedAt).toBe(NOW); // but defensively stamped so the drain loop can't spin
   });
 
   it("never overrides a Manual* pair (R6)", async () => {

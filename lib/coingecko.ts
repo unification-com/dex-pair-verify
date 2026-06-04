@@ -4,7 +4,7 @@
 // (used by the canonical-address lookup) via the same `x-cg-demo-api-key`
 // header. Without a key, callers fall back to the public/shared rate limits.
 
-import { fetchWithBackoff } from "./httpBackoff";
+import { makePacedFetch } from "./httpBackoff";
 
 export const GECKO_API_KEY = process.env.GECKO_API_KEY ?? "";
 
@@ -22,24 +22,10 @@ export const cgDemoHeaders = (): Record<string, string> | undefined =>
 // is a non-cost. Without a key the public limit is lower still, so pace harder.
 export const CG_KEYED_CALL_SPACING_MS = GECKO_API_KEY ? 4000 : 8000;
 
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-
-// Min-interval gate: the earliest wall-clock time the next CoinGecko call may
-// fire. Updated to now + spacing as each call starts, so work done between
-// calls (DB writes, verdict runs) counts towards the interval and we only sleep
-// the remainder. Assumes sequential callers — true for every batch pass (each
-// awaits one item before starting the next), so there's no concurrent race.
-let nextCgCallAt = 0;
-
-// The single choke-point for ALL keyed CoinGecko traffic. Spaces calls under the
-// Demo key's per-minute window to avoid 429s proactively, then routes through
-// fetchWithBackoff so a stray 429 (shared IP, burst) still recovers. The
-// `x-cg-demo-api-key` header is attached automatically.
-export async function cgKeyedFetch(url: string, label: string): Promise<Response | null> {
-  const wait = nextCgCallAt - Date.now();
-  if (wait > 0) {
-    await sleep(wait);
-  }
-  nextCgCallAt = Date.now() + CG_KEYED_CALL_SPACING_MS;
-  return fetchWithBackoff(url, { headers: cgDemoHeaders() }, label);
-}
+// The single choke-point for ALL keyed CoinGecko traffic (ingest + canonical) —
+// one paced fetcher so the two passes share one schedule and can't collectively
+// overrun the Demo key's per-minute window. The `x-cg-demo-api-key` header is
+// attached automatically.
+const pacedCgFetch = makePacedFetch(CG_KEYED_CALL_SPACING_MS);
+export const cgKeyedFetch = (url: string, label: string): Promise<Response | null> =>
+  pacedCgFetch(url, label, { headers: cgDemoHeaders() });

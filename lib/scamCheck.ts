@@ -8,7 +8,7 @@
 import { Prisma } from "@prisma/client";
 
 import { evmChainId, EVM_SUPPORTED_CHAINS } from "./chains";
-import { fetchWithBackoff } from "./httpBackoff";
+import { makePacedFetch } from "./httpBackoff";
 import prisma from "./prisma";
 import { VERIFIED_STATUSES } from "./status";
 import { runVerdictForPair } from "./verdictRunner";
@@ -58,11 +58,18 @@ const HIGH_TAX = 0.1;
 export type TokenSecurity = Record<string, unknown>;
 export type SecurityFetcher = (chainId: string, address: string) => Promise<TokenSecurity | null>;
 
+// GoPlus free tier is 30 req/min. Pace under it (one call / 2.5s ≈ 24/min) so
+// the scam + identity passes — both route through fetchTokenSecurity — can't
+// 429-storm the shared GoPlus budget. Same gate primitive as the CoinGecko path
+// (DRY), with GoPlus's own independent schedule.
+const GOPLUS_CALL_SPACING_MS = 2500;
+const pacedGoplusFetch = makePacedFetch(GOPLUS_CALL_SPACING_MS);
+
 // The default GoPlus token-security fetch. Exported so the identity resolver
-// (T1) reuses the exact same call + back-off rather than duplicating it (DRY).
+// (T1) reuses the exact same paced call + back-off rather than duplicating it (DRY).
 export const fetchTokenSecurity: SecurityFetcher = async (chainId, address) => {
   const url = `https://api.gopluslabs.io/api/v1/token_security/${chainId}?contract_addresses=${address}`;
-  const res = await fetchWithBackoff(url, undefined, `scamcheck ${chainId}`);
+  const res = await pacedGoplusFetch(url, `scamcheck ${chainId}`);
   if (!res) {
     return null;
   }

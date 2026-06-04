@@ -62,11 +62,22 @@ export async function runIdentityCheckForToken(
   if (!token) {
     return { checked: false, confirmed: false, promotedPairs: 0 };
   }
+
+  // Defensive stamp: any token that reaches here is marked checked, even on the
+  // early-out guards below. The batch where-clause already excludes these cases,
+  // but stamping unconditionally removes the reliance on where-clause/guard
+  // agreement (a divergence would otherwise be an infinite drain loop) — matching
+  // the stamp-on-miss contract the canonical/scam/factory passes uphold.
+  const stampChecked = (): Promise<unknown> =>
+    prisma.token.update({ where: { id: token.id }, data: { identityCheckedAt: now } });
+
   // CG-listed → already identified via cgId; nothing for this pass to do.
   if (hasCgId(token.coingeckoCoinId)) {
+    await stampChecked();
     return { checked: false, confirmed: true, promotedPairs: 0 };
   }
   if (evmChainId(token.chain) === null) {
+    await stampChecked();
     return { checked: false, confirmed: false, promotedPairs: 0 };
   }
 

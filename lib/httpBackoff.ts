@@ -45,3 +45,25 @@ export async function fetchWithBackoff(
   }
   return res;
 }
+
+// A min-interval rate gate around fetchWithBackoff. Each instance owns its own
+// schedule (closure state), so independent services (CoinGecko, GoPlus) pace
+// against their own per-minute budgets without interfering. Spacing calls
+// PROACTIVELY keeps us under the limit so we rarely trip a 429 at all — far
+// cheaper than the reactive 65s back-off above. Work done between calls (DB
+// writes, verdict runs) counts towards the interval, so it only sleeps the
+// remainder. Assumes sequential callers — true for every batch pass (each awaits
+// one item before the next), so there's no concurrent race on `nextAt`.
+export function makePacedFetch(
+  spacingMs: number,
+): (url: string, label: string, init?: RequestInit) => Promise<Response | null> {
+  let nextAt = 0;
+  return async (url, label, init) => {
+    const wait = nextAt - Date.now();
+    if (wait > 0) {
+      await sleep(wait);
+    }
+    nextAt = Date.now() + spacingMs;
+    return fetchWithBackoff(url, init, label);
+  };
+}
