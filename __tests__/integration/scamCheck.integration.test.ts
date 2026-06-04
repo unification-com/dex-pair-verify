@@ -5,7 +5,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { resetDb, seedPair, seedToken, testPrisma } from "./helpers";
-import { runScamCheckForToken, tokensToScamCheck } from "../../lib/scamCheck";
+import { rescoreScamForToken, runScamCheckForToken, tokensToRescore, tokensToScamCheck } from "../../lib/scamCheck";
 import { TokenPairStatus } from "../../types/types";
 
 const NOW = 1_700_000_000;
@@ -76,6 +76,79 @@ describe("runScamCheckForToken", () => {
     const token = await testPrisma.token.findUnique({ where: { id: t0.id } });
     expect(token?.scamCheckedAt).toBe(NOW); // stamped → drops out of the to-check set
     expect(token?.isScamFlagged).toBe(false); // metadata untouched
+  });
+});
+
+describe("rescoreScamForToken (re-score cached GoPlus data, no re-fetch)", () => {
+  it("clears a stale flag when the rule no longer flags the cached signal, and re-verifies", async () => {
+    // hidden_owner alone used to flag but no longer does — the token carries the
+    // stale flag + a demoted pair whose only blocker was that flag.
+    const t0 = await seedToken({
+      coingeckoCoinId: "rsr",
+      goPlusData: { hidden_owner: "1" },
+      isScamFlagged: true,
+      scamReason: "hidden owner",
+      scamCheckedAt: NOW,
+    });
+    const t1 = await seedToken({ coingeckoCoinId: "weth" });
+    const pair = await seedPair(t0.id, t1.id, { status: TokenPairStatus.NeedsReview, reviewTier: "spam" });
+
+    const out = await rescoreScamForToken(t0.id, { now: NOW });
+
+    expect(out.changed).toBe(true);
+    expect(out.flagged).toBe(false);
+    expect(out.affectedPairs).toBe(1);
+    expect((await testPrisma.token.findUnique({ where: { id: t0.id } }))?.isScamFlagged).toBe(false);
+    expect((await testPrisma.pair.findUnique({ where: { id: pair.id } }))?.status).toBe(TokenPairStatus.AutoVerified);
+  });
+
+  it("keeps a hard flag (no change, no re-verify)", async () => {
+    const t0 = await seedToken({
+      coingeckoCoinId: "scam",
+      goPlusData: { is_honeypot: "1" },
+      isScamFlagged: true,
+      scamCheckedAt: NOW,
+    });
+    const t1 = await seedToken({ coingeckoCoinId: "weth" });
+    await seedPair(t0.id, t1.id, { status: TokenPairStatus.NeedsReview });
+
+    const out = await rescoreScamForToken(t0.id, { now: NOW });
+    expect(out.changed).toBe(false);
+    expect(out.flagged).toBe(true);
+    expect(out.affectedPairs).toBe(0);
+  });
+
+  it("adds a flag and demotes when the cached data now qualifies", async () => {
+    // A stored honeypot signal left unflagged → re-score flags it + demotes.
+    const t0 = await seedToken({
+      coingeckoCoinId: "weth",
+      goPlusData: { is_honeypot: "1" },
+      isScamFlagged: false,
+      scamCheckedAt: NOW,
+    });
+    const t1 = await seedToken({ coingeckoCoinId: "usd-coin", decimals: 6 });
+    const pair = await seedPair(t0.id, t1.id, { status: TokenPairStatus.AutoVerified });
+
+    const out = await rescoreScamForToken(t0.id, { now: NOW });
+    expect(out.changed).toBe(true);
+    expect(out.flagged).toBe(true);
+    expect((await testPrisma.token.findUnique({ where: { id: t0.id } }))?.isScamFlagged).toBe(true);
+    expect((await testPrisma.pair.findUnique({ where: { id: pair.id } }))?.status).toBe(TokenPairStatus.NeedsReview);
+  });
+
+  it("skips a token with no cached GoPlus data", async () => {
+    const t0 = await seedToken({ coingeckoCoinId: "weth", scamCheckedAt: NOW }); // goPlusData null
+    const out = await rescoreScamForToken(t0.id, { now: NOW });
+    expect(out.changed).toBe(false);
+    expect(out.affectedPairs).toBe(0);
+  });
+});
+
+describe("tokensToRescore", () => {
+  it("returns scam-checked tokens (scamCheckedAt > 0), excludes never-checked", async () => {
+    const checked = await seedToken({ coingeckoCoinId: "weth", scamCheckedAt: NOW });
+    await seedToken({ coingeckoCoinId: "usd-coin", decimals: 6 }); // never checked → scamCheckedAt 0
+    expect(await tokensToRescore()).toEqual([checked.id]);
   });
 });
 

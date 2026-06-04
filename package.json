@@ -21,6 +21,7 @@
     "factorycheck": "tsx import/factorycheck.ts",
     "canonicalcheck": "tsx import/canonicalcheck.ts",
     "scancheck": "tsx import/scancheck.ts",
+    "rescore-scam": "tsx import/rescore-scam.ts",
     "ingest": "tsx import/ingest.ts",
     "pipeline": "tsx import/pipeline.ts",
     "postinstall": "simple-git-hooks",

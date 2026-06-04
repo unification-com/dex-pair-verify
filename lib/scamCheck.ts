@@ -185,3 +185,61 @@ export async function runScamCheckForToken(
 
   return { checked: true, flagged, reasons, demotedPairs };
 }
+
+// --- Re-score from cache (apply a rule change without re-fetching GoPlus) ----
+
+// Tokens that have been scam-checked at least once — the candidates for a
+// cache re-score. (Some have no GoPlus data — null fetch result — and are
+// skipped by rescoreScamForToken; gating on scamCheckedAt sidesteps Prisma's
+// fiddly JSON-null filtering.)
+export async function tokensToRescore(): Promise<string[]> {
+  const rows = await prisma.token.findMany({
+    where: { scamCheckedAt: { gt: 0 } },
+    select: { id: true },
+  });
+  return rows.map((r) => r.id);
+}
+
+export type RescoreOutcome = {
+  changed: boolean; // the flag flipped vs what was stored
+  flagged: boolean; // the new flag value
+  affectedPairs: number; // pairs re-verified because the flag changed
+};
+
+// Re-evaluate one token's CACHED GoPlus data against the CURRENT
+// evaluateScamSignals rule — no GoPlus call. If the flag flips (a rule tweak
+// added or removed it), persist the new flag/reason and re-run the verdict for
+// the token's pairs so the change propagates (cleared flag → re-verify, new flag
+// → demote). This is how a scam-rule change is applied to already-checked
+// tokens: instant + quota-free, and it reaches tokens a fresh scancheck would
+// skip (e.g. one demoted out of every verified pair). R6-safe via runVerdictForPair.
+export async function rescoreScamForToken(
+  tokenId: string,
+  opts: { now?: number } = {},
+): Promise<RescoreOutcome> {
+  const now = opts.now ?? Math.floor(Date.now() / 1000);
+  const token = await prisma.token.findUnique({ where: { id: tokenId } });
+  if (!token || token.goPlusData == null) {
+    return { changed: false, flagged: false, affectedPairs: 0 };
+  }
+
+  const { flagged, reasons } = evaluateScamSignals(token.goPlusData as TokenSecurity);
+  if (flagged === token.isScamFlagged) {
+    return { changed: false, flagged, affectedPairs: 0 };
+  }
+
+  await prisma.token.update({
+    where: { id: token.id },
+    data: { isScamFlagged: flagged, scamReason: reasons.join(", ") },
+  });
+
+  const pairs = await prisma.pair.findMany({
+    where: { OR: [{ token0Id: token.id }, { token1Id: token.id }] },
+    select: { id: true },
+  });
+  for (const p of pairs) {
+    await runVerdictForPair(p.id, { now });
+  }
+
+  return { changed: true, flagged, affectedPairs: pairs.length };
+}

@@ -7,7 +7,13 @@ import { countPairsToFactoryCheck, pairsToFactoryCheck, runFactoryCheckForPair }
 import { countTokensToIdentityCheck, runIdentityCheckForToken, tokensToIdentityCheck } from "./identityCheck";
 import { ingestPoolPage } from "./ingest";
 import prisma from "./prisma";
-import { countTokensToScamCheck, runScamCheckForToken, tokensToScamCheck } from "./scamCheck";
+import {
+  countTokensToScamCheck,
+  rescoreScamForToken,
+  runScamCheckForToken,
+  tokensToRescore,
+  tokensToScamCheck,
+} from "./scamCheck";
 import { getSourceByIndex, gtDexFor, gtNetworkFor, sourceCount } from "./sourceConfig";
 import { runVerdictForPair } from "./verdictRunner";
 
@@ -162,6 +168,35 @@ export async function scamPass(opts: { log?: Logger } = {}): Promise<ScamSummary
     (done) => log(`[scam] …${done}/${total} · ${flagged} flagged · ${demoted} demoted`),
   );
   return { total, flagged, demoted };
+}
+
+export type RescoreScamSummary = { total: number; changed: number; nowFlagged: number; cleared: number };
+// Re-score every scam-checked token's CACHED GoPlus data against the current
+// rule (no GoPlus calls) and re-verify any whose flag flipped. The fast,
+// quota-free way to apply a scam-signal rule change to existing data — contrast
+// scamPass, which re-fetches GoPlus.
+export async function rescoreScamPass(opts: { log?: Logger } = {}): Promise<RescoreScamSummary> {
+  const log = opts.log ?? noop;
+  const now = nowS();
+  const ids = await tokensToRescore();
+  let changed = 0;
+  let nowFlagged = 0;
+  let cleared = 0;
+  for (let i = 0; i < ids.length; i += 1) {
+    const out = await rescoreScamForToken(ids[i], { now });
+    if (out.changed) {
+      changed += 1;
+      if (out.flagged) {
+        nowFlagged += 1;
+      } else {
+        cleared += 1;
+      }
+    }
+    if ((i + 1) % 200 === 0) {
+      log(`[rescore-scam] …${i + 1}/${ids.length} · ${changed} flags changed`);
+    }
+  }
+  return { total: ids.length, changed, nowFlagged, cleared };
 }
 
 export type RevalidateSummary = { count: number; tallies: Record<string, number> };
