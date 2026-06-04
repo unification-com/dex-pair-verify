@@ -11,6 +11,7 @@ import { Prisma } from "@prisma/client";
 
 import { CG_SUPPORTED_CHAINS, cgPlatformForChain, fetchCanonicalContract, PlatformsFetcher } from "./canonical";
 import prisma from "./prisma";
+import { VERDICT_REASON } from "./verdict";
 import { runVerdictForPair } from "./verdictRunner";
 
 const hasCgId = (cgId: string | null | undefined): boolean => (cgId ?? "").trim().length > 0;
@@ -83,7 +84,7 @@ export async function runCanonicalCheckForToken(
     });
     for (const p of pairs) {
       const out = await runVerdictForPair(p.id, { now });
-      if (out.result?.reason.includes("impostor")) {
+      if (out.result?.reasonCode === VERDICT_REASON.canonicalImpostor) {
         impostorPairs += 1;
       }
     }

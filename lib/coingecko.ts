@@ -12,14 +12,15 @@ export const GECKO_API_KEY = process.env.GECKO_API_KEY ?? "";
 export const cgDemoHeaders = (): Record<string, string> | undefined =>
   GECKO_API_KEY ? { "x-cg-demo-api-key": GECKO_API_KEY } : undefined;
 
-// Minimum spacing between consecutive keyed CoinGecko calls. The Demo key allows
-// ~30 calls/min (one every 2s) and that budget is SHARED across every keyed
-// endpoint — ingest's on-chain pages AND canonical's /api/v3 lookups both draw
-// from it. We pace a touch over 2s so the rolling-minute window never trips a
-// 429: a single 429 costs a 65s back-off (RATE_LIMIT_BACKOFF_MS), which dwarfs
-// the ~500ms of head-room we give up per call. Without a key the public limit is
-// far lower, so we pace much more conservatively.
-export const CG_KEYED_CALL_SPACING_MS = GECKO_API_KEY ? 2500 : 8000;
+// Minimum spacing between consecutive keyed CoinGecko calls. The budget is
+// SHARED across every keyed endpoint — ingest's on-chain pages AND canonical's
+// /api/v3 lookups both draw from it — so the binding limit is the tighter of the
+// two. Empirically the on-chain (/onchain) endpoint 429s well below the /api/v3
+// 30/min ceiling, so we pace at 4s (~15/min) to stay under it and never trip a
+// 429 at all: a single 429 costs a 65s back-off (RATE_LIMIT_BACKOFF_MS), which
+// dwarfs the extra ~1.5s/call, and both passes run unattended so the slower pace
+// is a non-cost. Without a key the public limit is lower still, so pace harder.
+export const CG_KEYED_CALL_SPACING_MS = GECKO_API_KEY ? 4000 : 8000;
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 

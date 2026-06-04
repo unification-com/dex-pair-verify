@@ -1,15 +1,17 @@
-// Integration tests for the review-queue triage (T9) — computeReviewTier + the
-// runVerdictForPair persistence. The symbol-spoof check hits the DB, so these
-// are integration tests.
+// Tests for the review-queue triage (T9) — computeReviewTier (pure) + the
+// runVerdictForPair persistence (DB-backed, hence integration).
 
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { resetDb, seedPair, seedToken, testPrisma } from "./helpers";
 import { computeReviewTier } from "../../lib/reviewTier";
+import { VERDICT_REASON } from "../../lib/verdict";
 import { runVerdictForPair } from "../../lib/verdictRunner";
 import { TokenPairStatus } from "../../types/types";
 
-const NEEDS_REVIEW_REASON = "meets some fences but not the auto-verify bar";
+// A representative non-impostor NeedsReview outcome — the triage should default
+// these to "review" unless a token trips the scam / fake-major-token checks.
+const NON_IMPOSTOR = VERDICT_REASON.belowAutoVerifyBar;
 
 beforeEach(async () => {
   await resetDb();
@@ -29,31 +31,31 @@ describe("computeReviewTier", () => {
     ...over,
   });
 
-  it("flags an impostor reason as spam", () => {
-    expect(computeReviewTier("a token address does not match the canonical contract (possible impostor)", tok(), tok())).toBe("spam");
+  it("flags the canonical-impostor code as spam", () => {
+    expect(computeReviewTier(VERDICT_REASON.canonicalImpostor, tok(), tok())).toBe("spam");
   });
 
   it("flags a scam-flagged token as spam", () => {
-    expect(computeReviewTier(NEEDS_REVIEW_REASON, tok({ isScamFlagged: true }), tok())).toBe("spam");
+    expect(computeReviewTier(NON_IMPOSTOR, tok({ isScamFlagged: true }), tok())).toBe("spam");
   });
 
   it("flags a no-cgId token faking a MAJOR token (USDC/WETH) as spam, case-insensitively", () => {
-    expect(computeReviewTier(NEEDS_REVIEW_REASON, tok({ symbol: "USDC" }), tok())).toBe("spam");
-    expect(computeReviewTier(NEEDS_REVIEW_REASON, tok({ symbol: "weth" }), tok())).toBe("spam");
+    expect(computeReviewTier(NON_IMPOSTOR, tok({ symbol: "USDC" }), tok())).toBe("spam");
+    expect(computeReviewTier(NON_IMPOSTOR, tok({ symbol: "weth" }), tok())).toBe("spam");
   });
 
   it("does NOT flag the real (cgId-bearing) major token", () => {
-    expect(computeReviewTier(NEEDS_REVIEW_REASON, tok({ symbol: "USDC", coingeckoCoinId: "usd-coin" }), tok())).toBe("review");
+    expect(computeReviewTier(NON_IMPOSTOR, tok({ symbol: "USDC", coingeckoCoinId: "usd-coin" }), tok())).toBe("review");
   });
 
   it("does NOT flag a generic ticker collision (SPCX / AI / ROBO)", () => {
     for (const symbol of ["SPCX", "AI", "ROBO", "PAW"]) {
-      expect(computeReviewTier(NEEDS_REVIEW_REASON, tok({ symbol }), tok())).toBe("review");
+      expect(computeReviewTier(NON_IMPOSTOR, tok({ symbol }), tok())).toBe("review");
     }
   });
 
   it("defaults a genuine-but-uncertain pair to review", () => {
-    expect(computeReviewTier(NEEDS_REVIEW_REASON, tok({ symbol: "AAA" }), tok({ symbol: "BBB" }))).toBe("review");
+    expect(computeReviewTier(NON_IMPOSTOR, tok({ symbol: "AAA" }), tok({ symbol: "BBB" }))).toBe("review");
   });
 });
 

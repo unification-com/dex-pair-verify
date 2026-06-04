@@ -9,6 +9,8 @@
 // pools and correctly land in "review". The triage reliably clears only the
 // clear-cut spam (impostor / scam-flagged / fake-major-token).
 
+import { VERDICT_REASON, VerdictReasonCode } from "./verdict";
+
 export type ReviewTier = "spam" | "review";
 
 // The token fields the tier needs — assignable from a Prisma Token row.
@@ -36,10 +38,11 @@ const MAJOR_TOKEN_SYMBOLS = new Set([
 const fakesMajorToken = (t: TierToken): boolean =>
   !hasCgId(t.coingeckoCoinId) && MAJOR_TOKEN_SYMBOLS.has(t.symbol.trim().toUpperCase());
 
-// Triage a NeedsReview pair. `reason` is the verdict's verificationComment.
-export function computeReviewTier(reason: string, token0: TierToken, token1: TierToken): ReviewTier {
+// Triage a NeedsReview pair. `reasonCode` is the verdict's structured outcome
+// tag (VERDICT_REASON) — switched on directly, never substring-matched.
+export function computeReviewTier(reasonCode: VerdictReasonCode, token0: TierToken, token1: TierToken): ReviewTier {
   // Impostor: a token address ≠ its CoinGecko-canonical contract (T3).
-  if (reason.toLowerCase().includes("impostor")) {
+  if (reasonCode === VERDICT_REASON.canonicalImpostor) {
     return "spam";
   }
   // GoPlus scam flag (honeypot / extreme tax / hidden owner…) on either token.

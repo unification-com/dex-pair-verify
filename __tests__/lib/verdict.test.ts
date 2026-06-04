@@ -16,6 +16,7 @@ import {
   meetsTurnover,
   meetsTxCount,
   tokenAddressesMatchCanonical,
+  VERDICT_REASON,
   VerdictContext,
   VerdictPairInput,
   VerdictTokenInput,
@@ -269,6 +270,8 @@ describe("evaluatePair", () => {
     const r = evaluatePair(pair, makeCtx());
     expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
     expect(r.reason).toMatch(/impostor/i);
+    // Lock the structured code the triage + canonical-pass counter depend on.
+    expect(r.reasonCode).toBe(VERDICT_REASON.canonicalImpostor);
   });
 
   it("T3: a matching canonical address does not block auto-verify", () => {

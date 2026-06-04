@@ -233,7 +233,7 @@ export async function runVerdictForPair(
     // tier for any other verdict.
     const reviewTier =
       result.verdict === TokenPairStatus.NeedsReview
-        ? computeReviewTier(result.reason, pair.token0, pair.token1)
+        ? computeReviewTier(result.reasonCode, pair.token0, pair.token1)
         : null;
 
     await prisma.pair.update({

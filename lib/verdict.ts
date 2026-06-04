@@ -358,9 +358,35 @@ export type VerdictContext = {
   canonicalFactoryAddress: string | null; // from lib/sources.js
 };
 
+// Stable machine-readable code for each adjudication outcome — one per branch of
+// evaluatePair. Consumers (review triage, the canonical-pass impostor counter)
+// switch on this instead of substring-matching the human `reason` prose, which
+// silently breaks when the wording changes. One canonical list referenced
+// everywhere (DRY) and type-checked — a typo is a compile error, not a silent
+// miss.
+export const VERDICT_REASON = {
+  intraChainImpostorLoser: "intraChainImpostorLoser",
+  liquidityBelowHardFloor: "liquidityBelowHardFloor",
+  decimalsBogus: "decimalsBogus",
+  notIdentified: "notIdentified",
+  scamFlagged: "scamFlagged",
+  factoryMismatch: "factoryMismatch",
+  canonicalImpostor: "canonicalImpostor",
+  siblingVouched: "siblingVouched",
+  priceDeviation: "priceDeviation",
+  highConfidence: "highConfidence",
+  belowAutoVerifyBar: "belowAutoVerifyBar",
+} as const;
+
+export type VerdictReasonCode = (typeof VERDICT_REASON)[keyof typeof VERDICT_REASON];
+
 export type VerdictResult = {
   verdict: TokenPairStatus;
   reason: string;
+  // Machine-readable tag for the branch that produced this verdict (see
+  // VERDICT_REASON). Stable across reason-wording changes — consumers switch on
+  // this, never on the prose.
+  reasonCode: VerdictReasonCode;
   evidence: Record<string, number | string | boolean>;
   canonicalKey: string | null;
   confidence: number;
@@ -423,9 +449,10 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
     token1Decimals: pair.token1.decimals,
   };
 
-  const result = (verdict: TokenPairStatus, reason: string): VerdictResult => ({
+  const result = (verdict: TokenPairStatus, reasonCode: VerdictReasonCode, reason: string): VerdictResult => ({
     verdict,
     reason,
+    reasonCode,
     evidence,
     canonicalKey: ctx.canonicalKey,
     confidence,
@@ -439,6 +466,7 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   if (ctx.intraChainImpostorLoser) {
     return result(
       TokenPairStatus.NotCurrentlyUsable,
+      VERDICT_REASON.intraChainImpostorLoser,
       "another pair with this canonical key on this (chain, dex) matches the canonical token addresses",
     );
   }
@@ -446,22 +474,26 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   // 2. Hard fences — short-circuit to AutoRejected (bypasses operator review).
   //    A fence only fails (vs skips) when it had the data to fail on.
   if (pair.reserveUsd < config.hardMinLiquidityUsd) {
-    return result(TokenPairStatus.AutoRejected, `liquidity below hard floor ($${config.hardMinLiquidityUsd})`);
+    return result(
+      TokenPairStatus.AutoRejected,
+      VERDICT_REASON.liquidityBelowHardFloor,
+      `liquidity below hard floor ($${config.hardMinLiquidityUsd})`,
+    );
   }
   if (!f.decimals0.ok || !f.decimals1.ok) {
-    return result(TokenPairStatus.AutoRejected, "token decimals look bogus");
+    return result(TokenPairStatus.AutoRejected, VERDICT_REASON.decimalsBogus, "token decimals look bogus");
   }
 
   // 3. A token that is neither CoinGecko-listed NOR independently identity-
   //    confirmed (T1) → operator decides (legit-new vs scam).
   if (!f.identified.ok) {
-    return result(TokenPairStatus.NeedsReview, f.identified.reason);
+    return result(TokenPairStatus.NeedsReview, VERDICT_REASON.notIdentified, f.identified.reason);
   }
 
   // 3b. A scam-list flag (A.7) blocks auto-verify outright — even a verified
   //     sibling can't vouch past it; the operator decides.
   if (ctx.tokenScamFlagged) {
-    return result(TokenPairStatus.NeedsReview, "a token is flagged by the scam-list");
+    return result(TokenPairStatus.NeedsReview, VERDICT_REASON.scamFlagged, "a token is flagged by the scam-list");
   }
 
   // 3c. Factory mismatch (T2): the pool's on-chain factory() does not match the
@@ -471,7 +503,7 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   //     Skips when the factory is unknown (fence weight 0 ⇒ ok), so this is inert
   //     until the factory-check pass reads it.
   if (!f.factory.ok) {
-    return result(TokenPairStatus.NeedsReview, f.factory.reason);
+    return result(TokenPairStatus.NeedsReview, VERDICT_REASON.factoryMismatch, f.factory.reason);
   }
 
   // 3d. Token-address impostor (T3): a token's contract address does not match
@@ -484,6 +516,7 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   if (!f.canon0.ok || !f.canon1.ok) {
     return result(
       TokenPairStatus.NeedsReview,
+      VERDICT_REASON.canonicalImpostor,
       "a token address does not match the CoinGecko-canonical contract (possible impostor)",
     );
   }
@@ -491,22 +524,26 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   // 4. A verified cross-source sibling vouches for the key (+ liquidity passes)
   //    — a strong enough signal to auto-verify even past the mid-band rule.
   if (ctx.hasVerifiedSibling && f.liquidity.ok) {
-    return result(TokenPairStatus.AutoVerified, "canonical key matches an already-verified cross-source sibling");
+    return result(
+      TokenPairStatus.AutoVerified,
+      VERDICT_REASON.siblingVouched,
+      "canonical key matches an already-verified cross-source sibling",
+    );
   }
 
   // 5. Mid-band rule (A.3): a CG/DEX price mismatch is never auto-verified —
   //    it's not necessarily a scam, but it needs operator eyes.
   if (!f.price0.ok || !f.price1.ok) {
-    return result(TokenPairStatus.NeedsReview, "CG/DEX price deviation exceeds tolerance");
+    return result(TokenPairStatus.NeedsReview, VERDICT_REASON.priceDeviation, "CG/DEX price deviation exceeds tolerance");
   }
 
   // 6. Otherwise auto-verify only when confidence clears the band AND the core
   //    quantitative gates (liquidity / tx-count / age) all pass.
   const coreGatesPass = f.liquidity.ok && f.txCount.ok && f.age0.ok && f.age1.ok;
   if (confidence >= config.autoVerifyConfidence && coreGatesPass) {
-    return result(TokenPairStatus.AutoVerified, "all fences passed with high confidence");
+    return result(TokenPairStatus.AutoVerified, VERDICT_REASON.highConfidence, "all fences passed with high confidence");
   }
 
   // 7. Everything else lands in the (shrunken) manual queue.
-  return result(TokenPairStatus.NeedsReview, "meets some fences but not the auto-verify bar");
+  return result(TokenPairStatus.NeedsReview, VERDICT_REASON.belowAutoVerifyBar, "meets some fences but not the auto-verify bar");
 }
