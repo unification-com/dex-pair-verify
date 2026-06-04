@@ -34,7 +34,7 @@ describe("readPoolFactory", () => {
   it("reads + decodes the factory for a chain with an RPC", async () => {
     const ethCall = vi.fn(async () => WORD);
     expect(await readPoolFactory("eth", POOL, { ethCall })).toBe(UNI_V3_FACTORY);
-    expect(ethCall).toHaveBeenCalledWith("https://rpc.mevblocker.io", POOL, "0xc45a0155");
+    expect(ethCall).toHaveBeenCalledWith("https://ethereum-rpc.publicnode.com", POOL, "0xc45a0155");
   });
 
   it("returns null (no call) for a chain without a configured RPC", async () => {

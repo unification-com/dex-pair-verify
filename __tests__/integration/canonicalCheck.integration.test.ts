@@ -53,14 +53,15 @@ describe("runCanonicalCheckForToken", () => {
     expect((await testPrisma.pair.findUnique({ where: { id: pair.id } }))?.status).toBe(TokenPairStatus.NeedsReview);
   });
 
-  it("does not stamp on a transient CoinGecko failure (retryable)", async () => {
+  it("stamps the attempt on a transient failure so the batch terminates", async () => {
     const t0 = await seedToken({ coingeckoCoinId: "weth", contractAddress: WETH });
     const t1 = await seedToken({ coingeckoCoinId: "usd-coin", contractAddress: USDC, decimals: 6 });
     await seedPair(t0.id, t1.id, { status: TokenPairStatus.NeedsReview });
 
     const out = await runCanonicalCheckForToken(t0.id, { now: NOW, fetcher: async () => null });
     expect(out.checked).toBe(false);
-    expect((await testPrisma.token.findUnique({ where: { id: t0.id } }))?.canonicalCheckedAt).toBe(0);
+    // Stamped so it drops out of the to-check set; no canonical was cached.
+    expect((await testPrisma.token.findUnique({ where: { id: t0.id } }))?.canonicalCheckedAt).toBe(NOW);
     expect(await getCachedCanonicalAddress("weth", "eth")).toBeNull();
   });
 

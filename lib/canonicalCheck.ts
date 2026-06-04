@@ -60,17 +60,19 @@ export async function runCanonicalCheckForToken(
 
   const canonical = await fetchCanonicalContract(token.coingeckoCoinId, token.chain, { now, fetcher: opts.fetcher });
 
-  // Distinguish a definitive answer (a cache row exists — an address or a
-  // negative "") from a transient CoinGecko failure (no cache row). Only stamp
-  // canonicalCheckedAt on a definitive answer so transient misses retry.
+  // Stamp the attempt regardless so a batch pass always terminates (no infinite
+  // re-fetch loop). A transient CoinGecko miss (no cache row) leaves the
+  // canonical unresolved but a later job (newer jobStartedAt) re-checks it.
+  await prisma.token.update({ where: { id: token.id }, data: { canonicalCheckedAt: now } });
+
+  // A cache row (an address or a negative "") means a definitive answer; no row
+  // means a transient failure — nothing more to do this pass.
   const cacheRow = await prisma.canonicalAddress.findUnique({
     where: { coingeckoCoinId_chain: { coingeckoCoinId: token.coingeckoCoinId, chain: token.chain } },
   });
   if (!cacheRow) {
     return { checked: false, hasAddress: false, impostorPairs: 0 };
   }
-
-  await prisma.token.update({ where: { id: token.id }, data: { canonicalCheckedAt: now } });
 
   // Only a known address can change a verdict (activate the impostor fence).
   let impostorPairs = 0;

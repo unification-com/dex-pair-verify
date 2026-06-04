@@ -14,6 +14,7 @@
 
 import { utils as web3Utils } from "web3";
 
+import { cgDemoHeaders } from "./coingecko";
 import { fetchWithBackoff } from "./httpBackoff";
 import prisma from "./prisma";
 
@@ -83,7 +84,8 @@ const defaultPlatformsFetcher: PlatformsFetcher = async (cgId) => {
     `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(cgId)}` +
     `?localization=false&tickers=false&market_data=false` +
     `&community_data=false&developer_data=false&sparkline=false`;
-  const res = await fetchWithBackoff(url, undefined, `canonical ${cgId}`);
+  // With a Demo key this uses the keyed (higher) CoinGecko rate limit.
+  const res = await fetchWithBackoff(url, { headers: cgDemoHeaders() }, `canonical ${cgId}`);
   if (!res) {
     return null;
   }

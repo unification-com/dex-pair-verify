@@ -8,6 +8,7 @@
 
 import { utils as web3Utils } from "web3";
 
+import { cgDemoHeaders, GECKO_API_KEY } from "./coingecko";
 import { fetchWithBackoff } from "./httpBackoff";
 import prisma from "./prisma";
 import { thresholdSeedData } from "./sourceConfig";
@@ -16,13 +17,10 @@ import { runVerdictForPair } from "./verdictRunner";
 // With a (free Demo) CoinGecko API key, use CoinGecko's keyed on-chain
 // endpoints — same data as GeckoTerminal, but a dedicated rate limit instead of
 // the shared-IP public one. Without a key, fall back to the public GT API.
-const GECKO_API_KEY = process.env.GECKO_API_KEY ?? "";
 const GT_BASE = GECKO_API_KEY
   ? "https://api.coingecko.com/api/v3/onchain"
   : "https://api.geckoterminal.com/api/v2";
-const GT_HEADERS: Record<string, string> | undefined = GECKO_API_KEY
-  ? { "x-cg-demo-api-key": GECKO_API_KEY }
-  : undefined;
+const GT_HEADERS = cgDemoHeaders();
 
 // --- GeckoTerminal response shapes (only the fields we consume) ----------
 
