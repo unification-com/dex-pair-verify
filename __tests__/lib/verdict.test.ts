@@ -342,10 +342,33 @@ describe("evaluatePair", () => {
   });
 
   it("routes an unidentified token (no CG id, not identity-confirmed) to NeedsReview", () => {
+    // DEFAULT config has no soft floor (minLiquidityUsd 0), so AV-2 doesn't fire.
     const pair = makePair({ token0: makeToken({ coingeckoCoinId: "", canonicalAddress: null }) });
     const r = evaluatePair(pair, makeCtx({ canonicalKey: null }));
     expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
     expect(r.reason).toMatch(/identity-confirmed/i);
+  });
+
+  it("AV-2: auto-rejects an unidentified token in a sub-floor pool (not oracle-usable)", () => {
+    const cfg = { ...DEFAULT_VERDICT_CONFIG, minLiquidityUsd: 25000 };
+    const pair = makePair({
+      reserveUsd: 18000, // above the hard floor, below the soft floor
+      token0: makeToken({ coingeckoCoinId: "", identityConfirmed: false, canonicalAddress: null }),
+    });
+    const r = evaluatePair(pair, makeCtx({ config: cfg, canonicalKey: null }));
+    expect(r.verdict).toBe(TokenPairStatus.AutoRejected);
+    expect(r.reasonCode).toBe(VERDICT_REASON.unidentifiedThinPool);
+  });
+
+  it("AV-2: keeps a DEEP unidentified pool in review (may be real-but-unlisted → AV-3)", () => {
+    const cfg = { ...DEFAULT_VERDICT_CONFIG, minLiquidityUsd: 25000 };
+    const pair = makePair({
+      reserveUsd: 150000, // above the soft floor — not auto-rejected
+      token0: makeToken({ coingeckoCoinId: "", identityConfirmed: false, canonicalAddress: null }),
+    });
+    const r = evaluatePair(pair, makeCtx({ config: cfg, canonicalKey: null }));
+    expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
+    expect(r.reasonCode).toBe(VERDICT_REASON.notIdentified);
   });
 
   it("T1: auto-verifies a no-CG-id pair when both tokens are identity-confirmed", () => {

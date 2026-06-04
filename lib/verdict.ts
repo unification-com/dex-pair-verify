@@ -369,6 +369,7 @@ export const VERDICT_REASON = {
   liquidityBelowHardFloor: "liquidityBelowHardFloor",
   decimalsBogus: "decimalsBogus",
   notIdentified: "notIdentified",
+  unidentifiedThinPool: "unidentifiedThinPool",
   scamFlagged: "scamFlagged",
   factoryMismatch: "factoryMismatch",
   canonicalImpostor: "canonicalImpostor",
@@ -486,8 +487,20 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   }
 
   // 3. A token that is neither CoinGecko-listed NOR independently identity-
-  //    confirmed (T1) → operator decides (legit-new vs scam).
+  //    confirmed (T1). AV-2: if the pool is ALSO below the soft liquidity floor,
+  //    it is neither cross-referenceable nor deep enough to price reliably — it
+  //    can't serve the oracle, so auto-reject rather than queue it for manual
+  //    review. A DEEPER unidentified pool (≥ floor) might be a real-but-unlisted
+  //    token worth a look (AV-3), so it stays in review for the operator. This is
+  //    reversible: a later cgId / identity-confirm + a re-validate re-evaluates it.
   if (!f.identified.ok) {
+    if (pair.reserveUsd < config.minLiquidityUsd) {
+      return result(
+        TokenPairStatus.AutoRejected,
+        VERDICT_REASON.unidentifiedThinPool,
+        "unidentified token in a sub-floor pool — not oracle-usable (AV-2)",
+      );
+    }
     return result(TokenPairStatus.NeedsReview, VERDICT_REASON.notIdentified, f.identified.reason);
   }
 
