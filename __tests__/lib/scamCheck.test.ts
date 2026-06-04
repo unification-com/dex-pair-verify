@@ -31,10 +31,16 @@ describe("evaluateScamSignals", () => {
     expect(r.reasons).toContain("honeypot");
   });
 
-  it("flags strong signals (cannot-sell / self-destruct / hidden owner)", () => {
+  it("flags the hard signals (cannot-sell / self-destruct)", () => {
     expect(evaluateScamSignals({ cannot_sell_all: "1" }).flagged).toBe(true);
     expect(evaluateScamSignals({ selfdestruct: "1" }).flagged).toBe(true);
-    expect(evaluateScamSignals({ hidden_owner: "1" }).flagged).toBe(true);
+  });
+
+  it("does NOT flag the weak signals alone (hidden_owner / honeypot-linked creator)", () => {
+    // These false-positive on legit established tokens (RSR, BAND, OCEAN…), so
+    // they no longer flag on their own — only the hard signals above do.
+    expect(evaluateScamSignals({ hidden_owner: "1" }).flagged).toBe(false);
+    expect(evaluateScamSignals({ honeypot_with_same_creator: "1" }).flagged).toBe(false);
   });
 
   it("flags extreme buy/sell tax but not modest tax", () => {

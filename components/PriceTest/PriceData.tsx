@@ -5,7 +5,9 @@ import {Web3} from "web3";
 import {
     removeOutliersChauvenet,
     removeOutliersIQD,
+    removeOutliersMAD,
     removeOutliersPeirceCriterion,
+    robustAggregate,
     calculateMean,
     getStats,
     scientificToDecimal
@@ -34,6 +36,7 @@ const PriceData: React.FC<{
     const OUT_NONE = "None"
     const OUT_IDQ = "IDQ"
     const OUT_CHAUVENET = "Chauvenet"
+    const OUT_MAD = "MAD"
 
     const [isFetching, setIsFetching] = useState(true)
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -64,6 +67,10 @@ const PriceData: React.FC<{
     const [outlierMethod, setOutlierMethod] = useState(OUT_CHAUVENET)
     const [dMax, setDMax] = useState(1)
     const [minsOfData, setMinsOfData] = useState(0)
+    // The proposed go-ooo aggregation (MAD outlier reject → liquidity-weighted
+    // mean), computed alongside the method-selectable plain mean for comparison.
+    const [robustPrice, setRobustPrice] = useState(0)
+    const [robustInfo, setRobustInfo] = useState({ nUsed: 0, nRejected: 0, median: 0, mad: 0 })
 
     // Group contract addresses by (chain, dex). Memoised so it isn't rebuilt
     // on every render (and so the fetch effect's dependency is stable).
@@ -101,6 +108,7 @@ const PriceData: React.FC<{
             let t0Id = null
             let t1Id = null
             let pairName = null
+            let reserveUsd = 0
 
             for(let i = 0; i < pairs.length; i += 1) {
                 const p = pairs[i]
@@ -109,11 +117,12 @@ const PriceData: React.FC<{
                     t0Id = p.token0Id
                     t1Id = p.token1Id
                     pairName = p.pair
+                    reserveUsd = p.reserveUsd
                     break
                 }
             }
 
-            return {pId, t0Id, t1Id, pairName}
+            return {pId, t0Id, t1Id, pairName, reserveUsd}
         }
 
         const fetchPromises = endpoints.map(endpoint => fetch(endpoint, { signal: controller.signal }));
@@ -129,7 +138,7 @@ const PriceData: React.FC<{
                     if(d.success) {
                         for(let j = 0; j < d.prices.length; j += 1) {
 
-                            const {pId, t0Id, t1Id, pairName} = getPairInfo(d.prices[j].chain, d.prices[j].dex, d.prices[j].pairContractAddress)
+                            const {pId, t0Id, t1Id, pairName, reserveUsd} = getPairInfo(d.prices[j].chain, d.prices[j].dex, d.prices[j].pairContractAddress)
                             pd.push(
                                 {
                                     id: `price_${d.chain}_${d.dex}_${j}`, // for cell/row data in sortable table
@@ -143,6 +152,7 @@ const PriceData: React.FC<{
                                     t0Id,
                                     t1Id,
                                     pairName,
+                                    reserveUsd,
                                 }
                             )
                         }
@@ -171,13 +181,27 @@ const PriceData: React.FC<{
 
     useEffect(() => {
         const prices = []
+        const samples = []
         for(let i = 0; i < priceTableData.length; i += 1) {
             const p = priceTableData[i]
-            const price = (target === p.token0Symbol) ? p.token0Price : p.token1Price
-            prices.push(parseFloat(price))
+            const price = parseFloat((target === p.token0Symbol) ? p.token0Price : p.token1Price)
+            prices.push(price)
+            samples.push({ price, liquidity: p.reserveUsd ?? 0 })
         }
 
         setOriginalPrices(prices)
+
+        // Robust go-ooo pipeline on the same live data: MAD outlier reject →
+        // liquidity-weighted mean. Shown next to the plain mean so the two are
+        // directly comparable (this is what we'd port into adhoc.go).
+        if (samples.length > 0) {
+            const r = robustAggregate(samples)
+            setRobustPrice(r.price)
+            setRobustInfo({ nUsed: r.nUsed, nRejected: r.nRejected, median: r.median, mad: r.mad })
+        } else {
+            setRobustPrice(0)
+            setRobustInfo({ nUsed: 0, nRejected: 0, median: 0, mad: 0 })
+        }
     }, [priceTableData, target]);
 
     useEffect(() => {
@@ -189,6 +213,9 @@ const PriceData: React.FC<{
                 switch(outlierMethod) {
                     case OUT_CHAUVENET:
                         pricesOutliersRemoved = removeOutliersChauvenet(originalPrices, dMax)
+                        break
+                    case OUT_MAD:
+                        pricesOutliersRemoved = removeOutliersMAD(originalPrices)
                         break
                     case OUT_IDQ:
                         pricesOutliersRemoved = removeOutliersIQD(originalPrices)
@@ -298,6 +325,7 @@ const PriceData: React.FC<{
                 Change Outlier Remove method<br/>
                 Method: <select onChange={onOutlierMethodChange} className="form-select" defaultValue={outlierMethod}>
                 <option value={OUT_CHAUVENET}>{OUT_CHAUVENET}</option>
+                <option value={OUT_MAD}>{OUT_MAD}</option>
                 <option value={OUT_PEIRCE_CRITERION}>{OUT_PEIRCE_CRITERION}</option>
                 <option value={OUT_IDQ}>{OUT_IDQ}</option>
                 <option value={OUT_NONE}>{OUT_NONE}</option>
@@ -318,6 +346,14 @@ const PriceData: React.FC<{
             </h4>
 
             <h3>Mean Price: 1 {base} = {meanPrice} {target}</h3>
+
+            <h3 style={{color: "green"}}>
+                Robust (MAD + liquidity-weighted): 1 {base} = {scientificToDecimal(robustPrice)} {target}
+            </h3>
+            <h5 style={{marginTop: 0}}>
+                ↳ proposed go-ooo aggregation · {robustInfo.nUsed} pools used,&nbsp;
+                {robustInfo.nRejected} rejected by MAD · median {robustInfo.median} · MAD {robustInfo.mad}
+            </h5>
 
             <h3>||| Raw Data |||</h3>
 

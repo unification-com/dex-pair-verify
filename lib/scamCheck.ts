@@ -87,10 +87,17 @@ const flt = (v: unknown): number => parseFloat(str(v));
 
 export type ScamEvaluation = { flagged: boolean; reasons: string[] };
 
-// Map the GoPlus signals onto a flag + human reasons. Conservative — only
-// strong scam indicators flag (honeypot family, self-destruct, hidden owner,
-// extreme tax). Mintable / pausable are deliberately excluded (legit tokens
-// have them) to keep the NeedsReview queue small.
+// Map the GoPlus signals onto a flag + human reasons. Only STRONG, direct
+// evidence that a holder can't safely sell flags a token: the honeypot family,
+// self-destruct, and extreme tax. Two GoPlus signals are deliberately EXCLUDED
+// because they false-positive on legitimate, established tokens (they demoted
+// RSR, BAND, OCEAN, PHA, sUSDe, CGPT… in the 2026-06-04 run):
+//   - hidden_owner — normal for legit upgradeable-proxy / multisig / governance
+//     contracts; not evidence a holder is trapped.
+//   - honeypot_with_same_creator — guilt-by-association; trips on prolific /
+//     launchpad deployers who also shipped an unrelated flagged contract.
+// (mintable / pausable are likewise excluded — legit tokens have them.) Holding
+// the flag set to genuine bad actors keeps real tokens out of the spam queue.
 export function evaluateScamSignals(s: TokenSecurity | null): ScamEvaluation {
   if (!s) {
     return { flagged: false, reasons: [] };
@@ -98,9 +105,7 @@ export function evaluateScamSignals(s: TokenSecurity | null): ScamEvaluation {
   const reasons: string[] = [];
   if (str(s.is_honeypot) === "1") reasons.push("honeypot");
   if (str(s.cannot_sell_all) === "1") reasons.push("cannot sell all");
-  if (str(s.honeypot_with_same_creator) === "1") reasons.push("honeypot-linked creator");
   if (str(s.selfdestruct) === "1") reasons.push("self-destruct");
-  if (str(s.hidden_owner) === "1") reasons.push("hidden owner");
 
   const buyTax = flt(s.buy_tax);
   const sellTax = flt(s.sell_tax);
