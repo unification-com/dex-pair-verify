@@ -10,22 +10,20 @@ type SamplePair = { base: string; target: string; sources: number; chains: strin
 // /api/ooo/pairs catalogue) and points operators to the gated console.
 export const getServerSideProps: GetServerSideProps = async () => {
   let count = 0;
-  let queryFormat = "BASE.TARGET.AD";
   let sample: SamplePair[] = [];
   try {
     const catalogue = await buildPublicPairsCatalogue();
     count = catalogue.pairs.length;
-    queryFormat = catalogue.queryFormat;
     sample = catalogue.pairs.slice(0, 12).map((p) => ({
       base: p.base, target: p.target, sources: p.sources, chains: p.chains, totalLiquidityUsd: p.totalLiquidityUsd,
     }));
   } catch {
     // Landing must render even if the DB is unavailable — just show no sample.
   }
-  return { props: { count, queryFormat, sample } };
+  return { props: { count, sample } };
 }
 
-type Props = { count: number; queryFormat: string; sample: SamplePair[] };
+type Props = { count: number; sample: SamplePair[] };
 
 const usd = (n: number) => {
   const a = Math.abs(n);
@@ -35,7 +33,7 @@ const usd = (n: number) => {
   return "$" + n.toFixed(2);
 };
 
-const Landing: React.FC<Props> = ({ count, queryFormat, sample }) => (
+const Landing: React.FC<Props> = ({ count, sample }) => (
   <div className="landing">
     <main className="lp-main">
       <section className="lp-hero">
@@ -48,7 +46,7 @@ const Landing: React.FC<Props> = ({ count, queryFormat, sample }) => (
         </p>
         <div className="lp-cta">
           <Link href="/api/ooo/pairs"><a className="btn btn-primary">View the pairs API</a></Link>
-          <span className="lp-q">Query format <code className="mono">{queryFormat}</code> — e.g. <code className="mono">WETH.USDC.AD</code></span>
+          <a className="lp-q" href="https://docs.unification.io/ooo/guide/ooo_api.html" target="_blank" rel="noreferrer">View OoO docs for on-chain query formats →</a>
         </div>
       </section>
 
@@ -82,7 +80,7 @@ const Landing: React.FC<Props> = ({ count, queryFormat, sample }) => (
       .lp-hero h1 { font-size: var(--fs-3xl); line-height: var(--lh-tight); margin: var(--sp-4) 0; }
       .lp-lead { font-size: var(--fs-lg); color: var(--text-1); max-width: 660px; }
       .lp-cta { display: flex; align-items: center; gap: var(--sp-5); flex-wrap: wrap; margin-top: var(--sp-6); }
-      .lp-q { font-size: var(--fs-sm); color: var(--text-2); }
+      .lp-q { font-size: var(--fs-sm); }
       .lp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--sp-3); margin-top: var(--sp-5); }
       .lp-pair { display: flex; flex-direction: column; gap: 2px; padding: var(--sp-3) var(--sp-4); background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-md); }
       .lp-sym { font-weight: 600; }
