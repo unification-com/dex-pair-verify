@@ -2,6 +2,7 @@ import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import { Web3 } from "web3";
 
+import { usd, num as fmtNum } from "../../lib/format";
 import {
     aggregatePrices,
     getStats,
@@ -38,15 +39,8 @@ const METHODS: { key: OutlierMethod; label: string; robust?: boolean }[] = [
     { key: "peirce", label: "Peirce", robust: true },
 ];
 
-const usd = (n: number) => {
-    if (n == null) return "—";
-    const a = Math.abs(n);
-    if (a >= 1e9) return "$" + (n / 1e9).toFixed(2) + "B";
-    if (a >= 1e6) return "$" + (n / 1e6).toFixed(2) + "M";
-    if (a >= 1e3) return "$" + (n / 1e3).toFixed(1) + "k";
-    return "$" + n.toFixed(2);
-};
-const num = (n: number) => new Intl.NumberFormat("en-GB", { maximumFractionDigits: 4 }).format(n);
+// Price grid wants 4 dp; the shared formatter defaults to 0.
+const num = (n: number) => fmtNum(n, 4);
 
 const PriceData: React.FC<{
     base: string,

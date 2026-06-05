@@ -13,12 +13,16 @@ import DataTable, { Column } from "../../components/ui/DataTable";
 import Icon from "../../components/ui/Icon";
 import PageHeader from "../../components/ui/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
-import { operatorGate } from "../../lib/operatorGate";
+import { usd, num as fmtNum, ageStr } from "../../lib/format";
+import { isOperatorCtx } from "../../lib/operatorGate";
 import prisma from '../../lib/prisma';
-import { isVerifiedStatus } from "../../lib/status";
+import { isVerifiedStatus, VERIFIED_STATUSES } from "../../lib/status";
 import { getTokenWebPresence, TokenWebPresence } from "../../lib/tokenWebPresence";
 import { AssociatedPairProps, TokenProps } from "../../types/props";
 import { TokenPairStatus } from "../../types/types";
+
+// Detail pages show 2 dp; the shared formatter defaults to 0.
+const num = (n: number | null | undefined) => fmtNum(n, 2);
 
 const pairSelect = {
     pair: true, id: true, contractAddress: true, reserveUsd: true, reserve0: true,
@@ -26,12 +30,34 @@ const pairSelect = {
     txCount: true, confidence: true, status: true, dex: true,
 };
 
+// Trimmed token shape for the public read-only view (no trust/scam/web internals).
+type PublicTokenDetail = {
+    id: string; chain: string; contractAddress: string; symbol: string; name: string;
+    status: TokenPairStatus; verificationMethod: string;
+    coingeckoCoinId: string | null; decimals: number; deploymentTimestamp: number | null;
+};
+
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
-  const gate = await operatorGate(ctx);
-  if (gate) return gate;
+  const operator = await isOperatorCtx(ctx);
   const { params } = ctx;
+  const id = String(params?.id);
+
+  // Public: read-only view of VERIFIED tokens only. Anything else is 404 to anon.
+  if (!operator) {
+    const token = await prisma.token.findFirst({
+      where: { id, status: { in: [...VERIFIED_STATUSES] } },
+      include: { pairsToken0: { select: pairSelect }, pairsToken1: { select: pairSelect } },
+    });
+    if (token === null) {
+      return { notFound: true };
+    }
+    const { pairsToken0, pairsToken1, ...scalar } = token;
+    const pools = (pairsToken1 || []).concat(pairsToken0 || []).filter((p) => isVerifiedStatus(p.status as TokenPairStatus));
+    return { props: { isOperator: false, token: scalar, pools } };
+  }
+
     const token = await prisma.token.findUnique({
-        where: { id: String(params?.id) },
+        where: { id },
         include: {
             pairsToken0: { select: pairSelect },
             pairsToken1: { select: pairSelect },
@@ -48,41 +74,22 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     // holders), write-through cached on the token row; degrades to blank on
     // failure, never blocks the page.
     const web = await getTokenWebPresence(token)
-    return { props: { token, similarTokens, web } }
+    return { props: { isOperator: true, token, similarTokens, web } }
 }
 
-type Props = {
+type OperatorProps = {
+    isOperator: true;
     token: TokenProps;
     similarTokens: TokenProps[];
     web: TokenWebPresence;
 }
+type PublicProps = {
+    isOperator: false;
+    token: PublicTokenDetail;
+    pools: AssociatedPairProps[];
+}
+type Props = OperatorProps | PublicProps;
 
-const usd = (n: number | null | undefined) => {
-    if (n == null) return "—";
-    const a = Math.abs(n);
-    if (a >= 1e9) return "$" + (n / 1e9).toFixed(2) + "B";
-    if (a >= 1e6) return "$" + (n / 1e6).toFixed(2) + "M";
-    if (a >= 1e3) return "$" + (n / 1e3).toFixed(1) + "k";
-    return "$" + n.toFixed(2);
-};
-const num = (n: number | null | undefined) =>
-    n == null ? "—" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: 2 }).format(n);
-const ageStr = (ts: number | null) => {
-    if (!ts) return "unknown";
-    const days = Math.max(0, Date.now() / 1000 - ts) / 86400;
-    if (days < 1) return Math.max(1, Math.round(days * 24)) + "h";          // < 1 day → hours
-    if (days < 7) return Math.round(days) + "d";                            // < 1 week → days
-    if (days < 30.44) {                                                     // < 1 month → weeks + days
-        const w = Math.floor(days / 7);
-        const d = Math.round(days - w * 7);
-        return d > 0 ? `${w}w ${d}d` : `${w}w`;
-    }
-    const months = Math.floor(days / 30.44);
-    if (months < 12) return months + "mo";                                  // 1–12 months → months
-    const y = Math.floor(months / 12);                                      // > 12 months → years + months
-    const mo = months - y * 12;
-    return mo > 0 ? `${y}y ${mo}mo` : `${y}y`;
-};
 const hostOf = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
 
 const KV: React.FC<{ k: React.ReactNode; v: React.ReactNode }> = ({ k, v }) => (
@@ -98,7 +105,69 @@ const TrustRow: React.FC<{ label: string; tone: Tone; value: string; detail?: st
     </div>
 );
 
-const Token: React.FC<Props> = (props) => {
+// The public associated-pairs table (no confidence column — that's internal).
+const publicPairCols: Column<AssociatedPairProps>[] = [
+    { key: "pair", label: "Pair", sortable: true, render: (p) => <span style={{ fontWeight: 600 }}>{p.pair}</span> },
+    { key: "dex", label: "DEX", sortable: true },
+    { key: "reserveUsd", label: "Liquidity", num: true, sortable: true, render: (p) => usd(p.reserveUsd) },
+    { key: "txCount", label: "Tx", num: true, sortable: true, render: (p) => num(p.txCount) },
+    { key: "status", label: "Status", render: (p) => <StatusBadge status={p.status} size="sm" /> },
+];
+
+// Public read-only token detail: identity + market facts + verified pools.
+const PublicToken: React.FC<PublicProps> = ({ token: t, pools }) => {
+    const router = useRouter()
+    const totalLiquidity = pools.reduce((s, p) => s + (p.reserveUsd || 0), 0)
+    const vol24h = pools.reduce((s, p) => s + (p.volumeUsd24h || 0), 0)
+
+    return (
+        <Layout crumb={<Link href="/tokens"><a>‹ Verified tokens</a></Link>}>
+            <PageHeader
+                title={t.symbol}
+                badge={<StatusBadge status={t.status} method={t.verificationMethod} />}
+                sub={<span className="row gap-3 wrap items-center">
+                    {t.name} · <ChainName chain={t.chain} /> ·{" "}
+                    <ExplorerUrl chain={t.chain} contractAddress={t.contractAddress} linkType={"token"} /> ·{" "}
+                    <CoinGeckoCoinLink coingeckoId={t.coingeckoCoinId} />
+                </span>}
+            />
+
+            <div className="tok-main">
+                <div className="card card-pad">
+                    <span className="eyebrow" style={{ display: "block", marginBottom: "var(--sp-1)" }}>Identity</span>
+                    <div className="kv-grid">
+                        <KV k="CoinGecko" v={t.coingeckoCoinId ? <CoinGeckoCoinLink coingeckoId={t.coingeckoCoinId} /> : "—"} />
+                        <KV k="Decimals" v={String(t.decimals)} />
+                        <KV k="Age" v={ageStr(t.deploymentTimestamp)} />
+                        <KV k="Address" v={<ExplorerUrl chain={t.chain} contractAddress={t.contractAddress} linkType={"token"} />} />
+                    </div>
+                </div>
+
+                <div className="card card-pad">
+                    <span className="eyebrow" style={{ display: "block", marginBottom: "var(--sp-1)" }}>Across its verified pools</span>
+                    <div className="kv-grid">
+                        <KV k="Verified pools" v={pools.length} />
+                        <KV k="Total liquidity" v={usd(totalLiquidity)} />
+                        <KV k="24h volume" v={usd(vol24h)} />
+                    </div>
+                </div>
+
+                <div className="card card-pad">
+                    <span className="eyebrow" style={{ marginBottom: "var(--sp-3)", display: "block" }}>Verified pairs ({pools.length})</span>
+                    <DataTable columns={publicPairCols} data={pools} rowKey={(p) => p.id} onRowClick={(p) => router.push(`/p/${p.id}`)} sortInit={{ key: "reserveUsd", dir: "desc" }} empty="No verified pairs." />
+                </div>
+            </div>
+
+            <style jsx>{`
+                .tok-main { display: flex; flex-direction: column; gap: var(--sp-5); }
+                .kv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--sp-7); padding-top: var(--sp-3); }
+                .kv-row { display: flex; justify-content: space-between; gap: var(--sp-4); padding: var(--sp-2) 0; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
+            `}</style>
+        </Layout>
+    )
+}
+
+const OperatorToken: React.FC<OperatorProps> = (props) => {
     const router = useRouter()
     const t = props.token;
     const [currentStatus, setCurrentStatus] = useState(t.status)
@@ -313,4 +382,11 @@ const Token: React.FC<Props> = (props) => {
     )
 }
 
-export default Token;
+function TokenPage(props: Props) {
+    if (props.isOperator) {
+        return <OperatorToken {...(props as OperatorProps)} />
+    }
+    return <PublicToken {...(props as PublicProps)} />
+}
+
+export default TokenPage;

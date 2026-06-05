@@ -10,6 +10,7 @@ import Layout from "../components/shell/Layout";
 import ConfidenceMeter from "../components/ui/ConfidenceMeter";
 import Icon from "../components/ui/Icon";
 import PageHeader from "../components/ui/PageHeader";
+import { usd } from "../lib/format";
 import { isOperatorCtx } from "../lib/operatorGate";
 import prisma from "../lib/prisma";
 import { VERIFIED_STATUSES } from "../lib/status";
@@ -89,14 +90,6 @@ type PublicProps = {
   sources: SourceRow[];
 };
 type Props = OperatorProps | PublicProps;
-
-const usd = (n: number) => {
-  const a = Math.abs(n);
-  if (a >= 1e9) return "$" + (n / 1e9).toFixed(2) + "B";
-  if (a >= 1e6) return "$" + (n / 1e6).toFixed(2) + "M";
-  if (a >= 1e3) return "$" + (n / 1e3).toFixed(1) + "k";
-  return "$" + n.toFixed(2);
-};
 
 const AdminHome: React.FC<OperatorProps> = (props) => {
   const router = useRouter();

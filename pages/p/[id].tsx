@@ -22,7 +22,8 @@ import Icon from "../../components/ui/Icon";
 import PageHeader from "../../components/ui/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { deriveFences, UiFence } from "../../lib/fences";
-import { operatorGate } from "../../lib/operatorGate";
+import { usd, num as fmtNum } from "../../lib/format";
+import { isOperatorCtx } from "../../lib/operatorGate";
 import prisma from '../../lib/prisma';
 import { isVerifiedStatus, VERIFIED_STATUSES } from "../../lib/status";
 import { REASON_LABEL } from "../../lib/statusMeta";
@@ -31,15 +32,43 @@ import { buildVerdictContext, PairWithTokens } from "../../lib/verdictRunner";
 import { PairProps } from "../../types/props";
 import { TokenPairStatus } from "../../types/types";
 
+// Detail pages show 2 dp; the shared formatter defaults to 0.
+const num = (n: number | null | undefined) => fmtNum(n, 2);
+
 type VerdictView = { reasonCode: string; confidence: number | null; reason: string };
 type QueueView = { ids: string[]; filterQs: string };
 type MiniPair = { id: string; chain: string; dex: string; pair: string; reserveUsd: number; txCount: number; status: TokenPairStatus };
 
+// Trimmed pair shape for the public read-only view (no verdict/fence/trust internals).
+type PublicTokenView = { symbol: string; id: string; contractAddress: string; txCount: number; status: TokenPairStatus; coingeckoCoinId: string | null };
+type PublicPairView = {
+  id: string; chain: string; dex: string; contractAddress: string; pair: string;
+  status: TokenPairStatus; verificationMethod: string;
+  reserveUsd: number; reserve0: number; reserve1: number; reserveNativeCurrency: number;
+  volumeUsd: number; volumeUsd24h: number; marketCapUsd: number; txCount: number;
+  buys24h: number; sells24h: number; buyers24h: number; sellers24h: number;
+  token0: PublicTokenView; token1: PublicTokenView;
+};
+
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
-  const gate = await operatorGate(ctx);
-  if (gate) return gate;
+  const operator = await isOperatorCtx(ctx);
   const { params, query } = ctx;
   const id = String(params?.id);
+
+  // Public: read-only view of VERIFIED pairs only. Anything else is 404 to anon.
+  if (!operator) {
+    const pair = await prisma.pair.findFirst({
+      where: { id, status: { in: [...VERIFIED_STATUSES] } },
+      include: {
+        token0: { select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true, coingeckoCoinId: true } },
+        token1: { select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true, coingeckoCoinId: true } },
+      },
+    });
+    if (pair === null) {
+      return { notFound: true };
+    }
+    return { props: { isOperator: false, pair } };
+  }
 
   // Full rows drive the verdict engine; the SAME enrichment path the runner uses
   // (DRY) produces the per-token canonical/decimals/price/identity inputs the UI
@@ -145,6 +174,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
 
   return {
     props: {
+      isOperator: true,
       pair,
       similarPairs,
       fences,
@@ -158,7 +188,8 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   }
 }
 
-type Props = {
+type OperatorProps = {
+  isOperator: true;
   pair: PairProps;
   similarPairs: PairProps[];
   fences: UiFence[];
@@ -169,23 +200,89 @@ type Props = {
   autoVerifyBar: number;
   queue: QueueView | null;
 }
-
-const usd = (n: number | null | undefined) => {
-  if (n == null) return "—";
-  const a = Math.abs(n);
-  if (a >= 1e9) return "$" + (n / 1e9).toFixed(2) + "B";
-  if (a >= 1e6) return "$" + (n / 1e6).toFixed(2) + "M";
-  if (a >= 1e3) return "$" + (n / 1e3).toFixed(1) + "k";
-  return "$" + n.toFixed(2);
-};
-const num = (n: number | null | undefined) =>
-  n == null ? "—" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: 2 }).format(n);
+type PublicProps = {
+  isOperator: false;
+  pair: PublicPairView;
+}
+type Props = OperatorProps | PublicProps;
 
 const KV: React.FC<{ k: React.ReactNode; v: React.ReactNode }> = ({ k, v }) => (
   <div className="kv-row"><span className="kv-k muted">{k}</span><span className="kv-v mono">{v}</span></div>
 );
 
-const Pair: React.FC<Props> = (props) => {
+// Public read-only pair detail: status + symbols + liquidity + chains. No
+// verdict/confidence/fences/trust internals, no actions.
+const PublicPair: React.FC<PublicProps> = ({ pair }) => (
+  <Layout crumb={<Link href="/pairs"><a>‹ Verified pairs</a></Link>}>
+    <PageHeader
+      title={pair.pair}
+      badge={<StatusBadge status={pair.status} method={pair.verificationMethod} />}
+      sub={<span className="row gap-3 wrap items-center">
+        <ChainName chain={pair.chain} /> · <DexName dex={pair.dex} /> ·{" "}
+        <CoinGeckoPoolLink chain={pair.chain} contractAddress={pair.contractAddress} /> ·{" "}
+        <PoolUrl chain={pair.chain} dex={pair.dex} contractAddress={pair.contractAddress} /> ·{" "}
+        <ExplorerUrl chain={pair.chain} contractAddress={pair.contractAddress} linkType={"address"} />
+      </span>}
+    />
+
+    <div className="pub-grid">
+      <div className="token-cards">
+        {[pair.token0, pair.token1].map((t, i) => (
+          <div className="card card-pad token-card" key={`tok_${i}`}>
+            <div className="row spread items-center">
+              <span className="eyebrow">Token {i}</span>
+              <StatusBadge status={t.status} size="sm" />
+            </div>
+            <div className="tok-sym">{t.symbol}</div>
+            <KV k="Address" v={<ExplorerUrl chain={pair.chain} contractAddress={t.contractAddress} linkType={"token"} />} />
+            <KV k="CoinGecko" v={<CoinGeckoCoinLink coingeckoId={t.coingeckoCoinId} />} />
+            <KV k="Tx count" v={num(t.txCount)} />
+            <Link href={`/t/${t.id}`}><a className="btn btn-ghost btn-sm" style={{ marginTop: "var(--sp-4)" }}>View token →</a></Link>
+          </div>
+        ))}
+      </div>
+
+      <div className="card card-pad">
+        <span className="eyebrow" style={{ display: "block", marginBottom: "var(--sp-1)" }}>Liquidity &amp; volume</span>
+        <div className="kv-grid">
+          <KV k="Reserve USD" v={usd(pair.reserveUsd)} />
+          <KV k="Reserve native" v={<>{num(pair.reserveNativeCurrency)} <NativeToken chain={pair.chain} /></>} />
+          <KV k={`Reserve ${pair.token0.symbol}`} v={num(pair.reserve0)} />
+          <KV k={`Reserve ${pair.token1.symbol}`} v={num(pair.reserve1)} />
+          <KV k="Volume USD" v={usd(pair.volumeUsd)} />
+          <KV k="24h volume" v={usd(pair.volumeUsd24h)} />
+          <KV k="Tx count" v={num(pair.txCount)} />
+          <KV k="Market cap" v={usd(pair.marketCapUsd)} />
+        </div>
+      </div>
+
+      <div className="card card-pad">
+        <span className="eyebrow" style={{ display: "block", marginBottom: "var(--sp-1)" }}>24h activity</span>
+        <div className="kv-grid">
+          <KV k="Buys" v={num(pair.buys24h)} />
+          <KV k="Buyers" v={num(pair.buyers24h)} />
+          <KV k="Sells" v={num(pair.sells24h)} />
+          <KV k="Sellers" v={num(pair.sellers24h)} />
+        </div>
+      </div>
+    </div>
+
+    <style jsx>{`
+      .pub-grid { display: flex; flex-direction: column; gap: var(--sp-5); }
+      .token-cards { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-5); }
+      .token-card { display: flex; flex-direction: column; gap: var(--sp-2); }
+      .tok-sym { font-size: var(--fs-xl); font-weight: 700; margin: var(--sp-1) 0 var(--sp-3); }
+      .kv-row { display: flex; justify-content: space-between; gap: var(--sp-4); padding: var(--sp-2) 0; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
+      .kv-row:last-child { border-bottom: 0; }
+      .kv-k { white-space: nowrap; }
+      .kv-v { text-align: right; word-break: break-word; }
+      .kv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--sp-7); padding-top: var(--sp-3); }
+      @media (max-width: 720px) { .token-cards { grid-template-columns: 1fr; } }
+    `}</style>
+  </Layout>
+);
+
+const OperatorPair: React.FC<OperatorProps> = (props) => {
   const router = useRouter();
   const [currentStatus, setCurrentStatus] = useState(props.pair.status)
 
@@ -481,4 +578,11 @@ const Pair: React.FC<Props> = (props) => {
   )
 }
 
-export default Pair
+function PairPage(props: Props) {
+  if (props.isOperator) {
+    return <OperatorPair {...(props as OperatorProps)} />
+  }
+  return <PublicPair {...(props as PublicProps)} />
+}
+
+export default PairPage

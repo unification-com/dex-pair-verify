@@ -4,13 +4,7 @@
 // bare number.
 import React from "react";
 
-const usd = (n: number) => {
-  const a = Math.abs(n);
-  if (a >= 1e9) return "$" + (n / 1e9).toFixed(2) + "B";
-  if (a >= 1e6) return "$" + (n / 1e6).toFixed(2) + "M";
-  if (a >= 1e3) return "$" + (n / 1e3).toFixed(1) + "k";
-  return "$" + n.toFixed(2);
-};
+import { usd } from "../../lib/format";
 
 const ReserveVsFloor: React.FC<{ reserveUsd: number; floor: number; hardFloor: number }> = ({ reserveUsd, floor, hardFloor }) => {
   const lo = Math.max(1, (hardFloor || 500) / 2);

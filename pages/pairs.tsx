@@ -13,8 +13,10 @@ import DataTable, { Column } from "../components/ui/DataTable";
 import Icon from "../components/ui/Icon";
 import PageHeader from "../components/ui/PageHeader";
 import StatusBadge from "../components/ui/StatusBadge";
-import { operatorGate } from "../lib/operatorGate";
+import { usd, num } from "../lib/format";
+import { isOperatorCtx } from "../lib/operatorGate";
 import prisma from '../lib/prisma';
+import { VERIFIED_STATUSES } from "../lib/status";
 import { PairProps } from "../types/props";
 import { TokenPairStatus } from "../types/types";
 
@@ -35,17 +37,56 @@ const PAIR_TABS: { status: TokenPairStatus; label: string }[] = [
 const cleanParam = (v: unknown): string | null =>
     typeof v === "string" && v !== "" && v !== "undefined" ? v : null;
 
+type Source = { chain: string; dex: string };
+
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
-  const gate = await operatorGate(ctx);
-  if (gate) return gate;
+  const operator = await isOperatorCtx(ctx);
   const { query } = ctx;
+  // U-Q1: chain/dex are OPTIONAL filters. Absent → the whole queue.
+  const chain = cleanParam(query?.chain)
+  const dex = cleanParam(query?.dex)
+  const page = Math.max(1, Number(query?.page || 1))
+
+  // Public visitors get a read-only listing of VERIFIED pairs only — no review
+  // queue, no triage, no confidence/driver internals, no actions.
+  if (!operator) {
+    const where = {
+      status: { in: [...VERIFIED_STATUSES] },
+      ...(chain ? { chain } : {}),
+      ...(dex ? { dex } : {}),
+    }
+    const [pairs, totalCount, sourceGroups] = await Promise.all([
+      prisma.pair.findMany({
+        where,
+        include: {
+          token0: { select: { symbol: true, id: true, status: true } },
+          token1: { select: { symbol: true, id: true, status: true } },
+        },
+        orderBy: [{ reserveNativeCurrency: 'desc' }],
+        skip: (page - 1) * PAGE_SIZE,
+        take: PAGE_SIZE,
+      }),
+      prisma.pair.count({ where }),
+      prisma.pair.groupBy({ by: ['chain', 'dex'], where: { status: { in: [...VERIFIED_STATUSES] } }, _count: { _all: true } }),
+    ])
+    const chains = Array.from(new Set(sourceGroups.map((g) => g.chain))).sort()
+    const sources: Source[] = sourceGroups.map((g) => ({ chain: g.chain, dex: g.dex }))
+    return {
+      props: {
+        isOperator: false,
+        pairs,
+        chain: chain ?? "",
+        dex: dex ?? "",
+        page,
+        totalPages: Math.max(1, Math.ceil(totalCount / PAGE_SIZE)),
+        totalCount,
+        chains,
+        sources,
+      },
+    }
+  }
 
     const qStatus = String(query?.status || TokenPairStatus.NeedsReview) as TokenPairStatus
-    // U-Q1: chain/dex are now OPTIONAL filters. Absent → the whole unified queue
-    // across every source, instead of one (chain, dex) at a time.
-    const chain = cleanParam(query?.chain)
-    const dex = cleanParam(query?.dex)
-    const page = Math.max(1, Number(query?.page || 1))
     const tier = qStatus === TokenPairStatus.NeedsReview && query?.tier ? String(query.tier) : undefined
 
     const scope: Record<string, string> = {}
@@ -82,10 +123,11 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     for (const t of thresholdRows) (floorMap[t.chain] ||= {})[t.dex] = t.minLiquidityUsd
 
     const chains = Array.from(new Set(sourceGroups.map((g) => g.chain))).sort()
-    const sources = sourceGroups.map((g) => ({ chain: g.chain, dex: g.dex }))
+    const sources: Source[] = sourceGroups.map((g) => ({ chain: g.chain, dex: g.dex }))
 
     return {
         props: {
+            isOperator: true,
             pairs,
             chain: chain ?? "",
             dex: dex ?? "",
@@ -103,8 +145,8 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     };
 }
 
-type Source = { chain: string; dex: string };
-type Props = {
+type OperatorProps = {
+    isOperator: true,
     pairs: PairProps[],
     chain: string,
     dex: string,
@@ -119,24 +161,103 @@ type Props = {
     chains: string[],
     sources: Source[],
 }
-
-const usd = (n: number | null | undefined) => {
-    if (n == null) return "—";
-    const a = Math.abs(n);
-    if (a >= 1e9) return "$" + (n / 1e9).toFixed(2) + "B";
-    if (a >= 1e6) return "$" + (n / 1e6).toFixed(2) + "M";
-    if (a >= 1e3) return "$" + (n / 1e3).toFixed(1) + "k";
-    return "$" + n.toFixed(2);
-};
-const num = (n: number | null | undefined) =>
-    n == null ? "—" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 }).format(n);
+type PublicProps = {
+    isOperator: false,
+    pairs: PairProps[],
+    chain: string,
+    dex: string,
+    page: number,
+    totalPages: number,
+    totalCount: number,
+    chains: string[],
+    sources: Source[],
+}
+type Props = OperatorProps | PublicProps;
 
 const TriageBadge: React.FC<{ tier: string | null }> = ({ tier }) =>
     tier === "spam" ? <span className="badge badge-fail badge-sm">Likely spam</span>
         : tier === "review" ? <span className="badge badge-warn badge-sm">Worth a look</span>
             : <span className="muted">—</span>;
 
-const ListPairs: React.FC<Props> = (props) => {
+// Public read-only listing of verified pairs.
+const PublicPairs: React.FC<PublicProps> = (props) => {
+    const router = useRouter()
+    const [filter, setFilter] = useState("")
+    useEffect(() => { setFilter("") }, [props.chain, props.dex, props.page])
+
+    const hrefWith = (over: Partial<{ chain: string; dex: string; page: number }>): string => {
+        const qs = new URLSearchParams()
+        const chain = over.chain ?? props.chain
+        const dex = over.dex ?? props.dex
+        if (chain) qs.set("chain", chain)
+        if (dex) qs.set("dex", dex)
+        if (over.page && over.page > 1) qs.set("page", String(over.page))
+        const s = qs.toString()
+        return s ? `/pairs?${s}` : "/pairs"
+    }
+
+    const f = filter.trim().toLowerCase()
+    const visible = f
+        ? props.pairs.filter((p) => `${p.pair} ${p.chain} ${p.dex}`.toLowerCase().includes(f))
+        : props.pairs
+
+    const cols: Column<PairProps>[] = [
+        {
+            key: "pair", label: "Pair", sortable: true, render: (p) => (
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                    <span style={{ fontWeight: 600 }}>{p.pair}</span>
+                    <span className="muted" style={{ fontSize: "var(--fs-xs)" }}><ChainName chain={p.chain} /> · <DexName dex={p.dex} /></span>
+                </div>
+            ),
+        },
+        { key: "reserveUsd", label: "Liquidity", num: true, sortable: true, render: (p) => usd(p.reserveUsd) },
+        { key: "txCount", label: "Tx", num: true, sortable: true, render: (p) => num(p.txCount) },
+        { key: "status", label: "Status", render: (p) => <StatusBadge status={p.status} size="sm" /> },
+    ]
+
+    return (
+        <Layout crumb="Verified pairs">
+            <PageHeader
+                title="Verified pairs"
+                sub={`${props.totalCount} verified DEX pairs feeding OoO${props.chain || props.dex ? " · filtered" : " · all sources"}`}
+            />
+
+            <div className="filters card card-pad">
+                <span className="ico-input">
+                    <Icon name="search" size={14} />
+                    <input className="input" placeholder="Filter pair / chain / dex (this page)" value={filter} onChange={(e) => setFilter(e.target.value)} />
+                </span>
+                <select className="input" value={props.chain} onChange={(e) => router.push(hrefWith({ chain: e.target.value, dex: "", page: 1 }))}>
+                    <option value="">All chains</option>
+                    {props.chains.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select className="input" value={props.dex} onChange={(e) => router.push(hrefWith({ dex: e.target.value, page: 1 }))}>
+                    <option value="">All DEXs</option>
+                    {props.sources.filter((s) => !props.chain || s.chain === props.chain).map((s) => <option key={`${s.chain}_${s.dex}`} value={s.dex}>{s.dex}{props.chain ? "" : ` (${s.chain})`}</option>)}
+                </select>
+            </div>
+
+            <DataTable
+                columns={cols}
+                data={visible}
+                rowKey={(p) => p.id}
+                onRowClick={(p) => router.push(`/p/${p.id}`)}
+                empty="No verified pairs in this view."
+            />
+
+            <Pagination page={props.page} totalPages={props.totalPages} makeHref={(p) => hrefWith({ page: p })} />
+
+            <style jsx>{`
+                .filters { display: flex; gap: var(--sp-4); align-items: center; margin-bottom: var(--sp-4); flex-wrap: wrap; }
+                .ico-input { position: relative; display: inline-flex; align-items: center; flex: 1; min-width: 220px; }
+                .ico-input :global(.ico) { position: absolute; left: 10px; color: var(--text-2); }
+                .ico-input .input { width: 100%; padding-left: 30px; }
+            `}</style>
+        </Layout>
+    )
+}
+
+const OperatorPairs: React.FC<OperatorProps> = (props) => {
     const router = useRouter()
     const [selected, setSelected] = useState<Set<string>>(new Set())
     const [filter, setFilter] = useState("")
@@ -319,4 +440,11 @@ const ListPairs: React.FC<Props> = (props) => {
     )
 }
 
-export default ListPairs
+function PairsPage(props: Props) {
+    if (props.isOperator) {
+        return <OperatorPairs {...(props as OperatorProps)} />
+    }
+    return <PublicPairs {...(props as PublicProps)} />
+}
+
+export default PairsPage

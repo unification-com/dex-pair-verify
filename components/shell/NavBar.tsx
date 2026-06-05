@@ -51,16 +51,17 @@ const NavBar: React.FC<{ needsReviewCount?: number }> = ({ needsReviewCount }) =
       </div>
 
       <nav className="sb-nav">
-        {/* Public link — shown to everyone. The dedicated /pairs, /tokens, /sources
-            list pages are operator-only for now (their public views land in the next
-            stage); anonymous visitors get the verified-data overview on the dashboard. */}
+        {/* Public surface — shown to everyone. The list/detail pages render a
+            read-only verified-only view for anonymous visitors and the full
+            view for operators. The review ★ + needs-review pill on Pairs is
+            operator-only context. */}
         <Item href="/" icon="home" label="Dashboard" active={router.asPath === "/"} />
+        <Item href="/pairs" icon="queue" label="Pairs" star={isOperator} pill={isOperator ? (needsReviewCount ?? null) : null} active={active("/pairs")} />
+        <Item href="/tokens" icon="token" label="Tokens" active={active("/tokens")} />
+        <Item href="/sources" icon="layers" label="Sources" active={active("/sources")} />
 
         {/* Operator-only surface. */}
         {isOperator && <>
-          <Item href="/pairs" icon="queue" label="Pairs" star pill={needsReviewCount ?? null} active={active("/pairs")} />
-          <Item href="/tokens" icon="token" label="Tokens" active={active("/tokens")} />
-          <Item href="/sources" icon="layers" label="Sources" active={active("/sources")} />
           <div className="sb-group-label">Pipeline</div>
           {PASSES.map((p) => (
             <Link key={p.id} href={p.href}><a className={`sb-link${active(p.href) ? " active" : ""}`}>

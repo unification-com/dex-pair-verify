@@ -3,21 +3,12 @@ import { useRouter } from "next/router";
 import React, { useEffect, useState } from "react";
 
 import PriceData from "./PriceData";
+import { usd, num } from "../../lib/format";
 import { PairProps } from "../../types/props";
 import ChainName from "../ChainName";
 import DexName from "../DexName";
 import DataTable, { Column } from "../ui/DataTable";
 import PageHeader from "../ui/PageHeader";
-
-const usd = (n: number) => {
-    if (n == null) return "—";
-    const a = Math.abs(n);
-    if (a >= 1e9) return "$" + (n / 1e9).toFixed(2) + "B";
-    if (a >= 1e6) return "$" + (n / 1e6).toFixed(2) + "M";
-    if (a >= 1e3) return "$" + (n / 1e3).toFixed(1) + "k";
-    return "$" + n.toFixed(2);
-};
-const num = (n: number) => new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 }).format(n);
 
 const PriceTest: React.FC<{
     base: string,

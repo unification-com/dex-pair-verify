@@ -1,20 +1,28 @@
 // pages/sources.tsx
-// Phase 4, 4.A — the candidate review console. Lists Pending CandidateDexNetwork
-// rows (from `yarn discover`), and for each lets the operator paste a subgraph
-// URL → Verify (lib/subgraphVerify via /api/admin/verifysource) → confirm the
-// operational fields → Promote into SupportedSource, or Reject (D4). GeckoTerminal
-// gives only id+name per dex (Q1), so the subgraph URL + factory address are
-// operator-supplied here. The literal API key is never persisted — Verify returns
-// the {API_KEY} template, and only that template is promoted.
+// Public: a read-only listing of the supported DEX subgraph sources (go-ooo's
+// source of truth — chain, dex, schema family, provider, factory, verified-pair
+// count). Operator: the candidate review console — lists Pending
+// CandidateDexNetwork rows (from `yarn discover`), and for each lets the operator
+// paste a subgraph URL → Verify (lib/subgraphVerify via /api/admin/verifysource)
+// → confirm the operational fields → Promote into SupportedSource, or Reject
+// (D4). GeckoTerminal gives only id+name per dex (Q1), so the subgraph URL +
+// factory address are operator-supplied here. The literal API key is never
+// persisted — Verify returns the {API_KEY} template, and only that template is
+// promoted.
 import { GetServerSideProps } from "next";
+import Link from "next/link";
 import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
+import ChainName from "../components/ChainName";
+import StatCard from "../components/dashboard/StatCard";
+import DexName from "../components/DexName";
 import Layout from "../components/shell/Layout";
 import PageHeader from "../components/ui/PageHeader";
-import { operatorGate } from "../lib/operatorGate";
+import { isOperatorCtx } from "../lib/operatorGate";
 import prisma from "../lib/prisma";
 import { decentralizedTemplate, seedForGt } from "../lib/sourceSeeds";
+import { VERIFIED_STATUSES } from "../lib/status";
 import { CandidateStatus } from "../types/types";
 
 type Candidate = {
@@ -39,11 +47,49 @@ type Supported = {
   enabledAt: number;
 };
 
+// A supported source plus its verified-pair count, for the public listing.
+type PublicSource = {
+  id: string;
+  chain: string;
+  dex: string;
+  subgraphProvider: string;
+  subgraphSchemaFamily: string;
+  factoryAddress: string;
+  lastVerifiedAt: number;
+  pairCount: number;
+};
+
 const SCHEMA_FAMILIES = ["univ2", "univ3", "custom"];
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
-  const gate = await operatorGate(ctx);
-  if (gate) return gate;
+  const operator = await isOperatorCtx(ctx);
+
+  // Public: just the supported sources + their verified-pair counts. No
+  // candidates, no discover/promote/verify machinery.
+  if (!operator) {
+    const [supported, pairGroups] = await Promise.all([
+      prisma.supportedSource.findMany({
+        orderBy: [{ chain: "asc" }, { dex: "asc" }],
+        select: {
+          id: true,
+          chain: true,
+          dex: true,
+          subgraphProvider: true,
+          subgraphSchemaFamily: true,
+          factoryAddress: true,
+          lastVerifiedAt: true,
+        },
+      }),
+      prisma.pair.groupBy({ by: ["chain", "dex"], where: { status: { in: [...VERIFIED_STATUSES] } }, _count: { _all: true } }),
+    ]);
+    const countMap: Record<string, number> = {};
+    for (const g of pairGroups) countMap[`${g.chain}:${g.dex}`] = g._count._all;
+    const sources: PublicSource[] = supported.map((s) => ({ ...s, pairCount: countMap[`${s.chain}:${s.dex}`] ?? 0 }));
+    const networks = new Set(supported.map((s) => s.chain)).size;
+    const totalPairs = sources.reduce((a, r) => a + r.pairCount, 0);
+    return { props: { isOperator: false, sources, networks, totalPairs } };
+  }
+
   const [candidates, supported] = await Promise.all([
     prisma.candidateDexNetwork.findMany({
       where: { status: CandidateStatus.Pending },
@@ -74,8 +120,12 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     }),
   ]);
 
-  return { props: { candidates, supported } };
+  return { props: { isOperator: true, candidates, supported } };
 };
+
+type OperatorProps = { isOperator: true; candidates: Candidate[]; supported: Supported[] };
+type PublicProps = { isOperator: false; sources: PublicSource[]; networks: number; totalPairs: number };
+type Props = OperatorProps | PublicProps;
 
 type FormState = {
   url: string;
@@ -105,9 +155,69 @@ type FormState = {
 
 const fmtDate = (s: number): string => (s > 0 ? new Date(s * 1000).toISOString().slice(0, 10) : "—");
 
-const Sources: React.FC<{ candidates: Candidate[]; supported: Supported[] }> = (props) => {
-  const [candidates, setCandidates] = useState<Candidate[]>(props.candidates);
-  const [supported, setSupported] = useState<Supported[]>(props.supported);
+// Read-only supported-sources listing for the public.
+const PublicSources: React.FC<PublicProps> = (props) => (
+  <Layout crumb="Sources">
+    <PageHeader
+      title="Supported sources"
+      sub="The DEX subgraph sources that feed Unification's OoO oracle. Each verified pair is queried on-chain via the OoO API from one of these sources."
+    />
+
+    <div className="stat-row">
+      <StatCard label="Sources" value={props.sources.length} icon="layers" />
+      <StatCard label="Networks" value={props.networks} icon="home" />
+      <StatCard label="Verified pairs" value={props.totalPairs} tone="pass" icon="check" />
+    </div>
+
+    <div className="card card-pad" style={{ marginTop: "var(--sp-5)" }}>
+      <span className="eyebrow">Sources ({props.sources.length})</span>
+      {props.sources.length === 0 ? (
+        <p className="muted" style={{ marginTop: "var(--sp-3)" }}>No sources configured yet.</p>
+      ) : (
+        <div className="src-tbl" style={{ marginTop: "var(--sp-3)" }}>
+          <div className="src-head">
+            <span>Chain</span>
+            <span>DEX</span>
+            <span>Schema</span>
+            <span>Provider</span>
+            <span>Factory</span>
+            <span>Verified pairs</span>
+          </div>
+          {props.sources.map((s) => (
+            <div key={s.id} className="src-row">
+              <span><ChainName chain={s.chain} /></span>
+              <span><DexName dex={s.dex} /></span>
+              <span><span className="badge badge-neutral badge-sm">{s.subgraphSchemaFamily}</span></span>
+              <span className="muted">{s.subgraphProvider}</span>
+              <span className="mono truncate" title={s.factoryAddress}>{s.factoryAddress}</span>
+              <span>
+                <Link href={`/pairs?chain=${encodeURIComponent(s.chain)}&dex=${encodeURIComponent(s.dex)}`}><a className="mono">{s.pairCount}</a></Link>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+
+    <p className="muted" style={{ marginTop: "var(--sp-5)", fontSize: "var(--fs-sm)" }}>
+      Query these pairs on-chain via OoO — see the{" "}
+      <a href="https://docs.unification.io/ooo/guide/ooo_api.html" target="_blank" rel="noreferrer">OoO API docs</a>.
+    </p>
+
+    <style jsx>{`
+      .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--sp-4); }
+      .src-tbl { display: flex; flex-direction: column; font-size: var(--fs-sm); }
+      .src-head, .src-row { display: grid; grid-template-columns: 1.2fr 1.4fr 0.8fr 1.4fr 2fr 1fr; gap: var(--sp-3); align-items: center; padding: var(--sp-2) 0; }
+      .src-head { color: var(--text-3); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); }
+      .src-row { border-bottom: 1px solid var(--border); }
+      .src-row:last-child { border-bottom: 0; }
+    `}</style>
+  </Layout>
+);
+
+const OperatorSources: React.FC<OperatorProps> = (initial) => {
+  const [candidates, setCandidates] = useState<Candidate[]>(initial.candidates);
+  const [supported, setSupported] = useState<Supported[]>(initial.supported);
   const [openId, setOpenId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
 
@@ -429,4 +539,11 @@ const Sources: React.FC<{ candidates: Candidate[]; supported: Supported[] }> = (
   );
 };
 
-export default Sources;
+function SourcesPage(props: Props) {
+  if (props.isOperator) {
+    return <OperatorSources {...(props as OperatorProps)} />;
+  }
+  return <PublicSources {...(props as PublicProps)} />;
+}
+
+export default SourcesPage;
