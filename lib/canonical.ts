@@ -60,6 +60,9 @@ const CG_PLATFORM_BY_CHAIN: Record<string, string | null> = {
   polygon_pos: "polygon-pos",
   bsc: "binance-smart-chain",
   xdai: "xdai",
+  arbitrum: "arbitrum-one",
+  base: "base",
+  optimism: "optimistic-ethereum",
   qom: null,
 };
 

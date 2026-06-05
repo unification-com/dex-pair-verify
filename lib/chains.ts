@@ -27,6 +27,19 @@ export const chainInfo: Record<string, ChainInfo> = {
     rpc: "https://rpc.gnosischain.com",
     blocksPerMin: 12,
   },
+  // 4.D expansion chains (verified live 2026-06-05 via eth_chainId).
+  arbitrum: {
+    rpc: "https://arbitrum-one-rpc.publicnode.com",
+    blocksPerMin: 240, // ~0.25s blocks
+  },
+  base: {
+    rpc: "https://base-rpc.publicnode.com",
+    blocksPerMin: 30, // ~2s blocks
+  },
+  optimism: {
+    rpc: "https://optimism-rpc.publicnode.com",
+    blocksPerMin: 30, // ~2s blocks
+  },
 };
 
 // EVM numeric chain id per our internal chain key. null = not an EVM chain we
@@ -36,6 +49,9 @@ export const EVM_CHAIN_ID: Record<string, number | null> = {
   bsc: 56,
   polygon_pos: 137,
   xdai: 100,
+  arbitrum: 42161,
+  base: 8453,
+  optimism: 10,
   qom: null,
 };
 
