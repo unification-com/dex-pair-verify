@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
-import Layout from "../../components/Layout";
-import Status from "../../components/Status";
+import Layout from "../../components/shell/Layout";
+import StatusBadge from "../../components/ui/StatusBadge";
 import { TokenPairStatus } from "../../types/types";
 
 // Each page makes one GeckoTerminal call (pools with embedded tokens). 6s
@@ -121,7 +121,7 @@ const Ingest: React.FC = () => {
             <tbody>
               {TALLY_ORDER.filter((k) => tallies[k]).map((k) => (
                 <tr key={k}>
-                  <td>{isVerdictStatus(k) ? <Status status={k} method={""} /> : k}</td>
+                  <td>{isVerdictStatus(k) ? <StatusBadge status={k} method={""} /> : k}</td>
                   <td>{tallies[k]}</td>
                 </tr>
               ))}

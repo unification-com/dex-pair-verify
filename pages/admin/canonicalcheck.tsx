@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
-import Layout from "../../components/Layout";
+import Layout from "../../components/shell/Layout";
 
 // CoinGecko free tier rate-limits; pace batches of 10 so we stay under it.
 const CALL_DELAY_MS = 21000;

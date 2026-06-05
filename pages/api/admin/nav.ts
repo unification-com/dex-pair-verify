@@ -1,8 +1,5 @@
-import {getServerSession} from "next-auth";
-
-import {authOptions} from "./auth/[...nextauth]";
-import prisma from '../../lib/prisma';
-import {ExtendedSessionUser} from "../../types/types";
+import {requireAdminApi} from "../../../lib/apiAuth";
+import prisma from '../../../lib/prisma';
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -11,13 +8,9 @@ export default async function handler(
     res: NextApiResponse
 ) {
 
+    if (!(await requireAdminApi(req, res))) return;
+
     const nav = {dexs: [], chains: []}
-
-    const session = await getServerSession(req, res, authOptions)
-
-    if (!(session.user as ExtendedSessionUser).isAuthorised) {
-        return res.status(403).json(nav)
-    }
 
     const data = await prisma.pair.findMany({
         distinct: ['chain', 'dex'],

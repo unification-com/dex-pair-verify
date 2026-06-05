@@ -1,13 +1,13 @@
-import {buildExportIndex} from "../../../lib/export";
-import {checkBearerToken, parseBearer, tokenPrefix} from "../../../lib/exportAuth";
-import {rateLimit} from "../../../lib/rateLimit";
+import {buildExportIndex} from "../../../../lib/export";
+import {checkBearerToken, parseBearer, tokenPrefix} from "../../../../lib/exportAuth";
+import {rateLimit} from "../../../../lib/rateLimit";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
 // Bearer-token discovery manifest (A.6.2): which (chain, dex) exports exist,
 // their pair counts + last-updated + URL. Lets go-ooo discover what to poll
-// without a hardcoded source list. Lives at /api/export/manifest because
-// /api/export is taken by the session-gated GitHub-upload endpoint.
+// without a hardcoded source list. Lives at /api/ooo/export/manifest alongside
+// the per-(chain,dex) bearer export.
 const RATE_LIMIT = 60;
 const RATE_WINDOW_MS = 60_000;
 

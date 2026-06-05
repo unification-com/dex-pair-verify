@@ -1,9 +1,8 @@
 import formidable from "formidable";
-import {getServerSession} from "next-auth";
 
-import { authOptions } from "./auth/[...nextauth]"
-import prisma from '../../lib/prisma';
-import {ExtendedSessionUser, TokenPairStatus, VerificationMethod} from "../../types/types";
+import {requireAdminApi} from "../../../lib/apiAuth";
+import prisma from '../../../lib/prisma';
+import {TokenPairStatus, VerificationMethod} from "../../../types/types";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -18,11 +17,7 @@ export default async function handler(
     res: NextApiResponse
 ) {
 
-    const session = await getServerSession(req, res, authOptions)
-
-    if (!(session.user as ExtendedSessionUser).isAuthorised) {
-        return res.status(403).json({ success: false, err: "not authorised" })
-    }
+    if (!(await requireAdminApi(req, res))) return;
 
     const form = formidable({});
     let fields;

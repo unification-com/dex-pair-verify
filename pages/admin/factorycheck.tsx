@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
-import Layout from "../../components/Layout";
+import Layout from "../../components/shell/Layout";
 
 // RPC reads are lighter than the GoPlus limit; a short pace keeps public RPCs
 // happy while staying brisk.

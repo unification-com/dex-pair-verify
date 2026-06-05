@@ -2,7 +2,7 @@ import { GetServerSideProps } from "next";
 import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
-import Layout from "../../components/Layout";
+import Layout from "../../components/shell/Layout";
 import prisma from "../../lib/prisma";
 import { getSourceByIndex, sourceCount, thresholdSeedData } from "../../lib/sourceConfig";
 

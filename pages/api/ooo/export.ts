@@ -1,9 +1,5 @@
-import {getServerSession} from "next-auth";
-
-import {authOptions} from "./auth/[...nextauth]";
-import {buildExportV2} from "../../lib/export";
-import {ExtendedSessionUser} from "../../types/types";
-
+import {requireAdminApi} from "../../../lib/apiAuth";
+import {buildExportV2} from "../../../lib/export";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -16,11 +12,7 @@ export default async function handler(
     res: NextApiResponse
 ) {
 
-    const session = await getServerSession(req, res, authOptions)
-
-    if (!(session.user as ExtendedSessionUser).isAuthorised) {
-        return res.status(403).json("not authorised")
-    }
+    if (!(await requireAdminApi(req, res))) return;
 
     if(!req.query?.chain || !req.query?.dex) {
         return res.status(400).json("Chain and dex required")

@@ -102,7 +102,7 @@ const PriceData: React.FC<{
             const chainDexs = contractList[chain];
             for (const dex in chainDexs) {
                 const contracts = chainDexs[dex]
-                const url = `/api/getprices?chain=${chain}&dex=${dex}&addresses=${contracts.join(",")}&mins=${minsOfData}`
+                const url = `/api/admin/getprices?chain=${chain}&dex=${dex}&addresses=${contracts.join(",")}&mins=${minsOfData}`
                 endpoints.push(url)
             }
         }

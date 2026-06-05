@@ -9,11 +9,11 @@ import CoinGeckoCoinLink from "../../components/CoinGeckoCoinLink";
 import CoinGeckoPoolLink from "../../components/CoinGeckoPoolLink";
 import DexName from "../../components/DexName";
 import ExplorerUrl from "../../components/ExplorerUrl";
-import Layout from "../../components/Layout"
 import NativeToken from "../../components/NativeToken";
 import PoolUrl from "../../components/PoolUrl";
+import Layout from "../../components/shell/Layout"
 import SortableTable from "../../components/SortableTable/SortableTable";
-import Status from "../../components/Status";
+import StatusBadge from "../../components/ui/StatusBadge";
 import prisma from '../../lib/prisma';
 import {isVerifiedStatus} from "../../lib/status";
 import {PairProps} from "../../types/props";
@@ -95,7 +95,7 @@ const Pair: React.FC<Props> = (props) => {
     event.preventDefault()
 
     const formData = new FormData(event.currentTarget)
-    const response = await fetch('/api/setpairstatus', {
+    const response = await fetch('/api/admin/setpairstatus', {
       method: 'POST',
       body: formData,
     })
@@ -112,7 +112,7 @@ const Pair: React.FC<Props> = (props) => {
   }
 
   async function onRescan() {
-    const response = await fetch('/api/rescanpair', {
+    const response = await fetch('/api/admin/rescanpair', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pairid: props.pair.id }),
@@ -227,7 +227,7 @@ const Pair: React.FC<Props> = (props) => {
                                    linkType={"address"}/>
           </h3>
 
-          <h4>Pair Status: <Status status={currentStatus} method={props.pair.verificationMethod}/>
+          <h4>Pair Status: <StatusBadge status={currentStatus} method={props.pair.verificationMethod}/>
             {verifyPair}
             <button onClick={onRescan} type={"button"}>Re-run verdict (auto)</button>
           </h4>
@@ -374,7 +374,7 @@ const Pair: React.FC<Props> = (props) => {
                                      value={props.pair.token0.txCount}/>
           </p>
 
-          <p>Status: <Status status={props.pair.token0.status} method={""}/>&nbsp;
+          <p>Status: <StatusBadge status={props.pair.token0.status} method={""}/>&nbsp;
             <Link
                 href={`/t/${props.pair.token0.id}`}>
               <a>View/Edit</a>
@@ -393,7 +393,7 @@ const Pair: React.FC<Props> = (props) => {
                                      value={props.pair.token1.txCount}/>
           </p>
 
-          <p>Status: <Status status={props.pair.token1.status} method={""}/>&nbsp;
+          <p>Status: <StatusBadge status={props.pair.token1.status} method={""}/>&nbsp;
             <Link
                 href={`/t/${props.pair.token1.id}`}>
               <a>View/Edit</a>

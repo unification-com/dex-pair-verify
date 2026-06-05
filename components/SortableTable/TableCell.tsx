@@ -4,7 +4,7 @@ import React from "react";
 import {NumericFormat} from "react-number-format";
 
 import CoinGeckoCoinLink from "../CoinGeckoCoinLink";
-import Status from "../Status";
+import StatusBadge from "../ui/StatusBadge";
 
 const TableCell = ({ data, column }) => {
 
@@ -38,7 +38,7 @@ const TableCell = ({ data, column }) => {
             cellData = <><NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={d} />%</>;
             break
         case "status":
-            cellData = <><Status status={d} method={""} /></>
+            cellData = <><StatusBadge status={d} method={""} /></>
             break
         case "checkbox":
             cellData = <input

@@ -6,10 +6,10 @@ import {NotificationManager} from 'react-notifications';
 
 import ChainName from "../components/ChainName";
 import DexName from "../components/DexName";
-import Layout from "../components/Layout"
 import Pagination from "../components/Pagination";
+import Layout from "../components/shell/Layout"
 import SortableTable from "../components/SortableTable/SortableTable";
-import Status from "../components/Status";
+import StatusBadge from "../components/ui/StatusBadge";
 import prisma from '../lib/prisma';
 import {thresholdSeedData} from "../lib/sourceConfig";
 import {isVerifiedStatus} from "../lib/status";
@@ -175,7 +175,7 @@ const ListPairs: React.FC<Props> = (props) => {
         if (selected.size === 0) {
             return
         }
-        const response = await fetch('/api/bulkpairaction', {
+        const response = await fetch('/api/admin/bulkpairaction', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ids: Array.from(selected), action }),
@@ -193,7 +193,7 @@ const ListPairs: React.FC<Props> = (props) => {
         event.preventDefault()
 
         const formData = new FormData(event.currentTarget)
-        const response = await fetch('/api/setthresholds', {
+        const response = await fetch('/api/admin/setthresholds', {
             method: 'POST',
             body: formData,
         })
@@ -262,7 +262,7 @@ const ListPairs: React.FC<Props> = (props) => {
     return (
         <Layout>
             <div className="page" key={`pair_list_${props.chain}_${props.dex}_${props.status}`}>
-                <h1><Status status={props.status} method={""}/> Pairs</h1>
+                <h1><StatusBadge status={props.status} method={""}/> Pairs</h1>
                 <h2>
                     Chain: <ChainName chain={props.chain}/><br/>
                     DEX: <DexName dex={props.dex}/>
@@ -272,7 +272,7 @@ const ListPairs: React.FC<Props> = (props) => {
                     Set OoO Simulation Thresholds
                 </h3>
                 <p>
-                    These thresholds will determine which <Status status={TokenPairStatus.ManualVerified}  method={""}/> pairs/tokens will be used in the OoO simulations
+                    These thresholds will determine which <StatusBadge status={TokenPairStatus.ManualVerified}  method={""}/> pairs/tokens will be used in the OoO simulations
                 </p>
                 <form onSubmit={onSubmit}>
                     Min Liquidity: $<input type={"text"} defaultValue={thresholdMinLiquidity} name={"min_liquidity"}

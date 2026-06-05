@@ -1,6 +1,6 @@
-import {buildExportV2, exportLastModified} from "../../../../lib/export";
-import {checkBearerToken, parseBearer, tokenPrefix} from "../../../../lib/exportAuth";
-import {rateLimit} from "../../../../lib/rateLimit";
+import {buildExportV2, exportLastModified} from "../../../../../lib/export";
+import {checkBearerToken, parseBearer, tokenPrefix} from "../../../../../lib/exportAuth";
+import {rateLimit} from "../../../../../lib/rateLimit";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 

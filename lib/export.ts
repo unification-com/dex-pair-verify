@@ -1,6 +1,6 @@
 // Shared export builder (A.6). One implementation of the export shape, reused by
-// the session-gated GitHub-upload endpoint (pages/api/export.ts) and the
-// bearer-token API endpoint (pages/api/export/[chain]/[dex].ts) so the two paths
+// the session-gated GitHub-upload endpoint (pages/api/ooo/export.ts) and the
+// bearer-token API endpoint (pages/api/ooo/export/[chain]/[dex].ts) so the two paths
 // can never drift. Only verified pairs (operator-confirmed OR engine-auto-
 // verified) are ever emitted — see VERIFIED_STATUSES.
 
@@ -158,7 +158,7 @@ export async function buildExportIndex(opts: { now?: number } = {}): Promise<Exp
     }
     byChain.get(g.chain)!.push({
       dex: g.dex,
-      url: `/api/export/${g.chain}/${g.dex}`,
+      url: `/api/ooo/export/${g.chain}/${g.dex}`,
       pairCount: g._count._all,
       lastUpdated: modifiedAt.get(`${g.chain}/${g.dex}`) ?? 0,
     });

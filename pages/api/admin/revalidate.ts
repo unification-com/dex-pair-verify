@@ -1,9 +1,7 @@
-import {getServerSession} from "next-auth";
-
+import {requireAdminApi} from "../../../lib/apiAuth";
 import prisma from "../../../lib/prisma";
 import {runVerdictForPair} from "../../../lib/verdictRunner";
-import {ExtendedSessionUser, TokenPairStatus} from "../../../types/types";
-import {authOptions} from "../auth/[...nextauth]";
+import {TokenPairStatus} from "../../../types/types";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -20,11 +18,7 @@ export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
 ) {
-    const session = await getServerSession(req, res, authOptions)
-
-    if (!(session.user as ExtendedSessionUser).isAuthorised) {
-        return res.status(403).json({ success: false, err: "not authorised" })
-    }
+    if (!(await requireAdminApi(req, res))) return;
 
     const now = Math.floor(Date.now() / 1000)
     // First call: client omits jobStartedAt; we stamp the job and hand it back.

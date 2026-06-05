@@ -7,11 +7,11 @@
 import React, { FormEvent, useEffect, useState } from "react";
 import { NotificationManager } from "react-notifications";
 
+import PriceTest from "./PriceTest";
 import { ThresholdMap } from "../../lib/thresholds";
 import { PairProps } from "../../types/props";
 import { TokenPairStatus } from "../../types/types";
-import Status from "../Status";
-import PriceTest from "./PriceTest";
+import StatusBadge from "../ui/StatusBadge";
 
 type Props = {
   base: string;
@@ -57,7 +57,7 @@ const ThresholdPriceTest: React.FC<Props> = (props) => {
     });
 
     if (saveToDb !== null) {
-      const response = await fetch("/api/setthresholds", {
+      const response = await fetch("/api/admin/setthresholds", {
         method: "POST",
         body: formData,
       });
@@ -76,7 +76,7 @@ const ThresholdPriceTest: React.FC<Props> = (props) => {
 
   const thresholdsTable = (
     <>
-      Only <Status status={TokenPairStatus.ManualVerified} method={""} /> pairs are used, with a USD
+      Only <StatusBadge status={TokenPairStatus.ManualVerified} method={""} /> pairs are used, with a USD
       reserve and Tx Count greater or equal to the values below
       <div className={"divTable"}>
         <div className={"divTableBody"}>
@@ -121,7 +121,7 @@ const ThresholdPriceTest: React.FC<Props> = (props) => {
   const noUsablePairsWarning =
     usablePairs.length === 0 ? (
       <h2>
-        No usable <Status status={TokenPairStatus.ManualVerified} method={""} /> pairs found for{" "}
+        No usable <StatusBadge status={TokenPairStatus.ManualVerified} method={""} /> pairs found for{" "}
         {props.base}-{props.target} using specified min USD reserve and Tx counts. Please try
         another, or modify respective thresholds
       </h2>

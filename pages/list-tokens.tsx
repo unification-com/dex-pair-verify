@@ -3,10 +3,10 @@ import Link from "next/link";
 import React from "react"
 
 import ChainName from "../components/ChainName";
-import Layout from "../components/Layout"
 import Pagination from "../components/Pagination";
+import Layout from "../components/shell/Layout"
 import SortableTable from "../components/SortableTable/SortableTable";
-import Status from "../components/Status";
+import StatusBadge from "../components/ui/StatusBadge";
 import prisma from '../lib/prisma';
 import {TokenProps} from "../types/props";
 import {TokenPairStatus} from "../types/types";
@@ -109,7 +109,7 @@ const ListTokens: React.FC<Props> = (props) => {
     return (
         <Layout>
             <div className="page" key={`token_list_${props.chain}_${props.status}`}>
-                <h1><Status status={props.status} method={""} /> Tokens</h1>
+                <h1><StatusBadge status={props.status} method={""} /> Tokens</h1>
                 <h2>Chain: <ChainName chain={props.chain}/></h2>
                 <h3>
                     <Link

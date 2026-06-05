@@ -4,7 +4,7 @@ import React from "react"
 
 import ChainName from "../components/ChainName";
 import DexName from "../components/DexName";
-import Layout from "../components/Layout"
+import Layout from "../components/shell/Layout"
 import prisma from '../lib/prisma';
 
 export const getServerSideProps: GetServerSideProps = async () => {
@@ -65,7 +65,7 @@ const Home: React.FC<Props> = (props) => {
                 </td>
                 <td>
                   <Link
-                      href={`/api/export?chain=${encodeURIComponent(pair.chain)}&dex=${encodeURIComponent(pair.dex)}&download=1`}>
+                      href={`/api/ooo/export?chain=${encodeURIComponent(pair.chain)}&dex=${encodeURIComponent(pair.dex)}&download=1`}>
                     <a>Export Verified</a>
                   </Link>
                 </td>

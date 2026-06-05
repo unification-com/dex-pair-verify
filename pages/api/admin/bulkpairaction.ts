@@ -1,11 +1,8 @@
-import {getServerSession} from "next-auth";
-
-import {authOptions} from "./auth/[...nextauth]";
-import prisma from "../../lib/prisma";
-import {promoteTokensToVerified} from "../../lib/tokenStatus";
-import {runVerdictForPair} from "../../lib/verdictRunner";
-import {ExtendedSessionUser, TokenPairStatus, VerificationMethod} from "../../types/types";
-
+import {requireAdminApi} from "../../../lib/apiAuth";
+import prisma from "../../../lib/prisma";
+import {promoteTokensToVerified} from "../../../lib/tokenStatus";
+import {runVerdictForPair} from "../../../lib/verdictRunner";
+import {TokenPairStatus, VerificationMethod} from "../../../types/types";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -17,11 +14,7 @@ export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
 ) {
-    const session = await getServerSession(req, res, authOptions)
-
-    if (!(session.user as ExtendedSessionUser).isAuthorised) {
-        return res.status(403).json({ success: false, err: "not authorised" })
-    }
+    if (!(await requireAdminApi(req, res))) return;
 
     const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : []
     const action = String(req.body?.action || "")

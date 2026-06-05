@@ -1,5 +1,5 @@
 // Integration tests for the PUBLIC supported-pairs catalogue (T10): the
-// buildPublicPairsCatalogue builder + the ungated /api/pairs route. Asserts the
+// buildPublicPairsCatalogue builder + the ungated /api/ooo/pairs route. Asserts the
 // dedup/grouping logic, that only verified pairs appear, and that the route is
 // reachable WITHOUT auth + is cache/304-aware.
 
@@ -8,7 +8,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { resetDb, seedPair, seedToken, testPrisma } from "./helpers";
 import { buildPublicPairsCatalogue } from "../../lib/export";
 import { __resetRateLimit } from "../../lib/rateLimit";
-import pairsHandler from "../../pages/api/pairs";
+import pairsHandler from "../../pages/api/ooo/pairs";
 import { TokenPairStatus } from "../../types/types";
 
 const NOW = 1_700_000_000;

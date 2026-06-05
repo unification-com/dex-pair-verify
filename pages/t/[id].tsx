@@ -6,9 +6,9 @@ import {NumericFormat} from "react-number-format";
 import ChainName from "../../components/ChainName";
 import CoinGeckoCoinLink from "../../components/CoinGeckoCoinLink";
 import ExplorerUrl from "../../components/ExplorerUrl";
-import Layout from "../../components/Layout"
+import Layout from "../../components/shell/Layout"
 import SortableTable from "../../components/SortableTable/SortableTable";
-import Status from "../../components/Status";
+import StatusBadge from "../../components/ui/StatusBadge";
 import prisma from '../../lib/prisma';
 import {TokenProps} from "../../types/props";
 import {TokenPairStatus} from "../../types/types";
@@ -94,7 +94,7 @@ const Token: React.FC<Props> = (props) => {
         event.preventDefault()
 
         const formData = new FormData(event.currentTarget)
-        const response = await fetch('/api/settokenstatus', {
+        const response = await fetch('/api/admin/settokenstatus', {
             method: 'POST',
             body: formData,
         })
@@ -162,7 +162,7 @@ const Token: React.FC<Props> = (props) => {
                     CoinGecko: <CoinGeckoCoinLink coingeckoId={props.token.coingeckoCoinId}/>
                 </p>
 
-                <p>Status: <Status status={currentStatus} method={props.token.verificationMethod}/></p>
+                <p>Status: <StatusBadge status={currentStatus} method={props.token.verificationMethod}/></p>
                 Change Status: <form onSubmit={onSubmit}>
                 <select name="status" id="tokenstatus" defaultValue={currentStatus}>
                     <option value={TokenPairStatus.Unverified}>Unverified</option>

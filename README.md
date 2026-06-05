@@ -10,7 +10,7 @@ There are two surfaces, split by audience:
 
 **Public (ungated) — the supported-pairs catalogue.** What an OoO *user* can query.
 
-- `GET /api/pairs` — JSON list of the queryable pairs (deduped across chains/DEXs
+- `GET /api/ooo/pairs` — JSON list of the queryable pairs (deduped across chains/DEXs
   by canonical key), deepest liquidity first. Carries no trust internals — just
   `base` / `target` symbols, `canonicalKey`, `sources` (backing pool count),
   `chains`, and `totalLiquidityUsd`. Cacheable (`Cache-Control` + `Last-Modified` /
@@ -20,8 +20,8 @@ There are two surfaces, split by audience:
 **Gated (provider) — the full trust-weighted feed.** What the `go-ooo` *provider*
 pulls. Bearer token (`Authorization: Bearer <EXPORT_API_TOKEN>`):
 
-- `GET /api/export/manifest` — which `(chain, dex)` exports exist + freshness.
-- `GET /api/export/{chain}/{dex}` — per-pair verdict, `confidence` trust score,
+- `GET /api/ooo/export/manifest` — which `(chain, dex)` exports exist + freshness.
+- `GET /api/ooo/export/{chain}/{dex}` — per-pair verdict, `confidence` trust score,
   `reserveUsd`, and the per-source curation floor. Supports `?ifModifiedSince=<unix>`.
 
 ```bash

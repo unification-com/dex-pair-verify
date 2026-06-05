@@ -1,8 +1,8 @@
 import { GetServerSideProps } from "next";
 import React from "react";
 
-import Layout from "../../../../components/Layout";
 import ThresholdPriceTest from "../../../../components/PriceTest/ThresholdPriceTest";
+import Layout from "../../../../components/shell/Layout";
 import prisma from "../../../../lib/prisma";
 import { VERIFIED_STATUSES } from "../../../../lib/status";
 import { buildThresholdMap, ThresholdMap } from "../../../../lib/thresholds";

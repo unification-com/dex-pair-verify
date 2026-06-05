@@ -1,9 +1,6 @@
-import {getServerSession} from "next-auth";
-
+import {requireAdminApi} from "../../../lib/apiAuth";
 import {ingestPoolPage} from "../../../lib/ingest";
 import {getSourceByIndex, sourceCount} from "../../../lib/sourceConfig";
-import {ExtendedSessionUser} from "../../../types/types";
-import {authOptions} from "../auth/[...nextauth]";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -14,11 +11,7 @@ export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
 ) {
-    const session = await getServerSession(req, res, authOptions)
-
-    if (!(session.user as ExtendedSessionUser).isAuthorised) {
-        return res.status(403).json({ success: false, err: "not authorised" })
-    }
+    if (!(await requireAdminApi(req, res))) return;
 
     const idx = Math.max(0, Number(req.body?.sourceIndex) || 0)
     const page = Math.max(1, Number(req.body?.page) || 1)

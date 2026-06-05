@@ -1,10 +1,8 @@
 import {ApolloClient, gql, InMemoryCache} from "@apollo/client";
-import {getServerSession} from "next-auth";
 
-import {authOptions} from "./auth/[...nextauth]";
-import {chainInfo} from "../../lib/chains"
-import {dataSources} from "../../lib/sources"
-import {ExtendedSessionUser} from "../../types/types";
+import {requireAdminApi} from "../../../lib/apiAuth";
+import {chainInfo} from "../../../lib/chains"
+import {dataSources} from "../../../lib/sources"
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -69,12 +67,7 @@ export default async function handler(
         success: false,
     }
 
-    const session = await getServerSession(req, res, authOptions)
-
-    if (!(session.user as ExtendedSessionUser).isAuthorised) {
-        retData.error = "not authorised"
-        return res.status(403).json(retData)
-    }
+    if (!(await requireAdminApi(req, res))) return;
 
     if(!req.query?.chain || !req.query?.dex || !req.query?.addresses) {
         retData.error = "Chain, dex and addresses required"

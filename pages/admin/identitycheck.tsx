@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
-import Layout from "../../components/Layout";
+import Layout from "../../components/shell/Layout";
 
 // GoPlus free tier is 30 req/min; pace batches of 10 so we stay well under it.
 const CALL_DELAY_MS = 21000;
