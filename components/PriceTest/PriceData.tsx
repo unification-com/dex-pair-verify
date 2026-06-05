@@ -249,7 +249,7 @@ const PriceData: React.FC<{
                 .ctl-label { font-size: var(--fs-xs); color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; }
                 .ctl-toggle { flex-direction: row; align-items: center; gap: var(--sp-3); font-size: var(--fs-sm); }
                 .method-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--sp-4); margin-bottom: var(--sp-5); }
-                .mcard { text-align: left; padding: var(--sp-5); cursor: pointer; border: 1px solid var(--border); }
+                .mcard { text-align: left; padding: var(--sp-5); cursor: pointer; border: 1px solid var(--border); color: var(--text-0); }
                 .mcard.sel { border-color: var(--accent-line); background: var(--accent-dim); }
                 .mc-label { font-weight: 600; font-size: var(--fs-sm); }
                 .mc-tag { font-size: var(--fs-xs); color: var(--brand-2); border: 1px solid var(--brand-2); border-radius: var(--r-pill); padding: 0 6px; }

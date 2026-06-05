@@ -10,7 +10,7 @@
 // real freshness if you have it, else drop the `stale` flags.
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import React from "react";
 
 import Icon from "../ui/Icon";
@@ -42,7 +42,8 @@ const NavBar: React.FC<{ needsReviewCount?: number }> = ({ needsReviewCount }) =
   return (
     <aside className="sidebar">
       <div className="sb-brand">
-        <span className="sb-logo">U</span>
+        {/* eslint-disable-next-line @next/next/no-img-element -- tiny static brand tile; next/image is overkill */}
+        <img src="/unification_icon_128.png" alt="Unification" style={{ width: 28, height: 28, borderRadius: 7, flex: "none", display: "block" }} />
         <div className="col"><span className="name">Pair Verify</span><span className="env">unification · oracle</span></div>
       </div>
 
@@ -72,7 +73,7 @@ const NavBar: React.FC<{ needsReviewCount?: number }> = ({ needsReviewCount }) =
             <span style={{ fontWeight: 500, fontSize: "var(--fs-sm)" }} className="truncate">{session.user?.name || "operator"}</span>
             <span className="muted" style={{ fontSize: "var(--fs-xs)" }}>authorised</span>
           </div>
-          <Link href="/api/auth/signout"><a className="btn btn-ghost btn-icon btn-sm" title="Log out"><Icon name="logout" size={15} /></a></Link>
+          <button onClick={() => signOut()} className="btn btn-ghost btn-sm" title="Log out"><Icon name="logout" size={15} />Log out</button>
         </div>
       )}
     </aside>

@@ -37,18 +37,10 @@ const usd = (n: number) => {
 
 const Landing: React.FC<Props> = ({ count, queryFormat, sample }) => (
   <div className="landing">
-    <header className="lp-top">
-      <div className="lp-brand">
-        <span className="lp-logo">U</span>
-        <div className="col"><span className="lp-name">Pair Verify</span><span className="lp-env">unification · oracle</span></div>
-      </div>
-      <Link href="/admin"><a className="btn btn-primary btn-sm">Operator console →</a></Link>
-    </header>
-
     <main className="lp-main">
       <section className="lp-hero">
         <span className="eyebrow">Unification OoO · DEX pair verification</span>
-        <h1>Trusted DEX pairs for the on-chain oracle</h1>
+        <h1>Trusted DEX pairs for OoO</h1>
         <p className="lp-lead">
           Pairs are verified — identity, canonical address, factory provenance, liquidity, scam
           signals and CG/DEX price agreement — before the OoO provider serves a price for them.
@@ -86,11 +78,6 @@ const Landing: React.FC<Props> = ({ count, queryFormat, sample }) => (
 
     <style jsx>{`
       .landing { min-height: 100vh; display: flex; flex-direction: column; }
-      .lp-top { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-5) var(--sp-8); border-bottom: 1px solid var(--border); }
-      .lp-brand { display: flex; align-items: center; gap: var(--sp-3); }
-      .lp-logo { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: var(--r-md); background: var(--brand-2); color: #fff; font-weight: 700; }
-      .lp-name { font-weight: 600; }
-      .lp-env { font-size: var(--fs-xs); color: var(--text-2); }
       .lp-main { flex: 1; max-width: 920px; width: 100%; margin: 0 auto; padding: var(--sp-11) var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-9); }
       .lp-hero h1 { font-size: var(--fs-3xl); line-height: var(--lh-tight); margin: var(--sp-4) 0; }
       .lp-lead { font-size: var(--fs-lg); color: var(--text-1); max-width: 660px; }
