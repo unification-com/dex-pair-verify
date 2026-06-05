@@ -1,72 +1,66 @@
-import { GetServerSideProps} from "next"
+import { GetServerSideProps } from "next"
 import Link from "next/link";
-import React from "react"
+import { useRouter } from "next/router";
+import React, { useState } from "react"
 
 import ChainName from "../components/ChainName";
 import Pagination from "../components/Pagination";
 import Layout from "../components/shell/Layout"
-import SortableTable from "../components/SortableTable/SortableTable";
+import DataTable, { Column } from "../components/ui/DataTable";
+import Icon from "../components/ui/Icon";
+import PageHeader from "../components/ui/PageHeader";
 import StatusBadge from "../components/ui/StatusBadge";
 import prisma from '../lib/prisma';
-import {TokenProps} from "../types/props";
-import {TokenPairStatus} from "../types/types";
+import { TokenProps } from "../types/props";
+import { TokenPairStatus } from "../types/types";
 
 const PAGE_SIZE = 50
 
-export const getServerSideProps: GetServerSideProps = async ({ params: _params, query }) => {
+const TOKEN_TABS: { status: TokenPairStatus; label: string }[] = [
+    { status: TokenPairStatus.Unverified, label: "Unverified" },
+    { status: TokenPairStatus.ManualVerified, label: "Verified" },
+    { status: TokenPairStatus.Duplicate, label: "Duplicate" },
+    { status: TokenPairStatus.NotCurrentlyUsable, label: "Not Usable" },
+]
 
-    const chain = String(query?.chain)
+const cleanParam = (v: unknown): string | null =>
+    typeof v === "string" && v !== "" && v !== "undefined" ? v : null;
+
+export const getServerSideProps: GetServerSideProps = async ({ query }) => {
+    const chain = cleanParam(query?.chain)
     const qStatus = String(query?.status || TokenPairStatus.Unverified) as TokenPairStatus
     const page = Math.max(1, Number(query?.page || 1))
 
-    const where = { chain, status: qStatus }
+    const scope: Record<string, string> = {}
+    if (chain) scope.chain = chain
+    const where = { ...scope, status: qStatus }
 
-    const [tokens, totalCount, statusGroups, symbolGroups] = await Promise.all([
+    const [tokens, totalCount, statusGroups, chainGroups] = await Promise.all([
         prisma.token.findMany({
             where,
-            include: {
-                _count: {
-                    select: { duplicateTokenSymbols: true },
-                },
-            },
-            orderBy: [
-                {
-                    symbol: 'asc',
-                },
-            ],
+            orderBy: [{ symbol: 'asc' }],
             skip: (page - 1) * PAGE_SIZE,
             take: PAGE_SIZE,
         }),
         prisma.token.count({ where }),
-        prisma.token.groupBy({ by: ['status'], where: { chain }, _count: { _all: true } }),
-        // Count per symbol across the FULL status set so "Dupes" stays
-        // accurate even though rows are paginated.
-        prisma.token.groupBy({ by: ['symbol'], where, _count: { symbol: true } }),
+        prisma.token.groupBy({ by: ['status'], where: scope, _count: { _all: true } }),
+        prisma.token.groupBy({ by: ['chain'], _count: { _all: true } }),
     ]);
 
     const statusCounts: Record<string, number> = {}
-    for (const g of statusGroups) {
-        statusCounts[g.status] = g._count._all
-    }
-
-    const symbolCounts: Record<string, number> = {}
-    for (const g of symbolGroups) {
-        symbolCounts[g.symbol] = g._count.symbol
-    }
-
-    const tokensWithCount = (tokens as unknown as TokenProps[])
-    for (const t of tokensWithCount) {
-        t.duplicateCount = (symbolCounts[t.symbol] ?? 1) - 1
-    }
+    for (const g of statusGroups) statusCounts[g.status] = g._count._all
+    const chains = Array.from(new Set(chainGroups.map((g) => g.chain))).sort()
 
     return {
         props: {
-            tokens: tokensWithCount,
-            chain,
+            tokens,
+            chain: chain ?? "",
             status: qStatus,
             page,
             totalPages: Math.max(1, Math.ceil(totalCount / PAGE_SIZE)),
+            totalCount,
             statusCounts,
+            chains,
         },
     };
 }
@@ -77,96 +71,109 @@ type Props = {
     status: TokenPairStatus,
     page: number,
     totalPages: number,
+    totalCount: number,
     statusCounts: Record<string, number>,
+    chains: string[],
 }
 
+const usd = (n: number | null | undefined) => {
+    if (n == null) return "—";
+    const a = Math.abs(n);
+    if (a >= 1e9) return "$" + (n / 1e9).toFixed(2) + "B";
+    if (a >= 1e6) return "$" + (n / 1e6).toFixed(2) + "M";
+    if (a >= 1e3) return "$" + (n / 1e3).toFixed(1) + "k";
+    return "$" + n.toFixed(2);
+};
+const num = (n: number | null | undefined) =>
+    n == null ? "—" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 }).format(n);
+
 const ListTokens: React.FC<Props> = (props) => {
+    const router = useRouter()
+    const [filter, setFilter] = useState("")
 
-    let columns = [
-        { label: "Symbol", accessor: "symbol", sortable: true, sortbyOrder: "asc", cellType: "display" },
-        { label: "Name", accessor: "name", sortable: true, cellType: "display" },
-        { label: "Market Cap", accessor: "marketCapUsd", sortable: true, cellType: "usd" },
-        { label: "24h Volume", accessor: "volume24hUsd", sortable: true, cellType: "usd" },
-        { label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number" },
-        { label: `Dupes (status ${props.status})`, accessor: "duplicateCount", sortable: true, cellType: "display" },
-        { label: "Total Dupes", accessor: "_count.duplicateTokenSymbols", sortable: true, cellType: "display" },
-        // { label: "Edit", accessor: "id", sortable: false, cellType: "edit_button", router: {url: "/t/[id]", as: "/t/__ID__"} },
-    ];
-
-    if(props.status === TokenPairStatus.Unverified) {
-        columns = [
-            ...columns,
-            { label: "Imported", accessor: "createdAt", sortable: true, cellType: "datetime" },
-        ]
+    const hrefWith = (over: Partial<{ status: string; chain: string; page: number }>): string => {
+        const qs = new URLSearchParams()
+        qs.set("status", over.status ?? props.status)
+        const chain = over.chain ?? props.chain
+        if (chain) qs.set("chain", chain)
+        if (over.page && over.page > 1) qs.set("page", String(over.page))
+        return `/list-tokens?${qs.toString()}`
     }
 
-    columns = [
-        ...columns,
-        // @ts-ignore — column literals' `meta` widens the union; TS infers narrower
-        { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/t/__ID__", text: "View/Edit"} },
+    const f = filter.trim().toLowerCase()
+    const visible = f
+        ? props.tokens.filter((t) => `${t.symbol} ${t.name}`.toLowerCase().includes(f))
+        : props.tokens
+
+    const cols: Column<TokenProps>[] = [
+        {
+            key: "symbol", label: "Token", sortable: true, render: (t) => (
+                <div style={{ display: "flex", flexDirection: "column" }}>
+                    <span style={{ fontWeight: 600 }}>{t.symbol}</span>
+                    <span className="muted" style={{ fontSize: "var(--fs-xs)" }}>{t.name}</span>
+                </div>
+            ),
+        },
+        { key: "chain", label: "Chain", render: (t) => <ChainName chain={t.chain} /> },
+        {
+            key: "identity", label: "Identity", render: (t) =>
+                t.coingeckoCoinId ? <span className="badge badge-pass badge-sm">CoinGecko</span> : <span className="muted">—</span>,
+        },
+        {
+            key: "scam", label: "Scam", render: (t) =>
+                t.isScamFlagged ? <span className="badge badge-fail badge-sm" title={t.scamReason}>flagged</span> : <span className="muted">clear</span>,
+        },
+        { key: "volume24hUsd", label: "24h Vol", num: true, sortable: true, render: (t) => usd(t.volume24hUsd) },
+        { key: "txCount", label: "Tx", num: true, sortable: true, render: (t) => num(t.txCount) },
+        { key: "status", label: "Status", render: (t) => <StatusBadge status={t.status} size="sm" /> },
     ]
 
     return (
-        <Layout>
-            <div className="page" key={`token_list_${props.chain}_${props.status}`}>
-                <h1><StatusBadge status={props.status} method={""} /> Tokens</h1>
-                <h2>Chain: <ChainName chain={props.chain}/></h2>
-                <h3>
-                    <Link
-                        href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=${TokenPairStatus.Unverified}`}>
-                        <a>Unverified ({props.statusCounts[TokenPairStatus.Unverified] ?? 0})</a>
+        <Layout crumb="Tokens">
+            <PageHeader title="Tokens" sub={`${props.totalCount} ${props.chain ? `on ${props.chain}` : "across all chains"}`} />
+
+            <div className="tabs">
+                {TOKEN_TABS.map((t) => (
+                    <Link key={t.status} href={hrefWith({ status: t.status })}>
+                        <a className={`tab${props.status === t.status ? " active" : ""}`}>
+                            {t.label}<span className="tab-count">{props.statusCounts[t.status] ?? 0}</span>
+                        </a>
                     </Link>
-                    &nbsp;|&nbsp;
-                    <Link
-                        href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=${TokenPairStatus.ManualVerified}`}>
-                        <a>VERIFIED ({props.statusCounts[TokenPairStatus.ManualVerified] ?? 0})</a>
-                    </Link>
-                    &nbsp;|&nbsp;
-                    <Link
-                        href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=${TokenPairStatus.Duplicate}`}>
-                        <a>Duplicate ({props.statusCounts[TokenPairStatus.Duplicate] ?? 0})</a>
-                    </Link>
-                    &nbsp;|&nbsp;
-                    <Link
-                        href={`/list-tokens?chain=${encodeURIComponent(props.chain)}&status=${TokenPairStatus.NotCurrentlyUsable}`}>
-                        <a>Fake/Bad/Not Usable ({props.statusCounts[TokenPairStatus.NotCurrentlyUsable] ?? 0})</a>
-                    </Link>
-                </h3>
-                <main>
-                    <Pagination
-                        page={props.page}
-                        totalPages={props.totalPages}
-                        makeHref={(p) => `/list-tokens?chain=${encodeURIComponent(props.chain)}&status=${props.status}&page=${p}`}
-                    />
-                    <SortableTable
-                        key={`token_list_${props.chain}_${props.status}_${props.page}`}
-                        caption=""
-                        data={props.tokens}
-                        columns={columns}
-                        useFilter={true}
-                    />
-                    <Pagination
-                        page={props.page}
-                        totalPages={props.totalPages}
-                        makeHref={(p) => `/list-tokens?chain=${encodeURIComponent(props.chain)}&status=${props.status}&page=${p}`}
-                    />
-                </main>
+                ))}
             </div>
+
+            <div className="filters card card-pad">
+                <span className="ico-input">
+                    <Icon name="search" size={14} />
+                    <input className="input" placeholder="Filter symbol / name (this page)" value={filter} onChange={(e) => setFilter(e.target.value)} />
+                </span>
+                <select className="input" value={props.chain} onChange={(e) => router.push(hrefWith({ chain: e.target.value, page: 1 }))}>
+                    <option value="">All chains</option>
+                    {props.chains.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+            </div>
+
+            <DataTable
+                columns={cols}
+                data={visible}
+                rowKey={(t) => t.id}
+                onRowClick={(t) => router.push(`/t/${t.id}`)}
+                empty="No tokens in this view."
+            />
+
+            <Pagination page={props.page} totalPages={props.totalPages} makeHref={(p) => hrefWith({ page: p })} />
+
             <style jsx>{`
-                .token {
-                    background: white;
-                    transition: box-shadow 0.1s ease-in;
-                }
-
-                .token:hover {
-                    box-shadow: 1px 1px 3px #aaa;
-                }
-
-                .token + .token {
-                    margin-top: 2rem;
-                }
-
-
+                .tabs { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-5); border-bottom: 1px solid var(--border); }
+                .tab { display: inline-flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-5); font-size: var(--fs-sm); color: var(--text-1); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+                .tab:hover { color: var(--text-0); }
+                .tab.active { color: var(--accent-text); border-bottom-color: var(--accent); font-weight: 600; }
+                .tab-count { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-2); background: var(--bg-3); padding: 0 6px; border-radius: var(--r-pill); }
+                .tab.active .tab-count { color: var(--accent-text); background: var(--accent-dim); }
+                .filters { display: flex; gap: var(--sp-4); align-items: center; margin-bottom: var(--sp-4); flex-wrap: wrap; }
+                .ico-input { position: relative; display: inline-flex; align-items: center; flex: 1; min-width: 220px; }
+                .ico-input :global(.ico) { position: absolute; left: 10px; color: var(--text-2); }
+                .ico-input .input { width: 100%; padding-left: 30px; }
             `}</style>
         </Layout>
     )

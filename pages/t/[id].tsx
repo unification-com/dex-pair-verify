@@ -1,79 +1,41 @@
 import { GetServerSideProps } from "next"
-import React, {FormEvent, useEffect, useState} from "react"
-import {NotificationManager} from 'react-notifications';
-import {NumericFormat} from "react-number-format";
+import { useRouter } from "next/router";
+import React, { FormEvent, useEffect, useState } from "react"
+import { NotificationManager } from 'react-notifications';
 
 import ChainName from "../../components/ChainName";
 import CoinGeckoCoinLink from "../../components/CoinGeckoCoinLink";
 import ExplorerUrl from "../../components/ExplorerUrl";
 import Layout from "../../components/shell/Layout"
-import SortableTable from "../../components/SortableTable/SortableTable";
+import DataTable, { Column } from "../../components/ui/DataTable";
+import Icon from "../../components/ui/Icon";
+import PageHeader from "../../components/ui/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 import prisma from '../../lib/prisma';
-import {TokenProps} from "../../types/props";
-import {TokenPairStatus} from "../../types/types";
+import { AssociatedPairProps, TokenProps } from "../../types/props";
+import { TokenPairStatus } from "../../types/types";
+
+const pairSelect = {
+    pair: true, id: true, contractAddress: true, reserveUsd: true, reserve0: true,
+    reserve1: true, reserveNativeCurrency: true, volumeUsd: true, txCount: true, status: true, dex: true,
+};
 
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
-
     const token = await prisma.token.findUnique({
-        where: {
-            id: String(params?.id),
-        },
+        where: { id: String(params?.id) },
         include: {
-            pairsToken0: {
-                select: {
-                    pair: true,
-                    id: true,
-                    contractAddress: true,
-                    reserveUsd: true,
-                    reserve0: true,
-                    reserve1: true,
-                    reserveNativeCurrency: true,
-                    volumeUsd: true,
-                    txCount: true,
-                    status: true,
-                    dex: true,
-                },
-            },
-            pairsToken1: {
-                select: {
-                    pair: true,
-                    id: true,
-                    contractAddress: true,
-                    reserveUsd: true,
-                    reserve0: true,
-                    reserve1: true,
-                    reserveNativeCurrency: true,
-                    volumeUsd: true,
-                    txCount: true,
-                    status: true,
-                    dex: true,
-                },
-            },
-            duplicateTokenSymbols: {
-                select: {
-                    duplicateToken: true,
-                }
-            }
+            pairsToken0: { select: pairSelect },
+            pairsToken1: { select: pairSelect },
+            duplicateTokenSymbols: { select: { duplicateToken: true } },
         },
     });
-
     if (token === null) {
         return { notFound: true }
     }
-
     const similarTokens = await prisma.token.findMany({
-        where: {
-            symbol: token.symbol,
-            NOT: {
-                chain: token.chain
-            }
-        },
+        where: { symbol: token.symbol, NOT: { chain: token.chain } },
     })
-
-    return {
-        props: {token, similarTokens},
-    }
+    return { props: { token, similarTokens } }
 }
 
 type Props = {
@@ -81,25 +43,30 @@ type Props = {
     similarTokens: TokenProps[];
 }
 
-const Token: React.FC<Props> = (props) => {
-    const [currentStatus, setCurrentStatus] = useState(props.token.status)
+const usd = (n: number | null | undefined) => {
+    if (n == null) return "—";
+    const a = Math.abs(n);
+    if (a >= 1e9) return "$" + (n / 1e9).toFixed(2) + "B";
+    if (a >= 1e6) return "$" + (n / 1e6).toFixed(2) + "M";
+    if (a >= 1e3) return "$" + (n / 1e3).toFixed(1) + "k";
+    return "$" + n.toFixed(2);
+};
+const num = (n: number | null | undefined) =>
+    n == null ? "—" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: 2 }).format(n);
 
-    // Re-sync when navigating to a different token — the pages router
-    // re-renders this same component instance with new props.
-    useEffect(() => {
-        setCurrentStatus(props.token.status)
-    }, [props.token.status])
+const KV: React.FC<{ k: React.ReactNode; v: React.ReactNode }> = ({ k, v }) => (
+    <div className="kv-row"><span className="muted">{k}</span><span className="mono" style={{ textAlign: "right" }}>{v}</span></div>
+);
+
+const Token: React.FC<Props> = (props) => {
+    const router = useRouter()
+    const [currentStatus, setCurrentStatus] = useState(props.token.status)
+    useEffect(() => { setCurrentStatus(props.token.status) }, [props.token.status])
 
     async function onSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
-
         const formData = new FormData(event.currentTarget)
-        const response = await fetch('/api/admin/settokenstatus', {
-            method: 'POST',
-            body: formData,
-        })
-
-        // Handle response if necessary
+        const response = await fetch('/api/admin/settokenstatus', { method: 'POST', body: formData })
         const res = await response.json()
         if (res.success) {
             NotificationManager.success("Success!", `Status changed to ${res.data.new_status}`, 5000);
@@ -107,172 +74,126 @@ const Token: React.FC<Props> = (props) => {
         } else {
             NotificationManager.error("Error", `${res.err}`, 5000)
         }
-
     }
 
-    const duplicateColumns = [
-        {label: "Symbol", accessor: "symbol", sortable: true, sortbyOrder: "asc", cellType: "display"},
-        {label: "Name", accessor: "name", sortable: true, cellType: "display"},
-        {label: "CG ID", accessor: "coingeckoCoinId", sortable: true, cellType: "cgcoin"},
-        {label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number"},
-        {label: "Market Cap USD", accessor: "marketCapUsd", sortable: true, cellType: "usd"},
-        {label: "24h Volume", accessor: "volume24hUsd", sortable: true, cellType: "usd"},
-        {label: "Status", accessor: "status", sortable: true, cellType: "status"},
-        { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/t/__ID__", text: "View/Edit"} },
-    ];
+    const duplicateTokens: TokenProps[] = (props.token.duplicateTokenSymbols || []).map((d) => d.duplicateToken)
+    const associatedPairs: AssociatedPairProps[] = props.token.pairsToken1.concat(props.token.pairsToken0)
 
-    const similarTokensColumns = [
-        {label: "Chain", accessor: "chain", sortable: true, sortbyOrder: "asc", cellType: "display"},
-        ...duplicateColumns,
+    const tokenCols: Column<TokenProps>[] = [
+        { key: "symbol", label: "Symbol", sortable: true, render: (t) => <span style={{ fontWeight: 600 }}>{t.symbol}</span> },
+        { key: "name", label: "Name", sortable: true },
+        { key: "coingeckoCoinId", label: "CG ID", render: (t) => <CoinGeckoCoinLink coingeckoId={t.coingeckoCoinId} /> },
+        { key: "marketCapUsd", label: "Market cap", num: true, sortable: true, render: (t) => usd(t.marketCapUsd) },
+        { key: "volume24hUsd", label: "24h Vol", num: true, sortable: true, render: (t) => usd(t.volume24hUsd) },
+        { key: "status", label: "Status", render: (t) => <StatusBadge status={t.status} size="sm" /> },
     ]
-
-    const duplicateTokens = []
-
-    if (props.token.duplicateTokenSymbols.length > 0) {
-        for (let i = 0; i < props.token.duplicateTokenSymbols.length; i += 1) {
-            duplicateTokens.push(props.token.duplicateTokenSymbols[i].duplicateToken)
-        }
-    }
-
-    const associatedPairs = props.token.pairsToken1.concat(props.token.pairsToken0)
-
-    const assocPairColumns = [
-        {label: "Pair", accessor: "pair", sortable: true, sortbyOrder: "asc", cellType: "display"},
-        {label: "Dex", accessor: "dex", sortable: true, sortbyOrder: "asc", cellType: "display"},
-        {label: "Reserve USD", accessor: "reserveUsd", sortable: true, cellType: "usd"},
-        {label: "Reserve Native", accessor: "reserveNativeCurrency", sortable: true, cellType: "number"},
-        {label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number"},
-        {label: "Total Volume USD (DEX)", accessor: "volumeUsd", sortable: true, cellType: "usd"},
-        {label: "Status", accessor: "status", sortable: true, cellType: "status"},
-        { label: "", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/p/__ID__", text: "View/Edit"} },
+    const similarCols: Column<TokenProps>[] = [
+        { key: "chain", label: "Chain", render: (t) => <ChainName chain={t.chain} /> },
+        ...tokenCols,
+    ]
+    const pairCols: Column<AssociatedPairProps>[] = [
+        { key: "pair", label: "Pair", sortable: true, render: (p) => <span style={{ fontWeight: 600 }}>{p.pair}</span> },
+        { key: "dex", label: "DEX", sortable: true },
+        { key: "reserveUsd", label: "Reserve", num: true, sortable: true, render: (p) => usd(p.reserveUsd) },
+        { key: "txCount", label: "Tx", num: true, sortable: true, render: (p) => num(p.txCount) },
+        { key: "volumeUsd", label: "Volume", num: true, sortable: true, render: (p) => usd(p.volumeUsd) },
+        { key: "status", label: "Status", render: (p) => <StatusBadge status={p.status} size="sm" /> },
     ]
 
     return (
-        <Layout>
-            <div key={`token_page_${props.token.id}`}>
-                <h1>Token</h1>
-                <h3>Chain: <ChainName chain={props.token.chain}/></h3>
-                <h2>Symbol: {props.token.symbol}</h2>
-                <p>Name: {props.token.name}</p>
-                <p>Explorer: &nbsp;
-                    <ExplorerUrl chain={props.token.chain} contractAddress={props.token.contractAddress}
-                                 linkType={"token"}/>
-                </p>
-                <p>
-                    CoinGecko: <CoinGeckoCoinLink coingeckoId={props.token.coingeckoCoinId}/>
-                </p>
+        <Layout crumb="Token">
+            <PageHeader
+                title={props.token.symbol}
+                badge={<StatusBadge status={currentStatus} method={props.token.verificationMethod} />}
+                sub={<span className="row gap-3 wrap items-center">
+                    {props.token.name} · <ChainName chain={props.token.chain} /> ·{" "}
+                    <ExplorerUrl chain={props.token.chain} contractAddress={props.token.contractAddress} linkType={"token"} /> ·{" "}
+                    <CoinGeckoCoinLink coingeckoId={props.token.coingeckoCoinId} />
+                </span>}
+            />
 
-                <p>Status: <StatusBadge status={currentStatus} method={props.token.verificationMethod}/></p>
-                Change Status: <form onSubmit={onSubmit}>
-                <select name="status" id="tokenstatus" defaultValue={currentStatus}>
-                    <option value={TokenPairStatus.Unverified}>Unverified</option>
-                    <option value={TokenPairStatus.ManualVerified}>VERIFIED</option>
-                    <option value={TokenPairStatus.Duplicate}>Duplicate</option>
-                    <option value={TokenPairStatus.NotCurrentlyUsable}>Fake/Bad/Not Usable</option>
-                </select>
-                <input type={"text"} defaultValue={props.token.verificationComment} name={"comment"} placeholder={"optional comment"} />
-                <input type={"hidden"} value={props.token.id} name={"tokenid"} />
-                <button type="submit">Submit</button>
-            </form>
+            <div className="tok-grid">
+                <div className="tok-main">
+                    {props.token.isScamFlagged && (
+                        <div className="card card-pad scam-callout">
+                            <span className="badge badge-fail"><span className="glyph">⚠</span>Scam-flagged</span>
+                            <p style={{ margin: "var(--sp-3) 0 0", color: "var(--fail)" }}>{props.token.scamReason}</p>
+                        </div>
+                    )}
 
-                <p><strong>Note:</strong> Setting the token status to &quot;Fake/Dupe&quot; will automatically set the status of
-                    ALL
-                    associated pairs to Fake/Dupe</p>
+                    <div className="card card-pad">
+                        <span className="eyebrow">Stats</span>
+                        <div className="kv-grid">
+                            <KV k="Tx count" v={num(props.token.txCount)} />
+                            <KV k="Market cap" v={usd(props.token.marketCapUsd)} />
+                            <KV k="Total supply" v={num(props.token.totalSupply / (10 ** props.token.decimals))} />
+                            <KV k="24h volume" v={usd(props.token.volume24hUsd)} />
+                            <KV k="Decimals" v={props.token.decimals} />
+                        </div>
+                    </div>
 
-                {
-                    props.token.scamCheckedAt > 0 &&
-                    <>
-                        <h4>Scam check (GoPlus)</h4>
-                        {
-                            props.token.isScamFlagged
-                                ? <p style={{ color: "red", fontWeight: "bold" }}>⚠ Flagged: {props.token.scamReason}</p>
-                                : <p style={{ color: "green" }}>No scam signals</p>
-                        }
-                        {
-                            props.token.goPlusData &&
-                            <table>
-                                <thead>
-                                    <tr><th>Signal</th><th>Value</th></tr>
-                                </thead>
-                                <tbody>
-                                    {Object.entries(props.token.goPlusData)
-                                        .filter(([, v]) => typeof v === "string" || typeof v === "number")
-                                        .map(([k, v]) => (
-                                            <tr key={`gp_${k}`}><td>{k}</td><td>{String(v)}</td></tr>
-                                        ))}
-                                </tbody>
-                            </table>
-                        }
-                    </>
-                }
+                    {props.token.scamCheckedAt > 0 && props.token.goPlusData && (
+                        <details className="card raw">
+                            <summary>GoPlus security signals</summary>
+                            <div className="kv-grid">
+                                {Object.entries(props.token.goPlusData)
+                                    .filter(([, v]) => typeof v === "string" || typeof v === "number")
+                                    .map(([k, v]) => <KV key={`gp_${k}`} k={k} v={String(v)} />)}
+                            </div>
+                        </details>
+                    )}
 
-                <h4>Stats</h4>
-                <table>
-                    <thead>
-                    <tr>
-                        <th>Tx Count</th>
-                        <th>Market Cap</th>
-                        <th>Total Supply</th>
-                        <th>24h Volume</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    <tr>
-                        <td>
-                            <NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.token.txCount}/>
-                        </td>
-                        <td>
-                            $<NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.token.marketCapUsd}/>
-                        </td>
-                        <td>
-                            <NumericFormat displayType="text" thousandSeparator="," decimalScale={2}
-                                           value={props.token.totalSupply / (10 ** props.token.decimals)}/>
-                        </td>
-                        <td>
-                            $<NumericFormat displayType="text" thousandSeparator="," decimalScale={2} value={props.token.volume24hUsd}/>
-                        </td>
-                    </tr>
-                    </tbody>
-                </table>
+                    <div className="card card-pad">
+                        <span className="eyebrow" style={{ marginBottom: "var(--sp-3)", display: "block" }}>Associated pairs ({associatedPairs.length})</span>
+                        <DataTable columns={pairCols} data={associatedPairs} rowKey={(p) => p.id} onRowClick={(p) => router.push(`/p/${p.id}`)} sortInit={{ key: "reserveUsd", dir: "desc" }} empty="No pairs." />
+                    </div>
 
-                {
-                    (duplicateTokens.length) > 0 &&
-                    <>
-                        <h4>Possible Duplicates on this chain ({props.token.chain})</h4>
-                        <SortableTable
-                            key={`duplicatetoken_list_${props.token.id}`}
-                            caption=""
-                            data={duplicateTokens}
-                            columns={duplicateColumns}
-                            useFilter={true}
-                        />
-                    </>
-                }
+                    {duplicateTokens.length > 0 && (
+                        <details className="card raw">
+                            <summary>Possible duplicates on {props.token.chain} ({duplicateTokens.length})</summary>
+                            <DataTable columns={tokenCols} data={duplicateTokens} rowKey={(t) => t.id} onRowClick={(t) => router.push(`/t/${t.id}`)} />
+                        </details>
+                    )}
+                    {props.similarTokens.length > 0 && (
+                        <details className="card raw">
+                            <summary>Similar tokens on other chains ({props.similarTokens.length})</summary>
+                            <DataTable columns={similarCols} data={props.similarTokens} rowKey={(t) => t.id} onRowClick={(t) => router.push(`/t/${t.id}`)} />
+                        </details>
+                    )}
+                </div>
 
-                {
-                    (props.similarTokens.length) > 0 &&
-                    <>
-                        <h4>Similar Tokens on other chains</h4>
-                        <SortableTable
-                            key={`similartoken_list_${props.token.id}`}
-                            caption=""
-                            data={props.similarTokens}
-                            columns={similarTokensColumns}
-                            useFilter={true}
-                        />
-                    </>
-                }
-
-                <h4>Associated Pairs</h4>
-
-                <SortableTable
-                    key={`associated_pairs_list_${props.token.id}`}
-                    caption=""
-                    data={associatedPairs}
-                    columns={assocPairColumns}
-                    useFilter={true}
-                />
+                <aside className="tok-rail">
+                    <div className="card card-pad col gap-3">
+                        <span className="eyebrow">Decision</span>
+                        <form onSubmit={onSubmit} className="col gap-3">
+                            <select name="status" defaultValue={currentStatus} className="input">
+                                <option value={TokenPairStatus.Unverified}>Unverified</option>
+                                <option value={TokenPairStatus.ManualVerified}>Verified</option>
+                                <option value={TokenPairStatus.Duplicate}>Duplicate</option>
+                                <option value={TokenPairStatus.NotCurrentlyUsable}>Not usable</option>
+                            </select>
+                            <input type="text" name="comment" defaultValue={props.token.verificationComment} placeholder="optional comment" className="input" />
+                            <input type="hidden" name="tokenid" value={props.token.id} />
+                            <button type="submit" className="btn btn-primary"><Icon name="check" size={14} />Submit</button>
+                        </form>
+                        <p className="muted" style={{ fontSize: "var(--fs-xs)" }}>
+                            Marking a token Not usable / Duplicate cascades that status to all its associated pairs.
+                        </p>
+                    </div>
+                </aside>
             </div>
+
+            <style jsx>{`
+                .tok-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--sp-6); align-items: start; }
+                .tok-main { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
+                .tok-rail { position: sticky; top: var(--sp-6); }
+                .scam-callout { border-color: var(--fail-line, var(--fail)); }
+                .kv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--sp-7); padding-top: var(--sp-3); }
+                .kv-row { display: flex; justify-content: space-between; gap: var(--sp-4); padding: var(--sp-2) 0; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
+                .raw { padding: var(--sp-4) var(--sp-5); }
+                .raw > summary { cursor: pointer; font-weight: 600; font-size: var(--fs-sm); color: var(--text-1); }
+                @media (max-width: 1024px) { .tok-grid { grid-template-columns: 1fr; } .tok-rail { position: static; } }
+            `}</style>
         </Layout>
     )
 }
