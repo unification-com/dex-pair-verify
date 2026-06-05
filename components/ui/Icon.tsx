@@ -28,6 +28,7 @@ const ICONS: Record<string, string[]> = {
   filter: ["M3 5h14l-5 6v4l-4 2v-6z"],
   arrowR: ["M4 10h11M11 6l4 4-4 4"],
   logout: ["M8 4H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3", "M12 7l3 3-3 3M15 10H7"],
+  help: ["M10 4a6 6 0 1 0 0 12A6 6 0 0 0 10 4z", "M8.5 8.2a1.5 1.5 0 0 1 2.9.4c0 1-1.4 1.3-1.4 2.2", "M10 13.4v.4"],
 };
 
 export type IconName = keyof typeof ICONS;

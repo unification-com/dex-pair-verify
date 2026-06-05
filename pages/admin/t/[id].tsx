@@ -1,4 +1,5 @@
 import { GetServerSideProps } from "next"
+import Link from "next/link";
 import { useRouter } from "next/router";
 import React, { FormEvent, useEffect, useState } from "react"
 import { NotificationManager } from 'react-notifications';
@@ -7,17 +8,20 @@ import ChainName from "../../../components/ChainName";
 import CoinGeckoCoinLink from "../../../components/CoinGeckoCoinLink";
 import ExplorerUrl from "../../../components/ExplorerUrl";
 import Layout from "../../../components/shell/Layout"
+import ConfidenceMeter from "../../../components/ui/ConfidenceMeter";
 import DataTable, { Column } from "../../../components/ui/DataTable";
 import Icon from "../../../components/ui/Icon";
 import PageHeader from "../../../components/ui/PageHeader";
 import StatusBadge from "../../../components/ui/StatusBadge";
 import prisma from '../../../lib/prisma';
+import { isVerifiedStatus } from "../../../lib/status";
 import { AssociatedPairProps, TokenProps } from "../../../types/props";
 import { TokenPairStatus } from "../../../types/types";
 
 const pairSelect = {
     pair: true, id: true, contractAddress: true, reserveUsd: true, reserve0: true,
-    reserve1: true, reserveNativeCurrency: true, volumeUsd: true, txCount: true, status: true, dex: true,
+    reserve1: true, reserveNativeCurrency: true, volumeUsd: true, volumeUsd24h: true,
+    txCount: true, confidence: true, status: true, dex: true,
 };
 
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
@@ -53,15 +57,32 @@ const usd = (n: number | null | undefined) => {
 };
 const num = (n: number | null | undefined) =>
     n == null ? "—" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: 2 }).format(n);
+const ageStr = (ts: number | null) => {
+    if (!ts) return "unknown";
+    const h = (Date.now() / 1000 - ts) / 3600;
+    if (h < 24) return Math.round(h) + "h";
+    if (h < 24 * 90) return Math.round(h / 24) + "d";
+    return Math.round(h / 720) + "mo";
+};
 
 const KV: React.FC<{ k: React.ReactNode; v: React.ReactNode }> = ({ k, v }) => (
     <div className="kv-row"><span className="muted">{k}</span><span className="mono" style={{ textAlign: "right" }}>{v}</span></div>
 );
 
+type Tone = "pass" | "fail" | "warn" | "skip";
+const TrustRow: React.FC<{ label: string; tone: Tone; value: string; detail?: string }> = ({ label, tone, value, detail }) => (
+    <div className="trust-row">
+        <span className="tr-label">{label}</span>
+        <span className={`badge badge-${tone} badge-sm`}>{value}</span>
+        {detail ? <span className="tr-detail muted">{detail}</span> : null}
+    </div>
+);
+
 const Token: React.FC<Props> = (props) => {
     const router = useRouter()
-    const [currentStatus, setCurrentStatus] = useState(props.token.status)
-    useEffect(() => { setCurrentStatus(props.token.status) }, [props.token.status])
+    const t = props.token;
+    const [currentStatus, setCurrentStatus] = useState(t.status)
+    useEffect(() => { setCurrentStatus(t.status) }, [t.status])
 
     async function onSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
@@ -76,19 +97,29 @@ const Token: React.FC<Props> = (props) => {
         }
     }
 
-    const duplicateTokens: TokenProps[] = (props.token.duplicateTokenSymbols || []).map((d) => d.duplicateToken)
-    const associatedPairs: AssociatedPairProps[] = props.token.pairsToken1.concat(props.token.pairsToken0)
+    const duplicateTokens: TokenProps[] = (t.duplicateTokenSymbols || []).map((d) => d.duplicateToken)
+    const pools: AssociatedPairProps[] = (t.pairsToken1 || []).concat(t.pairsToken0 || [])
+
+    // Token-level market data isn't captured by ingest (it only writes pair-level
+    // stats), so aggregate the token's pools instead — that data IS available.
+    const totalLiquidity = pools.reduce((s, p) => s + (p.reserveUsd || 0), 0)
+    const vol24h = pools.reduce((s, p) => s + (p.volumeUsd24h || 0), 0)
+    const bestConf = pools.reduce((m, p) => Math.max(m, p.confidence ?? 0), 0)
+    const verifiedPools = pools.filter((p) => isVerifiedStatus(p.status)).length
+
+    // Identity & trust signals (the token-level scoring inputs).
+    const cgId = t.coingeckoCoinId;
+    const idTone: Tone = t.identityConfirmed ? "pass" : cgId ? "skip" : "warn";
+    const idValue = t.identityConfirmed ? "confirmed (≥2 sources)" : cgId ? "not needed — CoinGecko-listed" : "unconfirmed";
 
     const tokenCols: Column<TokenProps>[] = [
-        { key: "symbol", label: "Symbol", sortable: true, render: (t) => <span style={{ fontWeight: 600 }}>{t.symbol}</span> },
+        { key: "symbol", label: "Symbol", sortable: true, render: (tk) => <span style={{ fontWeight: 600 }}>{tk.symbol}</span> },
         { key: "name", label: "Name", sortable: true },
-        { key: "coingeckoCoinId", label: "CG ID", render: (t) => <CoinGeckoCoinLink coingeckoId={t.coingeckoCoinId} /> },
-        { key: "marketCapUsd", label: "Market cap", num: true, sortable: true, render: (t) => usd(t.marketCapUsd) },
-        { key: "volume24hUsd", label: "24h Vol", num: true, sortable: true, render: (t) => usd(t.volume24hUsd) },
-        { key: "status", label: "Status", render: (t) => <StatusBadge status={t.status} size="sm" /> },
+        { key: "coingeckoCoinId", label: "CG ID", render: (tk) => <CoinGeckoCoinLink coingeckoId={tk.coingeckoCoinId} /> },
+        { key: "status", label: "Status", render: (tk) => <StatusBadge status={tk.status} size="sm" /> },
     ]
     const similarCols: Column<TokenProps>[] = [
-        { key: "chain", label: "Chain", render: (t) => <ChainName chain={t.chain} /> },
+        { key: "chain", label: "Chain", render: (tk) => <ChainName chain={tk.chain} /> },
         ...tokenCols,
     ]
     const pairCols: Column<AssociatedPairProps>[] = [
@@ -96,47 +127,71 @@ const Token: React.FC<Props> = (props) => {
         { key: "dex", label: "DEX", sortable: true },
         { key: "reserveUsd", label: "Reserve", num: true, sortable: true, render: (p) => usd(p.reserveUsd) },
         { key: "txCount", label: "Tx", num: true, sortable: true, render: (p) => num(p.txCount) },
-        { key: "volumeUsd", label: "Volume", num: true, sortable: true, render: (p) => usd(p.volumeUsd) },
+        { key: "confidence", label: "Conf", sortable: true, sortVal: (p) => p.confidence ?? -1, render: (p) => <ConfidenceMeter value={p.confidence} compact /> },
         { key: "status", label: "Status", render: (p) => <StatusBadge status={p.status} size="sm" /> },
     ]
 
     return (
         <Layout crumb="Token">
             <PageHeader
-                title={props.token.symbol}
-                badge={<StatusBadge status={currentStatus} method={props.token.verificationMethod} />}
+                title={t.symbol}
+                badge={<StatusBadge status={currentStatus} method={t.verificationMethod} />}
                 sub={<span className="row gap-3 wrap items-center">
-                    {props.token.name} · <ChainName chain={props.token.chain} /> ·{" "}
-                    <ExplorerUrl chain={props.token.chain} contractAddress={props.token.contractAddress} linkType={"token"} /> ·{" "}
-                    <CoinGeckoCoinLink coingeckoId={props.token.coingeckoCoinId} />
+                    {t.name} · <ChainName chain={t.chain} /> ·{" "}
+                    <ExplorerUrl chain={t.chain} contractAddress={t.contractAddress} linkType={"token"} /> ·{" "}
+                    <CoinGeckoCoinLink coingeckoId={t.coingeckoCoinId} />
                 </span>}
             />
 
             <div className="tok-grid">
                 <div className="tok-main">
-                    {props.token.isScamFlagged && (
+                    {t.isScamFlagged && (
                         <div className="card card-pad scam-callout">
                             <span className="badge badge-fail"><span className="glyph">⚠</span>Scam-flagged</span>
-                            <p style={{ margin: "var(--sp-3) 0 0", color: "var(--fail)" }}>{props.token.scamReason}</p>
+                            <p style={{ margin: "var(--sp-3) 0 0", color: "var(--fail)" }}>{t.scamReason}</p>
                         </div>
                     )}
 
                     <div className="card card-pad">
-                        <span className="eyebrow">Stats</span>
-                        <div className="kv-grid">
-                            <KV k="Tx count" v={num(props.token.txCount)} />
-                            <KV k="Market cap" v={usd(props.token.marketCapUsd)} />
-                            <KV k="Total supply" v={num(props.token.totalSupply / (10 ** props.token.decimals))} />
-                            <KV k="24h volume" v={usd(props.token.volume24hUsd)} />
-                            <KV k="Decimals" v={props.token.decimals} />
+                        <div className="row spread items-center" style={{ marginBottom: "var(--sp-3)" }}>
+                            <span className="eyebrow">Identity &amp; trust</span>
+                            <Link href="/admin/help"><a className="muted" style={{ fontSize: "var(--fs-xs)" }}>What do these mean? →</a></Link>
+                        </div>
+                        <div className="trust-list">
+                            <TrustRow label="CoinGecko" tone={cgId ? "pass" : "skip"} value={cgId ? "listed" : "not listed"} detail={cgId || undefined} />
+                            <TrustRow label="Independent identity" tone={idTone} value={idValue} />
+                            {t.identityData && t.identityData.map((s, i) => (
+                                <div key={`id_${i}`} className="trust-sub">
+                                    <span className={`badge badge-${s.confirmed ? "pass" : "skip"} badge-sm`}>{s.confirmed ? "✓" : "–"} {s.category}</span>
+                                    <span className="muted">{s.detail}</span>
+                                </div>
+                            ))}
+                            <TrustRow label="Canonical address" tone={t.canonicalCheckedAt > 0 ? "pass" : "skip"} value={t.canonicalCheckedAt > 0 ? "resolved" : "not checked"} />
+                            <TrustRow label="Scam scan (GoPlus)" tone={t.isScamFlagged ? "fail" : t.scamCheckedAt > 0 ? "pass" : "skip"} value={t.isScamFlagged ? "flagged" : t.scamCheckedAt > 0 ? "clear" : "not run"} detail={t.isScamFlagged ? t.scamReason : undefined} />
+                            <TrustRow label="Decimals" tone={t.decimals >= 0 && t.decimals <= 36 ? "pass" : "fail"} value={String(t.decimals)} />
+                            <TrustRow label="Age" tone="skip" value={ageStr(t.deploymentTimestamp)} />
                         </div>
                     </div>
 
-                    {props.token.scamCheckedAt > 0 && props.token.goPlusData && (
+                    <div className="card card-pad">
+                        <span className="eyebrow" style={{ display: "block", marginBottom: "var(--sp-1)" }}>Across its pools</span>
+                        <div className="kv-grid">
+                            <KV k="Pools" v={pools.length} />
+                            <KV k="Verified pools" v={verifiedPools} />
+                            <KV k="Total liquidity" v={usd(totalLiquidity)} />
+                            <KV k="24h volume" v={usd(vol24h)} />
+                            <KV k="Best pair confidence" v={bestConf > 0 ? Math.round(bestConf * 100) + "%" : "—"} />
+                        </div>
+                        <p className="muted" style={{ fontSize: "var(--fs-xs)", marginTop: "var(--sp-3)" }}>
+                            Token-level market cap / supply aren&apos;t captured by ingest — these aggregate the token&apos;s pools.
+                        </p>
+                    </div>
+
+                    {t.scamCheckedAt > 0 && t.goPlusData && (
                         <details className="card raw">
                             <summary>GoPlus security signals</summary>
                             <div className="kv-grid">
-                                {Object.entries(props.token.goPlusData)
+                                {Object.entries(t.goPlusData)
                                     .filter(([, v]) => typeof v === "string" || typeof v === "number")
                                     .map(([k, v]) => <KV key={`gp_${k}`} k={k} v={String(v)} />)}
                             </div>
@@ -144,20 +199,20 @@ const Token: React.FC<Props> = (props) => {
                     )}
 
                     <div className="card card-pad">
-                        <span className="eyebrow" style={{ marginBottom: "var(--sp-3)", display: "block" }}>Associated pairs ({associatedPairs.length})</span>
-                        <DataTable columns={pairCols} data={associatedPairs} rowKey={(p) => p.id} onRowClick={(p) => router.push(`/admin/p/${p.id}`)} sortInit={{ key: "reserveUsd", dir: "desc" }} empty="No pairs." />
+                        <span className="eyebrow" style={{ marginBottom: "var(--sp-3)", display: "block" }}>Associated pairs ({pools.length})</span>
+                        <DataTable columns={pairCols} data={pools} rowKey={(p) => p.id} onRowClick={(p) => router.push(`/admin/p/${p.id}`)} sortInit={{ key: "reserveUsd", dir: "desc" }} empty="No pairs." />
                     </div>
 
                     {duplicateTokens.length > 0 && (
                         <details className="card raw">
-                            <summary>Possible duplicates on {props.token.chain} ({duplicateTokens.length})</summary>
-                            <DataTable columns={tokenCols} data={duplicateTokens} rowKey={(t) => t.id} onRowClick={(t) => router.push(`/admin/t/${t.id}`)} />
+                            <summary>Possible duplicates on {t.chain} ({duplicateTokens.length})</summary>
+                            <DataTable columns={tokenCols} data={duplicateTokens} rowKey={(tk) => tk.id} onRowClick={(tk) => router.push(`/admin/t/${tk.id}`)} />
                         </details>
                     )}
                     {props.similarTokens.length > 0 && (
                         <details className="card raw">
                             <summary>Similar tokens on other chains ({props.similarTokens.length})</summary>
-                            <DataTable columns={similarCols} data={props.similarTokens} rowKey={(t) => t.id} onRowClick={(t) => router.push(`/admin/t/${t.id}`)} />
+                            <DataTable columns={similarCols} data={props.similarTokens} rowKey={(tk) => tk.id} onRowClick={(tk) => router.push(`/admin/t/${tk.id}`)} />
                         </details>
                     )}
                 </div>
@@ -172,8 +227,8 @@ const Token: React.FC<Props> = (props) => {
                                 <option value={TokenPairStatus.Duplicate}>Duplicate</option>
                                 <option value={TokenPairStatus.NotCurrentlyUsable}>Not usable</option>
                             </select>
-                            <input type="text" name="comment" defaultValue={props.token.verificationComment} placeholder="optional comment" className="input" />
-                            <input type="hidden" name="tokenid" value={props.token.id} />
+                            <input type="text" name="comment" defaultValue={t.verificationComment} placeholder="optional comment" className="input" />
+                            <input type="hidden" name="tokenid" value={t.id} />
                             <button type="submit" className="btn btn-primary"><Icon name="check" size={14} />Submit</button>
                         </form>
                         <p className="muted" style={{ fontSize: "var(--fs-xs)" }}>
@@ -190,6 +245,11 @@ const Token: React.FC<Props> = (props) => {
                 .scam-callout { border-color: var(--fail-line, var(--fail)); }
                 .kv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--sp-7); padding-top: var(--sp-3); }
                 .kv-row { display: flex; justify-content: space-between; gap: var(--sp-4); padding: var(--sp-2) 0; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
+                .trust-list { display: flex; flex-direction: column; gap: var(--sp-1); }
+                .trust-row { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) 0; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
+                .tr-label { min-width: 150px; color: var(--text-1); }
+                .tr-detail { font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                .trust-sub { display: flex; align-items: center; gap: var(--sp-3); padding: 2px 0 2px var(--sp-6); font-size: var(--fs-xs); }
                 .raw { padding: var(--sp-4) var(--sp-5); }
                 .raw > summary { cursor: pointer; font-weight: 600; font-size: var(--fs-sm); color: var(--text-1); }
                 @media (max-width: 1024px) { .tok-grid { grid-template-columns: 1fr; } .tok-rail { position: static; } }

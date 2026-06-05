@@ -247,6 +247,13 @@ const Pair: React.FC<Props> = (props) => {
 
   const reasonLabel = REASON_LABEL[props.verdict.reasonCode] || props.verdict.reason || props.verdict.reasonCode;
 
+  // Confidence maths: it's the share of SCORED (non-skipped) fence weight that
+  // passed. Surfaced so the operator can see how the number was reached.
+  const scored = props.fences.filter((f) => f.ok !== null).sort((a, b) => b.weight - a.weight);
+  const totalW = scored.reduce((s, f) => s + f.weight, 0);
+  const passedW = scored.filter((f) => f.ok).reduce((s, f) => s + f.weight, 0);
+  const skippedN = props.fences.length - scored.length;
+
   const miniCols: Column<MiniPair>[] = [
     { key: "chain", label: "Chain", render: (r) => <ChainName chain={r.chain} /> },
     { key: "dex", label: "DEX", render: (r) => <DexName dex={r.dex} /> },
@@ -353,6 +360,24 @@ const Pair: React.FC<Props> = (props) => {
             <div className="reason-chip mono">{props.verdict.reasonCode}</div>
             <p className="reason-label">{reasonLabel}</p>
             <ConfidenceMeter value={props.verdict.confidence} threshold={props.autoVerifyBar} />
+            <details className="conf-breakdown">
+              <summary>How is this computed?</summary>
+              <div className="cb-formula mono">{passedW} / {totalW} scored weight{props.verdict.confidence != null ? ` = ${Math.round(props.verdict.confidence * 100)}%` : ""}</div>
+              <p className="cb-note muted">
+                Each fence carries a weight; confidence is the share of <em>scored</em> weight that passed.
+                {skippedN > 0 ? ` ${skippedN} skipped (unknown input).` : ""} An operator “Verify” sets it to 100%.{" "}
+                <Link href="/admin/help"><a>Scoring guide →</a></Link>
+              </p>
+              <div className="cb-list">
+                {scored.map((f) => (
+                  <div key={f.key} className="cb-item">
+                    <span className={`cb-glyph ${f.ok ? "ok" : "no"}`}>{f.ok ? "✓" : "✕"}</span>
+                    <span className="cb-label">{f.label}</span>
+                    <span className="mono muted cb-w">{f.ok ? f.weight : 0}/{f.weight}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
           </div>
 
           {q && qIndex >= 0 && (
@@ -413,6 +438,16 @@ const Pair: React.FC<Props> = (props) => {
         .raw > summary { cursor: pointer; font-weight: 600; font-size: var(--fs-sm); color: var(--text-1); }
         .reason-chip { align-self: flex-start; font-size: var(--fs-xs); padding: 2px 8px; border: 1px solid var(--border-strong); border-radius: var(--r-pill); color: var(--text-1); }
         .reason-label { margin: 0; font-size: var(--fs-md); color: var(--text-0); }
+        .conf-breakdown > summary { cursor: pointer; font-size: var(--fs-xs); color: var(--text-2); }
+        .cb-formula { margin-top: var(--sp-3); font-weight: 600; }
+        .cb-note { font-size: var(--fs-xs); margin: var(--sp-2) 0 var(--sp-3); }
+        .cb-list { display: flex; flex-direction: column; gap: 1px; }
+        .cb-item { display: flex; align-items: center; gap: var(--sp-3); font-size: var(--fs-xs); padding: 2px 0; }
+        .cb-glyph { width: 14px; text-align: center; font-weight: 700; }
+        .cb-glyph.ok { color: var(--pass); }
+        .cb-glyph.no { color: var(--fail); }
+        .cb-label { flex: 1; color: var(--text-1); }
+        .cb-w { font-size: 10px; }
         .decision-form { display: flex; flex-direction: column; gap: var(--sp-3); }
         @media (max-width: 1024px) {
           .pair-grid { grid-template-columns: 1fr; }

@@ -99,9 +99,18 @@ export type AssociatedPairProps = {
     buyers24h: number,
     sellers24h: number,
     volumeUsd24h: number,
+    confidence: number | null;
     status: TokenPairStatus;
     duplicatePairs: { duplicatePair: PairPropsNoToken }[] | null
 }
+
+// One identity-source verdict (lib/identity), stored on Token.identityData.
+export type IdentitySource = {
+    source: string;
+    category: string;
+    confirmed: boolean;
+    detail: string;
+};
 
 type DuplicateTokenCounter = {
     duplicateTokenSymbols: number;
@@ -127,6 +136,11 @@ export type TokenProps = {
     scamReason: string;
     scamCheckedAt: number;
     goPlusData: Record<string, unknown> | null;
+    identityConfirmed: boolean;
+    identityData: IdentitySource[] | null;
+    identityCheckedAt: number;
+    canonicalCheckedAt: number;
+    deploymentTimestamp: number | null;
     duplicateCount: number
     pairsToken0: AssociatedPairProps[] | null;
     pairsToken1: AssociatedPairProps[] | null;
