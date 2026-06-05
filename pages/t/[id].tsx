@@ -8,9 +8,11 @@ import ChainName from "../../components/ChainName";
 import CoinGeckoCoinLink from "../../components/CoinGeckoCoinLink";
 import ExplorerUrl from "../../components/ExplorerUrl";
 import Layout from "../../components/shell/Layout"
+import TokenWebPresenceCard from "../../components/TokenWebPresence";
 import ConfidenceMeter from "../../components/ui/ConfidenceMeter";
 import DataTable, { Column } from "../../components/ui/DataTable";
 import Icon from "../../components/ui/Icon";
+import KV from "../../components/ui/KV";
 import PageHeader from "../../components/ui/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { usd, num as fmtNum, ageStr } from "../../lib/format";
@@ -30,7 +32,7 @@ const pairSelect = {
     txCount: true, confidence: true, status: true, dex: true,
 };
 
-// Trimmed token shape for the public read-only view (no trust/scam/web internals).
+// Trimmed token shape for the public read-only view (no trust/scam internals).
 type PublicTokenDetail = {
     id: string; chain: string; contractAddress: string; symbol: string; name: string;
     status: TokenPairStatus; verificationMethod: string;
@@ -51,9 +53,12 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     if (token === null) {
       return { notFound: true };
     }
+    // Same free decision-support enrichment as the operator view (write-through
+    // cached on the token row, so anon traffic doesn't re-fetch per request).
+    const web = await getTokenWebPresence(token);
     const { pairsToken0, pairsToken1, ...scalar } = token;
     const pools = (pairsToken1 || []).concat(pairsToken0 || []).filter((p) => isVerifiedStatus(p.status as TokenPairStatus));
-    return { props: { isOperator: false, token: scalar, pools } };
+    return { props: { isOperator: false, token: scalar, pools, web } };
   }
 
     const token = await prisma.token.findUnique({
@@ -87,14 +92,9 @@ type PublicProps = {
     isOperator: false;
     token: PublicTokenDetail;
     pools: AssociatedPairProps[];
+    web: TokenWebPresence;
 }
 type Props = OperatorProps | PublicProps;
-
-const hostOf = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
-
-const KV: React.FC<{ k: React.ReactNode; v: React.ReactNode }> = ({ k, v }) => (
-    <div className="kv-row"><span className="muted">{k}</span><span className="mono" style={{ textAlign: "right" }}>{v}</span></div>
-);
 
 type Tone = "pass" | "fail" | "warn" | "skip";
 const TrustRow: React.FC<{ label: string; tone: Tone; value: string; detail?: string }> = ({ label, tone, value, detail }) => (
@@ -114,8 +114,8 @@ const publicPairCols: Column<AssociatedPairProps>[] = [
     { key: "status", label: "Status", render: (p) => <StatusBadge status={p.status} size="sm" /> },
 ];
 
-// Public read-only token detail: identity + market facts + verified pools.
-const PublicToken: React.FC<PublicProps> = ({ token: t, pools }) => {
+// Public read-only token detail: identity + market facts + verified pools + web presence.
+const PublicToken: React.FC<PublicProps> = ({ token: t, pools, web }) => {
     const router = useRouter()
     const totalLiquidity = pools.reduce((s, p) => s + (p.reserveUsd || 0), 0)
     const vol24h = pools.reduce((s, p) => s + (p.volumeUsd24h || 0), 0)
@@ -143,6 +143,8 @@ const PublicToken: React.FC<PublicProps> = ({ token: t, pools }) => {
                     </div>
                 </div>
 
+                <TokenWebPresenceCard web={web} />
+
                 <div className="card card-pad">
                     <span className="eyebrow" style={{ display: "block", marginBottom: "var(--sp-1)" }}>Across its verified pools</span>
                     <div className="kv-grid">
@@ -161,7 +163,6 @@ const PublicToken: React.FC<PublicProps> = ({ token: t, pools }) => {
             <style jsx>{`
                 .tok-main { display: flex; flex-direction: column; gap: var(--sp-5); }
                 .kv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--sp-7); padding-top: var(--sp-3); }
-                .kv-row { display: flex; justify-content: space-between; gap: var(--sp-4); padding: var(--sp-2) 0; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
             `}</style>
         </Layout>
     )
@@ -262,34 +263,7 @@ const OperatorToken: React.FC<OperatorProps> = (props) => {
                         </div>
                     </div>
 
-                    {(props.web.websites.length > 0 || props.web.twitter || props.web.telegram || props.web.discord || props.web.description || props.web.holders != null) && (
-                        <div className="card card-pad">
-                            <div className="row spread items-center" style={{ marginBottom: "var(--sp-3)" }}>
-                                <span className="eyebrow">Web presence</span>
-                                <span className="muted" style={{ fontSize: "var(--fs-xs)" }}>decision support · not a trust gate</span>
-                            </div>
-                            <div className="row gap-4 items-start wrap">
-                                {props.web.imageUrl ? (
-                                    // eslint-disable-next-line @next/next/no-img-element -- remote token logo from GeckoTerminal
-                                    <img src={props.web.imageUrl} alt="" width={40} height={40} style={{ borderRadius: 8, flex: "none" }} />
-                                ) : null}
-                                <div className="col gap-3" style={{ flex: 1, minWidth: 0 }}>
-                                    {props.web.description ? <p className="muted" style={{ fontSize: "var(--fs-sm)", margin: 0 }}>{props.web.description}</p> : null}
-                                    <div className="row gap-4 wrap" style={{ fontSize: "var(--fs-sm)" }}>
-                                        {props.web.websites.map((w, i) => <a key={`web_${i}`} href={w} target="_blank" rel="noreferrer">{hostOf(w)}</a>)}
-                                        {props.web.twitter ? <a href={props.web.twitter} target="_blank" rel="noreferrer">Twitter</a> : null}
-                                        {props.web.telegram ? <a href={props.web.telegram} target="_blank" rel="noreferrer">Telegram</a> : null}
-                                        {props.web.discord ? <a href={props.web.discord} target="_blank" rel="noreferrer">Discord</a> : null}
-                                        {props.web.websites.length === 0 && !props.web.twitter && !props.web.telegram && !props.web.discord ? <span className="muted">no links on GeckoTerminal</span> : null}
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="kv-grid" style={{ marginTop: "var(--sp-3)" }}>
-                                <KV k="Holders (Blockscout)" v={props.web.holders != null ? num(props.web.holders) : "—"} />
-                                <KV k="Transfers" v={props.web.transfers != null ? num(props.web.transfers) : "—"} />
-                            </div>
-                        </div>
-                    )}
+                    <TokenWebPresenceCard web={props.web} />
 
                     <div className="card card-pad">
                         <span className="eyebrow" style={{ display: "block", marginBottom: "var(--sp-1)" }}>Across its pools</span>
@@ -366,7 +340,6 @@ const OperatorToken: React.FC<OperatorProps> = (props) => {
                 .tok-rail { position: sticky; top: var(--sp-6); }
                 .scam-callout { border-color: var(--fail-line, var(--fail)); }
                 .kv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--sp-7); padding-top: var(--sp-3); }
-                .kv-row { display: flex; justify-content: space-between; gap: var(--sp-4); padding: var(--sp-2) 0; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
                 .trust-list { display: flex; flex-direction: column; gap: var(--sp-1); }
                 .trust-row { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) 0; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
                 .tr-label { min-width: 150px; color: var(--text-1); }

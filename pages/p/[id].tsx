@@ -9,7 +9,8 @@ import CoinGeckoCoinLink from "../../components/CoinGeckoCoinLink";
 import CoinGeckoPoolLink from "../../components/CoinGeckoPoolLink";
 import DexName from "../../components/DexName";
 import ExplorerUrl from "../../components/ExplorerUrl";
-import NativeToken from "../../components/NativeToken";
+import MiniPairTable, { MiniPair } from "../../components/MiniPairTable";
+import PairMarketData from "../../components/PairMarketData";
 import PoolUrl from "../../components/PoolUrl";
 import FenceChecklist from "../../components/review/FenceChecklist";
 import QueueNav from "../../components/review/QueueNav";
@@ -17,12 +18,12 @@ import ReserveVsFloor from "../../components/review/ReserveVsFloor";
 import TrustBadgeRow, { TrustSignals } from "../../components/review/TrustBadgeRow";
 import Layout from "../../components/shell/Layout"
 import ConfidenceMeter from "../../components/ui/ConfidenceMeter";
-import DataTable, { Column } from "../../components/ui/DataTable";
 import Icon from "../../components/ui/Icon";
+import KV from "../../components/ui/KV";
 import PageHeader from "../../components/ui/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { deriveFences, UiFence } from "../../lib/fences";
-import { usd, num as fmtNum } from "../../lib/format";
+import { num as fmtNum } from "../../lib/format";
 import { isOperatorCtx } from "../../lib/operatorGate";
 import prisma from '../../lib/prisma';
 import { isVerifiedStatus, VERIFIED_STATUSES } from "../../lib/status";
@@ -37,7 +38,6 @@ const num = (n: number | null | undefined) => fmtNum(n, 2);
 
 type VerdictView = { reasonCode: string; confidence: number | null; reason: string };
 type QueueView = { ids: string[]; filterQs: string };
-type MiniPair = { id: string; chain: string; dex: string; pair: string; reserveUsd: number; txCount: number; status: TokenPairStatus };
 
 // Trimmed pair shape for the public read-only view (no verdict/fence/trust internals).
 type PublicTokenView = { symbol: string; id: string; contractAddress: string; txCount: number; status: TokenPairStatus; coingeckoCoinId: string | null };
@@ -46,6 +46,7 @@ type PublicPairView = {
   status: TokenPairStatus; verificationMethod: string;
   reserveUsd: number; reserve0: number; reserve1: number; reserveNativeCurrency: number;
   volumeUsd: number; volumeUsd24h: number; marketCapUsd: number; txCount: number;
+  token0PriceCg: number | string | null; token1PriceCg: number | string | null; priceChangePercentage24h: number;
   buys24h: number; sells24h: number; buyers24h: number; sellers24h: number;
   token0: PublicTokenView; token1: PublicTokenView;
 };
@@ -67,7 +68,21 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     if (pair === null) {
       return { notFound: true };
     }
-    return { props: { isOperator: false, pair } };
+    // The same pair traded elsewhere — verified-only, so anon can't click through
+    // to an unverified clone (the public detail page 404s those anyway).
+    const similar = await prisma.pair.findMany({
+      where: {
+        OR: [
+          { pair: `${pair.token0.symbol}-${pair.token1.symbol}` },
+          { pair: `${pair.token1.symbol}-${pair.token0.symbol}` },
+        ],
+        NOT: { chain: pair.chain, dex: pair.dex },
+        status: { in: [...VERIFIED_STATUSES] },
+      },
+      select: { id: true, chain: true, dex: true, pair: true, reserveUsd: true, txCount: true, status: true },
+      orderBy: { reserveNativeCurrency: "desc" },
+    });
+    return { props: { isOperator: false, pair, similar } };
   }
 
   // Full rows drive the verdict engine; the SAME enrichment path the runner uses
@@ -203,16 +218,17 @@ type OperatorProps = {
 type PublicProps = {
   isOperator: false;
   pair: PublicPairView;
+  similar: MiniPair[];
 }
 type Props = OperatorProps | PublicProps;
 
-const KV: React.FC<{ k: React.ReactNode; v: React.ReactNode }> = ({ k, v }) => (
-  <div className="kv-row"><span className="kv-k muted">{k}</span><span className="kv-v mono">{v}</span></div>
-);
+const toMini = (p: { id: string; chain: string; dex: string; pair: string; reserveUsd: number; txCount: number; status: TokenPairStatus }): MiniPair =>
+  ({ id: p.id, chain: p.chain, dex: p.dex, pair: p.pair, reserveUsd: p.reserveUsd, txCount: p.txCount, status: p.status });
 
-// Public read-only pair detail: status + symbols + liquidity + chains. No
-// verdict/confidence/fences/trust internals, no actions.
-const PublicPair: React.FC<PublicProps> = ({ pair }) => (
+// Public read-only pair detail: status + symbols + the market-data boxes (shared
+// with the operator view) + the same pair traded on other DEXs. No verdict /
+// confidence / fences / trust internals, no actions.
+const PublicPair: React.FC<PublicProps> = ({ pair, similar }) => (
   <Layout crumb={<Link href="/pairs"><a>‹ Verified pairs</a></Link>}>
     <PageHeader
       title={pair.pair}
@@ -242,29 +258,14 @@ const PublicPair: React.FC<PublicProps> = ({ pair }) => (
         ))}
       </div>
 
-      <div className="card card-pad">
-        <span className="eyebrow" style={{ display: "block", marginBottom: "var(--sp-1)" }}>Liquidity &amp; volume</span>
-        <div className="kv-grid">
-          <KV k="Reserve USD" v={usd(pair.reserveUsd)} />
-          <KV k="Reserve native" v={<>{num(pair.reserveNativeCurrency)} <NativeToken chain={pair.chain} /></>} />
-          <KV k={`Reserve ${pair.token0.symbol}`} v={num(pair.reserve0)} />
-          <KV k={`Reserve ${pair.token1.symbol}`} v={num(pair.reserve1)} />
-          <KV k="Volume USD" v={usd(pair.volumeUsd)} />
-          <KV k="24h volume" v={usd(pair.volumeUsd24h)} />
-          <KV k="Tx count" v={num(pair.txCount)} />
-          <KV k="Market cap" v={usd(pair.marketCapUsd)} />
-        </div>
-      </div>
+      <PairMarketData pair={pair} />
 
-      <div className="card card-pad">
-        <span className="eyebrow" style={{ display: "block", marginBottom: "var(--sp-1)" }}>24h activity</span>
-        <div className="kv-grid">
-          <KV k="Buys" v={num(pair.buys24h)} />
-          <KV k="Buyers" v={num(pair.buyers24h)} />
-          <KV k="Sells" v={num(pair.sells24h)} />
-          <KV k="Sellers" v={num(pair.sellers24h)} />
-        </div>
-      </div>
+      {similar.length > 0 && (
+        <details className="card raw" open>
+          <summary>Also traded on other DEXs ({similar.length})</summary>
+          <MiniPairTable pairs={similar} sortInit={{ key: "reserveUsd", dir: "desc" }} />
+        </details>
+      )}
     </div>
 
     <style jsx>{`
@@ -272,11 +273,8 @@ const PublicPair: React.FC<PublicProps> = ({ pair }) => (
       .token-cards { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-5); }
       .token-card { display: flex; flex-direction: column; gap: var(--sp-2); }
       .tok-sym { font-size: var(--fs-xl); font-weight: 700; margin: var(--sp-1) 0 var(--sp-3); }
-      .kv-row { display: flex; justify-content: space-between; gap: var(--sp-4); padding: var(--sp-2) 0; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
-      .kv-row:last-child { border-bottom: 0; }
-      .kv-k { white-space: nowrap; }
-      .kv-v { text-align: right; word-break: break-word; }
-      .kv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--sp-7); padding-top: var(--sp-3); }
+      .raw { padding: var(--sp-4) var(--sp-5); }
+      .raw > summary { cursor: pointer; font-weight: 600; font-size: var(--fs-sm); color: var(--text-1); }
       @media (max-width: 720px) { .token-cards { grid-template-columns: 1fr; } }
     `}</style>
   </Layout>
@@ -374,17 +372,6 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
   const passedW = scored.filter((f) => f.ok).reduce((s, f) => s + f.weight, 0);
   const skippedN = props.fences.length - scored.length;
 
-  const miniCols: Column<MiniPair>[] = [
-    { key: "chain", label: "Chain", render: (r) => <ChainName chain={r.chain} /> },
-    { key: "dex", label: "DEX", render: (r) => <DexName dex={r.dex} /> },
-    { key: "pair", label: "Pair", sortable: true },
-    { key: "reserveUsd", label: "Reserve", num: true, sortable: true, render: (r) => usd(r.reserveUsd) },
-    { key: "txCount", label: "Tx", num: true, sortable: true, render: (r) => num(r.txCount) },
-    { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} size="sm" /> },
-  ];
-  const toMini = (p: PairProps | { id: string; chain: string; dex: string; pair: string; reserveUsd: number; txCount: number; status: TokenPairStatus }): MiniPair =>
-    ({ id: p.id, chain: p.chain, dex: p.dex, pair: p.pair, reserveUsd: p.reserveUsd, txCount: p.txCount, status: p.status });
-
   const duplicates: MiniPair[] = (props.pair.duplicatePairs || []).map((d) => toMini(d.duplicatePair));
   const similar: MiniPair[] = props.similarPairs.map(toMini);
 
@@ -427,49 +414,18 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
             ))}
           </div>
 
-          <details className="card raw">
-            <summary>CoinGecko market data</summary>
-            <div className="kv-grid">
-              <KV k="Market cap" v={usd(props.pair.marketCapUsd)} />
-              <KV k={`${props.pair.token0.symbol} price`} v={`${num(Number(props.pair.token0PriceCg))} ${props.pair.token1.symbol}`} />
-              <KV k={`${props.pair.token1.symbol} price`} v={`${num(Number(props.pair.token1PriceCg))} ${props.pair.token0.symbol}`} />
-              <KV k="24h change" v={`${num(props.pair.priceChangePercentage24h)}%`} />
-              <KV k="24h volume" v={usd(props.pair.volumeUsd24h)} />
-            </div>
-          </details>
-
-          <details className="card raw">
-            <summary>DEX subgraph reserves</summary>
-            <div className="kv-grid">
-              <KV k="Reserve USD" v={usd(props.pair.reserveUsd)} />
-              <KV k="Reserve native" v={<>{num(props.pair.reserveNativeCurrency)} <NativeToken chain={props.pair.chain} /></>} />
-              <KV k={`Reserve ${props.pair.token0.symbol}`} v={num(props.pair.reserve0)} />
-              <KV k={`Reserve ${props.pair.token1.symbol}`} v={num(props.pair.reserve1)} />
-              <KV k="Volume USD" v={usd(props.pair.volumeUsd)} />
-              <KV k="Tx count" v={num(props.pair.txCount)} />
-            </div>
-          </details>
-
-          <details className="card raw">
-            <summary>24h activity</summary>
-            <div className="kv-grid">
-              <KV k="Buys" v={num(props.pair.buys24h)} />
-              <KV k="Buyers" v={num(props.pair.buyers24h)} />
-              <KV k="Sells" v={num(props.pair.sells24h)} />
-              <KV k="Sellers" v={num(props.pair.sellers24h)} />
-            </div>
-          </details>
+          <PairMarketData pair={props.pair} />
 
           {duplicates.length > 0 && (
-            <details className="card raw">
+            <details className="card raw" open>
               <summary>Possible duplicates on {props.pair.dex} ({duplicates.length})</summary>
-              <DataTable columns={miniCols} data={duplicates} rowKey={(r) => r.id} onRowClick={(r) => router.push(`/p/${r.id}`)} />
+              <MiniPairTable pairs={duplicates} />
             </details>
           )}
           {similar.length > 0 && (
-            <details className="card raw">
+            <details className="card raw" open>
               <summary>Similar pairs on other DEXs ({similar.length})</summary>
-              <DataTable columns={miniCols} data={similar} rowKey={(r) => r.id} onRowClick={(r) => router.push(`/p/${r.id}`)} sortInit={{ key: "reserveUsd", dir: "desc" }} />
+              <MiniPairTable pairs={similar} sortInit={{ key: "reserveUsd", dir: "desc" }} />
             </details>
           )}
         </div>
@@ -549,11 +505,6 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
         .token-cards { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-5); }
         .token-card { display: flex; flex-direction: column; gap: var(--sp-2); }
         .tok-sym { font-size: var(--fs-xl); font-weight: 700; margin: var(--sp-1) 0 var(--sp-3); }
-        .kv-row { display: flex; justify-content: space-between; gap: var(--sp-4); padding: var(--sp-2) 0; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
-        .kv-row:last-child { border-bottom: 0; }
-        .kv-k { white-space: nowrap; }
-        .kv-v { text-align: right; word-break: break-word; }
-        .kv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--sp-7); padding-top: var(--sp-3); }
         .raw { padding: var(--sp-4) var(--sp-5); }
         .raw > summary { cursor: pointer; font-weight: 600; font-size: var(--fs-sm); color: var(--text-1); }
         .reason-chip { align-self: flex-start; font-size: var(--fs-xs); padding: 2px 8px; border: 1px solid var(--border-strong); border-radius: var(--r-pill); color: var(--text-1); }
