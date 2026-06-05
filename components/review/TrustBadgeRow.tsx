@@ -14,7 +14,7 @@ export type TrustSignals = {
   canonical: "match" | "impostor" | "unknown";
   factory: "canonical" | "mismatch" | "unknown";
   scamFlagged: boolean;
-  scamReason?: string;
+  scamReason?: string | null;
   verifiedOnOtherDexs?: number; // 0/undefined hides the Sibling badge
 };
 

@@ -78,7 +78,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params, query }) 
     canonical,
     factory,
     scamFlagged: context.tokenScamFlagged,
-    scamReason: full.token0.isScamFlagged ? full.token0.scamReason : full.token1.isScamFlagged ? full.token1.scamReason : undefined,
+    scamReason: full.token0.isScamFlagged ? full.token0.scamReason : full.token1.isScamFlagged ? full.token1.scamReason : null,
     verifiedOnOtherDexs: context.hasVerifiedSibling ? 1 : 0,
   };
 
