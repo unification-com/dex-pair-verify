@@ -13,6 +13,7 @@ import DataTable, { Column } from "../components/ui/DataTable";
 import Icon from "../components/ui/Icon";
 import PageHeader from "../components/ui/PageHeader";
 import StatusBadge from "../components/ui/StatusBadge";
+import { operatorGate } from "../lib/operatorGate";
 import prisma from '../lib/prisma';
 import { PairProps } from "../types/props";
 import { TokenPairStatus } from "../types/types";
@@ -34,7 +35,10 @@ const PAIR_TABS: { status: TokenPairStatus; label: string }[] = [
 const cleanParam = (v: unknown): string | null =>
     typeof v === "string" && v !== "" && v !== "undefined" ? v : null;
 
-export const getServerSideProps: GetServerSideProps = async ({ query }) => {
+export const getServerSideProps: GetServerSideProps = async (ctx) => {
+  const gate = await operatorGate(ctx);
+  if (gate) return gate;
+  const { query } = ctx;
 
     const qStatus = String(query?.status || TokenPairStatus.NeedsReview) as TokenPairStatus
     // U-Q1: chain/dex are now OPTIONAL filters. Absent → the whole unified queue

@@ -13,6 +13,8 @@ import { useRouter } from "next/router";
 import { signOut, useSession } from "next-auth/react";
 import React from "react";
 
+import { ExtendedSessionUser } from "../../types/types";
+import LogInButton from "../LogInButton";
 import Icon from "../ui/Icon";
 
 const PASSES = [
@@ -27,6 +29,7 @@ const PASSES = [
 const NavBar: React.FC<{ needsReviewCount?: number }> = ({ needsReviewCount }) => {
   const router = useRouter();
   const { data: session } = useSession();
+  const isOperator = !!(session?.user as ExtendedSessionUser | undefined)?.isAuthorised;
   const active = (p: string) => router.asPath === p || router.asPath.startsWith(p + "?");
 
   const Item = ({ href, icon, label, pill, active: a, star }: {
@@ -48,11 +51,16 @@ const NavBar: React.FC<{ needsReviewCount?: number }> = ({ needsReviewCount }) =
       </div>
 
       <nav className="sb-nav">
+        {/* Public link — shown to everyone. The dedicated /pairs, /tokens, /sources
+            list pages are operator-only for now (their public views land in the next
+            stage); anonymous visitors get the verified-data overview on the dashboard. */}
         <Item href="/" icon="home" label="Dashboard" active={router.asPath === "/"} />
-        <Item href="/pairs?status=NeedsReview" icon="queue" label="Review queue" star pill={needsReviewCount ?? null} active={active("/pairs")} />
-        <Item href="/tokens" icon="token" label="Tokens" active={active("/tokens")} />
 
-        {session && <>
+        {/* Operator-only surface. */}
+        {isOperator && <>
+          <Item href="/pairs" icon="queue" label="Pairs" star pill={needsReviewCount ?? null} active={active("/pairs")} />
+          <Item href="/tokens" icon="token" label="Tokens" active={active("/tokens")} />
+          <Item href="/sources" icon="layers" label="Sources" active={active("/sources")} />
           <div className="sb-group-label">Pipeline</div>
           {PASSES.map((p) => (
             <Link key={p.id} href={p.href}><a className={`sb-link${active(p.href) ? " active" : ""}`}>
@@ -61,21 +69,25 @@ const NavBar: React.FC<{ needsReviewCount?: number }> = ({ needsReviewCount }) =
           ))}
 
           <div className="sb-group-label">Tools</div>
-          <Item href="/sources" icon="layers" label="Sources" active={active("/sources")} />
           <Item href="/thresholds" icon="filter" label="Thresholds" active={active("/thresholds")} />
           <Item href="/price-test" icon="price" label="OoO price-test" active={active("/price-test")} />
           <Item href="/help" icon="help" label="Scoring guide" active={active("/help")} />
         </>}
       </nav>
 
-      {session && (
+      {isOperator ? (
         <div className="sb-foot">
-          <span className="sb-avatar">{(session.user?.name || "OP").slice(0, 2).toUpperCase()}</span>
+          <span className="sb-avatar">{(session?.user?.name || "OP").slice(0, 2).toUpperCase()}</span>
           <div className="col grow" style={{ minWidth: 0 }}>
-            <span style={{ fontWeight: 500, fontSize: "var(--fs-sm)" }} className="truncate">{session.user?.name || "operator"}</span>
+            <span style={{ fontWeight: 500, fontSize: "var(--fs-sm)" }} className="truncate">{session?.user?.name || "operator"}</span>
             <span className="muted" style={{ fontSize: "var(--fs-xs)" }}>authorised</span>
           </div>
           <button onClick={() => signOut()} className="btn btn-ghost btn-sm" title="Log out"><Icon name="logout" size={15} />Log out</button>
+        </div>
+      ) : (
+        <div className="sb-foot" style={{ justifyContent: "center", gap: "var(--sp-3)" }}>
+          <span className="muted" style={{ fontSize: "var(--fs-xs)" }}>Operator?</span>
+          <LogInButton />
         </div>
       )}
     </aside>

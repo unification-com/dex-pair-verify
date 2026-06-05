@@ -12,6 +12,7 @@ import { NotificationManager } from "react-notifications";
 
 import Layout from "../components/shell/Layout";
 import PageHeader from "../components/ui/PageHeader";
+import { operatorGate } from "../lib/operatorGate";
 import prisma from "../lib/prisma";
 import { decentralizedTemplate, seedForGt } from "../lib/sourceSeeds";
 import { CandidateStatus } from "../types/types";
@@ -40,7 +41,9 @@ type Supported = {
 
 const SCHEMA_FAMILIES = ["univ2", "univ3", "custom"];
 
-export const getServerSideProps: GetServerSideProps = async () => {
+export const getServerSideProps: GetServerSideProps = async (ctx) => {
+  const gate = await operatorGate(ctx);
+  if (gate) return gate;
   const [candidates, supported] = await Promise.all([
     prisma.candidateDexNetwork.findMany({
       where: { status: CandidateStatus.Pending },

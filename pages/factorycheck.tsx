@@ -3,6 +3,7 @@ import { NotificationManager } from "react-notifications";
 
 import PassRunnerLayout from "../components/admin/PassRunnerLayout";
 import Layout from "../components/shell/Layout";
+import { operatorOnlyGSSP } from "../lib/operatorGate";
 
 // RPC reads are lighter than the GoPlus limit; a short pace keeps public RPCs
 // happy while staying brisk.
@@ -108,5 +109,7 @@ const FactoryCheck: React.FC = () => {
     </Layout>
   );
 };
+
+export const getServerSideProps = operatorOnlyGSSP;
 
 export default FactoryCheck;

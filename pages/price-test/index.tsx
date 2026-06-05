@@ -4,6 +4,7 @@ import React, { FormEvent, useState } from "react";
 import Layout from "../../components/shell/Layout";
 import Icon from "../../components/ui/Icon";
 import PageHeader from "../../components/ui/PageHeader";
+import { operatorOnlyGSSP } from "../../lib/operatorGate";
 
 // Entry point for the OoO price-test (the sidebar links here). Enter a symbol
 // pair → the per-pool price simulation. You can also reach this from any
@@ -38,5 +39,7 @@ const PriceTestIndex: React.FC = () => {
     </Layout>
   );
 };
+
+export const getServerSideProps = operatorOnlyGSSP;
 
 export default PriceTestIndex;

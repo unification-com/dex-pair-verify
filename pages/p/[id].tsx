@@ -22,6 +22,7 @@ import Icon from "../../components/ui/Icon";
 import PageHeader from "../../components/ui/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { deriveFences, UiFence } from "../../lib/fences";
+import { operatorGate } from "../../lib/operatorGate";
 import prisma from '../../lib/prisma';
 import { isVerifiedStatus, VERIFIED_STATUSES } from "../../lib/status";
 import { REASON_LABEL } from "../../lib/statusMeta";
@@ -34,7 +35,10 @@ type VerdictView = { reasonCode: string; confidence: number | null; reason: stri
 type QueueView = { ids: string[]; filterQs: string };
 type MiniPair = { id: string; chain: string; dex: string; pair: string; reserveUsd: number; txCount: number; status: TokenPairStatus };
 
-export const getServerSideProps: GetServerSideProps = async ({ params, query }) => {
+export const getServerSideProps: GetServerSideProps = async (ctx) => {
+  const gate = await operatorGate(ctx);
+  if (gate) return gate;
+  const { params, query } = ctx;
   const id = String(params?.id);
 
   // Full rows drive the verdict engine; the SAME enrichment path the runner uses

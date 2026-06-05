@@ -10,7 +10,9 @@ import Layout from "../components/shell/Layout";
 import ConfidenceMeter from "../components/ui/ConfidenceMeter";
 import Icon from "../components/ui/Icon";
 import PageHeader from "../components/ui/PageHeader";
+import { isOperatorCtx } from "../lib/operatorGate";
 import prisma from "../lib/prisma";
+import { VERIFIED_STATUSES } from "../lib/status";
 import { TokenPairStatus } from "../types/types";
 
 type Step = { href: string; step?: string; label: string; what: string };
@@ -31,7 +33,23 @@ const MAINTENANCE: Step[] = [
   { href: "/revalidate", label: "Re-validate", what: "Re-run the verdict across every pair (e.g. after changing thresholds). Fast — no external API calls." },
 ];
 
-export const getServerSideProps: GetServerSideProps = async () => {
+export const getServerSideProps: GetServerSideProps = async (ctx) => {
+  // Public visitors get a read-only verified-data overview — no review queue, no
+  // operator internals.
+  if (!(await isOperatorCtx(ctx))) {
+    const [verifiedPairs, verifiedTokens, supported, verifiedSourceGroups] = await Promise.all([
+      prisma.pair.count({ where: { status: { in: [...VERIFIED_STATUSES] } } }),
+      prisma.token.count({ where: { status: { in: [...VERIFIED_STATUSES] } } }),
+      prisma.supportedSource.findMany({ select: { chain: true, dex: true }, orderBy: [{ chain: 'asc' }, { dex: 'asc' }] }),
+      prisma.pair.groupBy({ by: ['chain', 'dex'], where: { status: { in: [...VERIFIED_STATUSES] } }, _count: { _all: true } }),
+    ]);
+    const sources: SourceRow[] = verifiedSourceGroups
+      .map((g) => ({ chain: g.chain, dex: g.dex, count: g._count._all }))
+      .sort((a, b) => b.count - a.count);
+    const networks = Array.from(new Set(supported.map((s) => s.chain))).length;
+    return { props: { isOperator: false, verifiedPairs, verifiedTokens, supportedCount: supported.length, networks, sources } };
+  }
+
   const [statusGroups, tierGroups, topReview, sourceGroups] = await Promise.all([
     prisma.pair.groupBy({ by: ['status'], _count: { _all: true } }),
     prisma.pair.groupBy({ by: ['reviewTier'], where: { status: TokenPairStatus.NeedsReview }, _count: { _all: true } }),
@@ -52,15 +70,25 @@ export const getServerSideProps: GetServerSideProps = async () => {
     .map((g) => ({ chain: g.chain, dex: g.dex, count: g._count._all }))
     .sort((a, b) => b.count - a.count);
 
-  return { props: { statusCounts, tierCounts, topReview, sources } };
+  return { props: { isOperator: true, statusCounts, tierCounts, topReview, sources } };
 }
 
-type Props = {
+type OperatorProps = {
+  isOperator: true;
   statusCounts: Record<string, number>;
   tierCounts: Record<string, number>;
   topReview: TopRow[];
   sources: SourceRow[];
 };
+type PublicProps = {
+  isOperator: false;
+  verifiedPairs: number;
+  verifiedTokens: number;
+  supportedCount: number;
+  networks: number;
+  sources: SourceRow[];
+};
+type Props = OperatorProps | PublicProps;
 
 const usd = (n: number) => {
   const a = Math.abs(n);
@@ -70,7 +98,7 @@ const usd = (n: number) => {
   return "$" + n.toFixed(2);
 };
 
-const AdminHome: React.FC<Props> = (props) => {
+const AdminHome: React.FC<OperatorProps> = (props) => {
   const router = useRouter();
   const sc = props.statusCounts;
   const verified = (sc[TokenPairStatus.AutoVerified] ?? 0) + (sc[TokenPairStatus.ManualVerified] ?? 0);
@@ -180,4 +208,49 @@ const AdminHome: React.FC<Props> = (props) => {
   );
 };
 
-export default AdminHome;
+// Public read-only overview — verified-data summary, no review queue / internals.
+const PublicHome: React.FC<PublicProps> = (props) => (
+  <Layout crumb="Overview">
+    <PageHeader
+      title="Trusted DEX pairs for OoO"
+      sub="The verified DEX pairs, tokens and sources that feed Unification's on-chain oracle (OoO). Read-only — operators log in for the review tools."
+    />
+    <div className="pub-stats">
+      <StatCard label="Verified pairs" value={props.verifiedPairs} tone="pass" icon="check" />
+      <StatCard label="Verified tokens" value={props.verifiedTokens} icon="token" />
+      <StatCard label="Supported sources" value={props.supportedCount} icon="layers" />
+      <StatCard label="Networks" value={props.networks} icon="home" />
+    </div>
+    <div className="card card-pad" style={{ marginTop: "var(--sp-5)" }}>
+      <span className="eyebrow">Sources — verified pairs per (chain · DEX)</span>
+      <div className="pub-src">
+        {props.sources.map((s) => (
+          <div key={`${s.chain}_${s.dex}`} className="pub-srow">
+            <span><ChainName chain={s.chain} /> · <DexName dex={s.dex} /></span>
+            <span className="grow" />
+            <span className="muted mono">{s.count}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+    <p className="muted" style={{ marginTop: "var(--sp-5)", fontSize: "var(--fs-sm)" }}>
+      Query these pairs on-chain via OoO — see the{" "}
+      <a href="https://docs.unification.io/ooo/guide/ooo_api.html" target="_blank" rel="noreferrer">OoO API docs</a>.
+    </p>
+    <style jsx>{`
+      .pub-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--sp-4); }
+      .pub-src { display: flex; flex-direction: column; margin-top: var(--sp-3); }
+      .pub-srow { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) 0; border-bottom: 1px solid var(--border); font-size: var(--fs-sm); }
+      .pub-srow:last-child { border-bottom: 0; }
+    `}</style>
+  </Layout>
+);
+
+function Home(props: Props) {
+  if (props.isOperator) {
+    return <AdminHome {...(props as OperatorProps)} />;
+  }
+  return <PublicHome {...(props as PublicProps)} />;
+}
+
+export default Home;

@@ -3,6 +3,7 @@ import { NotificationManager } from "react-notifications";
 
 import PassRunnerLayout from "../components/admin/PassRunnerLayout";
 import Layout from "../components/shell/Layout";
+import { operatorOnlyGSSP } from "../lib/operatorGate";
 import { TokenPairStatus } from "../types/types";
 
 // Pace between batches, matching the ingest cadence. Re-validate only hits
@@ -122,5 +123,7 @@ const Revalidate: React.FC = () => {
     </Layout>
   );
 };
+
+export const getServerSideProps = operatorOnlyGSSP;
 
 export default Revalidate;

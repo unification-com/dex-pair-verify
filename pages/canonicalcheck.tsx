@@ -3,6 +3,7 @@ import { NotificationManager } from "react-notifications";
 
 import PassRunnerLayout from "../components/admin/PassRunnerLayout";
 import Layout from "../components/shell/Layout";
+import { operatorOnlyGSSP } from "../lib/operatorGate";
 
 // CoinGecko free tier rate-limits; pace batches of 10 so we stay under it.
 const CALL_DELAY_MS = 21000;
@@ -107,5 +108,7 @@ const CanonicalCheck: React.FC = () => {
     </Layout>
   );
 };
+
+export const getServerSideProps = operatorOnlyGSSP;
 
 export default CanonicalCheck;

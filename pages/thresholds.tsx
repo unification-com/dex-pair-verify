@@ -4,6 +4,7 @@ import { NotificationManager } from "react-notifications";
 
 import Layout from "../components/shell/Layout";
 import PageHeader from "../components/ui/PageHeader";
+import { operatorGate } from "../lib/operatorGate";
 import prisma from "../lib/prisma";
 import { getSources, thresholdSeedData } from "../lib/sourceConfig";
 
@@ -37,7 +38,9 @@ const NUM_FIELDS: { key: keyof ThresholdRow; label: string; step?: string }[] = 
   { key: "autoVerifyConfidence", label: "Auto-Verify Conf (0-1)", step: "any" },
 ];
 
-export const getServerSideProps: GetServerSideProps = async () => {
+export const getServerSideProps: GetServerSideProps = async (ctx) => {
+  const gate = await operatorGate(ctx);
+  if (gate) return gate;
   // Ensure a threshold row exists for every configured source so the operator
   // can tune them all, even before any ingest has created rows lazily.
   const sources = await getSources();

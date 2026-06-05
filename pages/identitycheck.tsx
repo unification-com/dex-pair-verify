@@ -3,6 +3,7 @@ import { NotificationManager } from "react-notifications";
 
 import PassRunnerLayout from "../components/admin/PassRunnerLayout";
 import Layout from "../components/shell/Layout";
+import { operatorOnlyGSSP } from "../lib/operatorGate";
 
 // GoPlus free tier is 30 req/min; pace batches of 10 so we stay well under it.
 const CALL_DELAY_MS = 21000;
@@ -108,5 +109,7 @@ const IdentityCheck: React.FC = () => {
     </Layout>
   );
 };
+
+export const getServerSideProps = operatorOnlyGSSP;
 
 export default IdentityCheck;

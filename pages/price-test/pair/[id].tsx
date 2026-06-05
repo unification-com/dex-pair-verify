@@ -4,12 +4,16 @@ import React from "react";
 import ThresholdPriceTest from "../../../components/PriceTest/ThresholdPriceTest";
 import Layout from "../../../components/shell/Layout";
 import StatusBadge from "../../../components/ui/StatusBadge";
+import { operatorGate } from "../../../lib/operatorGate";
 import prisma from "../../../lib/prisma";
 import { isVerifiedStatus, VERIFIED_STATUSES } from "../../../lib/status";
 import { buildThresholdMap, ThresholdMap } from "../../../lib/thresholds";
 import { PairProps } from "../../../types/props";
 
-export const getServerSideProps: GetServerSideProps = async ({ params }) => {
+export const getServerSideProps: GetServerSideProps = async (ctx) => {
+  const gate = await operatorGate(ctx);
+  if (gate) return gate;
+  const { params } = ctx;
   const pair = await prisma.pair.findUnique({
     where: {
       id: String(params?.id),

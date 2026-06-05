@@ -13,6 +13,7 @@ import DataTable, { Column } from "../../components/ui/DataTable";
 import Icon from "../../components/ui/Icon";
 import PageHeader from "../../components/ui/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
+import { operatorGate } from "../../lib/operatorGate";
 import prisma from '../../lib/prisma';
 import { isVerifiedStatus } from "../../lib/status";
 import { getTokenWebPresence, TokenWebPresence } from "../../lib/tokenWebPresence";
@@ -25,7 +26,10 @@ const pairSelect = {
     txCount: true, confidence: true, status: true, dex: true,
 };
 
-export const getServerSideProps: GetServerSideProps = async ({ params }) => {
+export const getServerSideProps: GetServerSideProps = async (ctx) => {
+  const gate = await operatorGate(ctx);
+  if (gate) return gate;
+  const { params } = ctx;
     const token = await prisma.token.findUnique({
         where: { id: String(params?.id) },
         include: {

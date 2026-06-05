@@ -6,13 +6,16 @@ import Layout from "../components/shell/Layout"
 import PageHeader from "../components/ui/PageHeader";
 import StatusBadge from "../components/ui/StatusBadge";
 import { FENCE_WEIGHTS } from "../lib/fences";
+import { operatorGate } from "../lib/operatorGate";
 import { REASON_LABEL, STATUS_META } from "../lib/statusMeta";
 import { DEFAULT_VERDICT_CONFIG } from "../lib/verdict";
 import { TokenPairStatus } from "../types/types";
 
 // The defaults are server-imported from the engine so this page can never drift
 // from the real config; they're tunable per-(chain,dex) on /thresholds.
-export const getServerSideProps: GetServerSideProps = async () => {
+export const getServerSideProps: GetServerSideProps = async (ctx) => {
+  const gate = await operatorGate(ctx);
+  if (gate) return gate;
   const c = DEFAULT_VERDICT_CONFIG;
   return {
     props: {

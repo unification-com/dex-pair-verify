@@ -3,6 +3,7 @@ import { NotificationManager } from "react-notifications";
 
 import PassRunnerLayout from "../components/admin/PassRunnerLayout";
 import Layout from "../components/shell/Layout";
+import { operatorOnlyGSSP } from "../lib/operatorGate";
 import { TokenPairStatus } from "../types/types";
 
 // Each page makes one GeckoTerminal call (pools with embedded tokens). 6s
@@ -118,5 +119,7 @@ const Ingest: React.FC = () => {
     </Layout>
   );
 };
+
+export const getServerSideProps = operatorOnlyGSSP;
 
 export default Ingest;
