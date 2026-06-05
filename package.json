@@ -24,6 +24,7 @@
     "rescore-scam": "tsx import/rescore-scam.ts",
     "ingest": "tsx import/ingest.ts",
     "discover": "tsx import/discover.ts",
+    "validate-seeds": "tsx import/validate-seeds.ts",
     "pipeline": "tsx import/pipeline.ts",
     "postinstall": "simple-git-hooks",
     "verify-gt": "tsx import/verify_gt.ts"

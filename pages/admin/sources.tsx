@@ -13,6 +13,7 @@ import { NotificationManager } from "react-notifications";
 import Layout from "../../components/shell/Layout";
 import PageHeader from "../../components/ui/PageHeader";
 import prisma from "../../lib/prisma";
+import { decentralizedTemplate, seedForGt } from "../../lib/sourceSeeds";
 import { CandidateStatus } from "../../types/types";
 
 type Candidate = {
@@ -80,6 +81,8 @@ type FormState = {
   factoryAddress: string;
   schemaFamily: string;
   apiKeyEnvVar: string;
+  seeded: boolean; // pre-filled from the curated catalogue (lib/sourceSeeds)
+  seedNote: string | null; // catalogue caveat (e.g. "Solidly — not priceable yet")
   // Filled by Verify:
   provider: string;
   template: string;
@@ -87,6 +90,11 @@ type FormState = {
   live: boolean | null; // null = not yet verified
   queryFields: string[];
   verifyError: string | null;
+  // Real-query data probe (filled by Verify):
+  dataApplicable: boolean | null;
+  dataOk: boolean | null;
+  sampleReserveUsd: number | null;
+  dataError: string | null;
   // Transient flags:
   verifying: boolean;
   busy: boolean;
@@ -102,19 +110,29 @@ const Sources: React.FC<{ candidates: Candidate[]; supported: Supported[] }> = (
 
   const open = (c: Candidate) => {
     setOpenId(c.id);
+    // Pre-fill from the curated catalogue when this candidate is a recognised
+    // target (matched by GT network+dex slug): the subgraph URL, factory, schema
+    // family and internal ids all come pre-populated, so promotion is verify-and-go.
+    const seed = seedForGt(c.chain, c.dex);
     setForm({
-      url: "",
-      chain: c.chain,
-      dex: c.dex,
-      factoryAddress: c.factoryAddress ?? "",
-      schemaFamily: c.subgraphSchemaFamily ?? "univ2",
+      url: seed ? decentralizedTemplate(seed.subgraphId) : "",
+      chain: seed ? seed.chain : c.chain,
+      dex: seed ? seed.dex : c.dex,
+      factoryAddress: seed ? seed.factoryAddress : c.factoryAddress ?? "",
+      schemaFamily: seed ? seed.schemaFamily : c.subgraphSchemaFamily ?? "univ2",
       apiKeyEnvVar: "",
+      seeded: !!seed,
+      seedNote: seed?.note ?? (seed && !seed.priceable ? "Not priceable by go-ooo yet" : null),
       provider: "",
       template: "",
       keyEnvVar: null,
       live: null,
       queryFields: [],
       verifyError: null,
+      dataApplicable: null,
+      dataOk: null,
+      sampleReserveUsd: null,
+      dataError: null,
       verifying: false,
       busy: false,
     });
@@ -155,9 +173,15 @@ const Sources: React.FC<{ candidates: Candidate[]; supported: Supported[] }> = (
         schemaFamily: res.schemaFamily && res.schemaFamily !== "custom" ? res.schemaFamily : form.schemaFamily,
         queryFields: res.queryFields || [],
         verifyError: res.error || null,
+        dataApplicable: res.dataApplicable ?? null,
+        dataOk: res.dataOk ?? null,
+        sampleReserveUsd: res.sampleReserveUsd ?? null,
+        dataError: res.dataError ?? null,
       });
-      if (res.live) {
-        NotificationManager.success("Subgraph is live", `${res.provider} · ${res.schemaFamily}`, 3500);
+      if (res.live && res.dataOk) {
+        NotificationManager.success("Live + returning data", `${res.provider} · ${res.schemaFamily}`, 3500);
+      } else if (res.live) {
+        NotificationManager.warning("Live, but the data query did not return usable rows", res.dataError || "", 5000);
       } else {
         NotificationManager.warning("Probe did not confirm liveness", res.error || "", 5000);
       }
@@ -298,7 +322,11 @@ const Sources: React.FC<{ candidates: Candidate[]; supported: Supported[] }> = (
                 {openId === c.id && form ? (
                   <div className="cand-panel">
                     {/* Verify */}
-                    <label className="fld-label" htmlFor={`url-${c.id}`}>Subgraph URL</label>
+                    <label className="fld-label" htmlFor={`url-${c.id}`}>
+                      Subgraph URL
+                      {form.seeded ? <span className="badge badge-info badge-sm" style={{ marginLeft: 8 }}>★ pre-filled from catalogue</span> : null}
+                      {form.seedNote ? <span className="muted" style={{ marginLeft: 8 }}>{form.seedNote}</span> : null}
+                    </label>
                     <div className="row gap-3">
                       <input
                         id={`url-${c.id}`}
@@ -317,6 +345,13 @@ const Sources: React.FC<{ candidates: Candidate[]; supported: Supported[] }> = (
                         <span className={`badge badge-${form.live ? "pass" : "warn"} badge-sm`}>
                           {form.live ? "live" : "not confirmed live"}
                         </span>
+                        {form.dataApplicable ? (
+                          <span className={`badge badge-${form.dataOk ? "pass" : "warn"} badge-sm`} title={form.dataError || ""}>
+                            {form.dataOk ? `data ✓ ~$${Math.round(form.sampleReserveUsd ?? 0).toLocaleString("en-GB")}` : "no usable data"}
+                          </span>
+                        ) : form.live ? (
+                          <span className="badge badge-neutral badge-sm">data n/a</span>
+                        ) : null}
                         <span className="muted">provider: <span className="mono">{form.provider}</span></span>
                         {form.keyEnvVar ? <span className="muted">key: <span className="mono">{form.keyEnvVar}</span></span> : null}
                         {form.template ? <span className="muted">template: <span className="mono truncate" title={form.template}>{form.template}</span></span> : null}

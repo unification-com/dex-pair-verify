@@ -20,7 +20,10 @@ export type SchemaFamily = "univ2" | "univ3" | "custom";
 // matters — most specific first. `self-hosted` is the catch-all (operator-defined
 // auth, no managed key).
 const PROVIDERS: { provider: SubgraphProvider; test: RegExp; keyEnvVar: string | null }[] = [
-  { provider: "graph-decentralized", test: /^https:\/\/gateway[^/]*\.network\.thegraph\.com\/api\/[^/]+\/subgraphs\/id\/[^/]+/, keyEnvVar: "THEGRAPH_API_KEY" },
+  // Matches both the modern gateway host (gateway.thegraph.com) and the older
+  // regional one (gateway-arbitrum.network.thegraph.com) that the wired
+  // lib/sources.js entries use — the `.network.` segment is optional.
+  { provider: "graph-decentralized", test: /^https:\/\/gateway[^/]*\.(network\.)?thegraph\.com\/api\/[^/]+\/subgraphs\/id\/[^/]+/, keyEnvVar: "THEGRAPH_API_KEY" },
   { provider: "graph-studio", test: /^https:\/\/api\.studio\.thegraph\.com\/query\//, keyEnvVar: "GRAPH_STUDIO_API_KEY" },
   { provider: "graph-hosted", test: /^https:\/\/api\.thegraph\.com\/subgraphs\/name\//, keyEnvVar: null },
 ];
@@ -123,16 +126,98 @@ export async function probeSubgraph(url: string, opts: { fetcher?: GraphqlFetche
   return { live: true, schemaFamily: classifySchemaFamily(fields), queryFields: fields };
 }
 
+// Minimal "is this subgraph returning real, usable pricing data" query per schema
+// family. univ2 fetches a pair with positive reserveUSD; univ3 (incl. Algebra,
+// which exposes the same pools/TVL fields) a pool with positive
+// totalValueLockedUSD. A `where` filter rather than an orderBy — a global sort is
+// slow on large subgraphs (times out) and surfaces univ2's notoriously corrupted
+// reserveUSD outliers. custom/solidly have no generic query (they await a dedicated
+// template), so the data probe is not applicable. Reserve values are BigDecimal, so
+// the threshold is a quoted string.
+const DATA_QUERY: Partial<Record<SchemaFamily, { query: string; collection: string; reserveField: string }>> = {
+  univ2: {
+    query: `{ pairs(first: 1, where: { reserveUSD_gt: "0" }) { id reserveUSD } }`,
+    collection: "pairs",
+    reserveField: "reserveUSD",
+  },
+  univ3: {
+    query: `{ pools(first: 1, where: { totalValueLockedUSD_gt: "0" }) { id totalValueLockedUSD } }`,
+    collection: "pools",
+    reserveField: "totalValueLockedUSD",
+  },
+};
+
+export type DataProbeResult = {
+  applicable: boolean; // false for custom/solidly (no generic query yet)
+  ok: boolean; // true when the query returned a row with a positive reserve/TVL
+  rowCount: number;
+  sampleReserveUsd: number | null;
+  sampleId: string | null;
+  error?: string;
+};
+
+// Real-data liveness/usability probe: runs the schema family's minimal query (the
+// same one the pipeline uses) and checks a row comes back with a positive
+// reserve/TVL. Stronger than introspection — catches subgraphs that exist but are
+// empty, broken, re-synced, or a schema variant. Injectable fetcher for tests.
+export async function dataProbeSubgraph(
+  url: string,
+  schemaFamily: SchemaFamily,
+  opts: { fetcher?: GraphqlFetcher } = {},
+): Promise<DataProbeResult> {
+  const spec = DATA_QUERY[schemaFamily];
+  if (!spec) {
+    return { applicable: false, ok: false, rowCount: 0, sampleReserveUsd: null, sampleId: null, error: `no generic data query for schema family "${schemaFamily}"` };
+  }
+  const fetcher = opts.fetcher ?? defaultGraphqlFetch;
+  const json = (await fetcher(url, spec.query)) as
+    | { data?: Record<string, { id: string; [k: string]: unknown }[]>; errors?: { message?: string }[] }
+    | null;
+  if (!json) {
+    return { applicable: true, ok: false, rowCount: 0, sampleReserveUsd: null, sampleId: null, error: "no response / non-2xx / timeout" };
+  }
+  if (json.errors?.length) {
+    return { applicable: true, ok: false, rowCount: 0, sampleReserveUsd: null, sampleId: null, error: json.errors.map((e) => e.message).join("; ") };
+  }
+  const rows = json.data?.[spec.collection] ?? [];
+  if (rows.length === 0) {
+    return { applicable: true, ok: false, rowCount: 0, sampleReserveUsd: null, sampleId: null, error: "query returned no rows (empty subgraph?)" };
+  }
+  const top = rows[0];
+  const reserve = parseFloat(String(top[spec.reserveField] ?? ""));
+  const reserveOk = Number.isFinite(reserve) && reserve > 0;
+  return {
+    applicable: true,
+    ok: reserveOk,
+    rowCount: rows.length,
+    sampleReserveUsd: Number.isFinite(reserve) ? reserve : null,
+    sampleId: top.id ?? null,
+    error: reserveOk ? undefined : "top row has no positive reserve/TVL",
+  };
+}
+
+const skippedDataProbe = (error: string): DataProbeResult => ({
+  applicable: false,
+  ok: false,
+  rowCount: 0,
+  sampleReserveUsd: null,
+  sampleId: null,
+  error,
+});
+
 export type VerifyResult = {
   provider: SubgraphProvider;
   template: string;      // {API_KEY} placeholder, safe to persist / export
   keyEnvVar: string | null;
   probe: ProbeResult;
+  dataProbe: DataProbeResult;
 };
 
-// Operator-paste entry point: detect provider, build the safe template, then probe
-// using the substituted literal key (taken from env by default; pass `key` in tests).
-// The returned `template` is what gets persisted — never the literal URL.
+// Operator-paste entry point: detect provider, build the safe template, run the
+// introspection probe (classify the schema family), then — if it's live — the
+// real-data probe (confirm the subgraph actually returns usable pricing rows,
+// like go-ooo would). The returned `template` is what gets persisted — never the
+// literal URL. Key taken from env by default; pass `key` in tests.
 export async function verifySubgraphSource(
   literalUrl: string,
   opts: { key?: string; fetcher?: GraphqlFetcher } = {},
@@ -140,6 +225,10 @@ export async function verifySubgraphSource(
   const { template, provider } = toUrlTemplate(literalUrl);
   const keyEnvVar = keyEnvVarFor(provider);
   const key = opts.key ?? (keyEnvVar ? process.env[keyEnvVar] ?? "" : "");
-  const probe = await probeSubgraph(applyUrlTemplate(template, key), { fetcher: opts.fetcher });
-  return { provider, template, keyEnvVar, probe };
+  const literal = applyUrlTemplate(template, key);
+  const probe = await probeSubgraph(literal, { fetcher: opts.fetcher });
+  const dataProbe = probe.live
+    ? await dataProbeSubgraph(literal, probe.schemaFamily, { fetcher: opts.fetcher })
+    : skippedDataProbe("skipped — introspection not live");
+  return { provider, template, keyEnvVar, probe, dataProbe };
 }

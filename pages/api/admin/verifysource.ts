@@ -28,6 +28,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       schemaFamily: r.probe.schemaFamily,
       queryFields: r.probe.queryFields,
       error: r.probe.error ?? null,
+      // Real-query data probe — confirms the subgraph returns usable pricing rows.
+      dataApplicable: r.dataProbe.applicable,
+      dataOk: r.dataProbe.ok,
+      sampleReserveUsd: r.dataProbe.sampleReserveUsd,
+      dataError: r.dataProbe.error ?? null,
     });
   } catch (err) {
     console.error(err);
