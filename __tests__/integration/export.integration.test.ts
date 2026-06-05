@@ -6,7 +6,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { resetDb, seedPair, seedToken, testPrisma } from "./helpers";
 import {
-  buildExportIndex,
+  buildExportManifestV3,
   buildExportV2,
   EXPORT_MANIFEST_SCHEMA_VERSION,
   EXPORT_PAIR_SCHEMA_VERSION,
@@ -94,22 +94,60 @@ describe("buildExportV2", () => {
   });
 });
 
-describe("buildExportIndex", () => {
-  it("groups verified pair counts by chain and dex", async () => {
+const seedSource = (chain: string, dex: string, over: Record<string, unknown> = {}) =>
+  testPrisma.supportedSource.create({
+    data: {
+      chain,
+      dex,
+      subgraphUrlTemplate: `https://gateway.thegraph.com/api/{API_KEY}/subgraphs/id/${dex}`,
+      subgraphSchemaFamily: "univ3",
+      subgraphProvider: "graph-decentralized",
+      factoryAddress: "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+      lastVerifiedAt: 1234,
+      enabledAt: 1000,
+      ...over,
+    },
+  });
+
+describe("buildExportManifestV3", () => {
+  it("emits the SupportedSource registry with endpoints, schema family + verified pair counts", async () => {
+    await seedSource("eth", "uniswap_v3");
+    await seedSource("eth", "sushiswap", { subgraphSchemaFamily: "univ2" });
     await seedVerifiedPair({ lastChecked: 1000 });
     await seedVerifiedPair({ lastChecked: 2000 });
     await seedVerifiedPair({ dex: "sushiswap" });
 
-    const idx = await buildExportIndex({ now: NOW });
+    const m = await buildExportManifestV3({ now: NOW });
 
-    expect(idx.schemaVersion).toBe(EXPORT_MANIFEST_SCHEMA_VERSION);
-    expect(idx.schemaVersion).toBe(2); // manifest stays at 2 (Phase 4 bumps it)
-    const eth = idx.chains.find((c) => c.chain === "eth");
-    const uni = eth?.dexs.find((d) => d.dex === "uniswap_v3");
+    expect(m.schemaVersion).toBe(EXPORT_MANIFEST_SCHEMA_VERSION);
+    expect(m.schemaVersion).toBe(3);
+    const uni = m.supportedSources.find((s) => s.chain === "eth" && s.dex === "uniswap_v3");
     expect(uni?.pairCount).toBe(2);
     expect(uni?.lastUpdated).toBe(2000);
-    expect(uni?.url).toBe("/api/export/eth/uniswap_v3");
-    expect(eth?.dexs.find((d) => d.dex === "sushiswap")?.pairCount).toBe(1);
+    expect(uni?.exportUrl).toBe("/api/ooo/export/eth/uniswap_v3");
+    expect(uni?.subgraphSchemaFamily).toBe("univ3");
+    expect(uni?.rpcUrl).toBe("https://ethereum-rpc.publicnode.com"); // from chainInfo
+    expect(uni?.lastVerifiedAt).toBe(1234);
+    expect(uni?.endpoints).toEqual([
+      { provider: "graph-decentralized", urlTemplate: "https://gateway.thegraph.com/api/{API_KEY}/subgraphs/id/uniswap_v3", tier: "paid" },
+    ]);
+    expect(m.supportedSources.find((s) => s.dex === "sushiswap")?.pairCount).toBe(1);
+  });
+
+  it("appends free-tier additional endpoints, tier derived from provider", async () => {
+    await seedSource("eth", "uniswap_v3", {
+      additionalEndpoints: [{ provider: "graph-studio", urlTemplate: "https://api.studio.thegraph.com/query/1/x/v1" }],
+    });
+
+    const m = await buildExportManifestV3({ now: NOW });
+    const uni = m.supportedSources.find((s) => s.dex === "uniswap_v3");
+    expect(uni?.endpoints).toHaveLength(2);
+    expect(uni?.endpoints[0].tier).toBe("paid");
+    expect(uni?.endpoints[1]).toEqual({
+      provider: "graph-studio",
+      urlTemplate: "https://api.studio.thegraph.com/query/1/x/v1",
+      tier: "free",
+    });
   });
 });
 

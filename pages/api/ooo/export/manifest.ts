@@ -1,13 +1,13 @@
-import {buildExportIndex} from "../../../../lib/export";
+import {buildExportManifestV3} from "../../../../lib/export";
 import {checkBearerToken, parseBearer, tokenPrefix} from "../../../../lib/exportAuth";
 import {rateLimit} from "../../../../lib/rateLimit";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
-// Bearer-token discovery manifest (A.6.2): which (chain, dex) exports exist,
-// their pair counts + last-updated + URL. Lets go-ooo discover what to poll
-// without a hardcoded source list. Lives at /api/ooo/export/manifest alongside
-// the per-(chain,dex) bearer export.
+// Bearer-token discovery manifest (4.C, v3): the SupportedSource registry — each
+// source's subgraph endpoint list, schema family, factory, rpc + verified pair
+// count — so go-ooo consumes it as its source of truth instead of a hard-coded
+// list. Lives at /api/ooo/export/manifest alongside the per-(chain,dex) bearer export.
 const RATE_LIMIT = 60;
 const RATE_WINDOW_MS = 60_000;
 
@@ -27,9 +27,8 @@ export default async function handler(
     }
 
     try {
-        const data = await buildExportIndex()
-        const dexCount = data.chains.reduce((n, c) => n + c.dexs.length, 0)
-        console.log(JSON.stringify({ export: "manifest", token: tokenPrefix(token), chains: data.chains.length, dexs: dexCount, ms: Date.now() - started }))
+        const data = await buildExportManifestV3()
+        console.log(JSON.stringify({ export: "manifest", v: data.schemaVersion, token: tokenPrefix(token), sources: data.supportedSources.length, ms: Date.now() - started }))
         return res.status(200).json(data)
     } catch (err) {
         console.error(err)

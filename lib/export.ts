@@ -6,6 +6,7 @@
 
 import { Prisma } from "@prisma/client";
 
+import { chainInfo } from "./chains";
 import prisma from "./prisma";
 import { VERIFIED_STATUSES } from "./status";
 import { TokenPairStatus } from "../types/types";
@@ -15,9 +16,10 @@ import { TokenPairStatus } from "../types/types";
 // go-ooo can weight pools by trust. Additive — a v2 consumer ignores the new
 // fields.
 export const EXPORT_PAIR_SCHEMA_VERSION = 3;
-// The discovery manifest format — still 2. Phase 4 evolves it to 3 with the
-// richer per-source metadata (see TRACKER-modular-dex-network.md § 4.C).
-export const EXPORT_MANIFEST_SCHEMA_VERSION = 2;
+// The discovery manifest format — v3 (Phase 4 / 4.C): the rich per-source registry
+// (subgraph endpoint list, schema family, factory, rpc) that go-ooo consumes as
+// its source of truth, replacing its hard-coded source list.
+export const EXPORT_MANIFEST_SCHEMA_VERSION = 3;
 
 export type ExportTokenV2 = {
   chain: string;
@@ -122,57 +124,108 @@ export async function buildExportV2(
   };
 }
 
-export type ExportIndexDex = { dex: string; url: string; pairCount: number; lastUpdated: number };
-export type ExportIndexChain = { chain: string; dexs: ExportIndexDex[] };
-export type ExportIndex = {
-  schemaVersion: number;
-  generatedAt: number;
-  chains: ExportIndexChain[];
+export type ManifestEndpoint = {
+  provider: string; // graph-decentralized | graph-studio | graph-hosted | self-hosted
+  urlTemplate: string; // {API_KEY} placeholder — never a literal key
+  tier: "paid" | "free"; // derived from provider (decentralised network = paid)
 };
 
-// The discovery manifest (A.6.2): which (chain, dex) exports exist, their pair
-// counts + last-updated, so go-ooo can poll without a hardcoded source list.
-export async function buildExportIndex(opts: { now?: number } = {}): Promise<ExportIndex> {
-  const [verifiedGroups, modifiedGroups] = await Promise.all([
-    prisma.pair.groupBy({
-      by: ["chain", "dex"],
-      where: { status: { in: VERIFIED } },
-      _count: { _all: true },
-    }),
+export type ManifestSource = {
+  chain: string;
+  dex: string;
+  // Ordered endpoint list — [0] is the primary, free-tier alternatives follow.
+  // go-ooo picks paid-vs-free by which API keys it holds.
+  endpoints: ManifestEndpoint[];
+  subgraphSchemaFamily: string;
+  factoryAddress: string;
+  rpcUrl: string | null; // for go-ooo's at-block price sampling (null = chain not mapped)
+  blocksPerMin: number | null;
+  pairCount: number; // verified pairs available at exportUrl
+  exportUrl: string;
+  lastUpdated: number; // max pair-modified time for this source
+  lastVerifiedAt: number; // last subgraph liveness re-probe (D8)
+};
+
+export type ExportManifestV3 = {
+  schemaVersion: number;
+  generatedAt: number;
+  supportedSources: ManifestSource[];
+};
+
+// The decentralised network is the paid (per-query-billed) tier; Studio / hosted /
+// self-hosted are free tiers.
+const providerTier = (provider: string): "paid" | "free" =>
+  provider === "graph-decentralized" ? "paid" : "free";
+
+// Parse the additionalEndpoints JSON column into typed endpoints (tier derived
+// from provider). Tolerant of a malformed/legacy value — returns [].
+const parseAdditionalEndpoints = (raw: Prisma.JsonValue | null): ManifestEndpoint[] => {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const out: ManifestEndpoint[] = [];
+  for (const e of raw) {
+    if (e && typeof e === "object" && !Array.isArray(e)) {
+      const rec = e as Record<string, unknown>;
+      const provider = String(rec.provider ?? "");
+      const urlTemplate = String(rec.urlTemplate ?? "");
+      if (provider && urlTemplate) {
+        out.push({ provider, urlTemplate, tier: providerTier(provider) });
+      }
+    }
+  }
+  return out;
+};
+
+// The v3 discovery manifest (4.C): the SupportedSource registry — every source's
+// subgraph endpoint(s), schema family, factory, rpc + verified pair count — so
+// go-ooo consumes it as its source of truth instead of a hard-coded list. Emits
+// ALL supported sources (pairCount 0 for a source not yet ingested); go-ooo skips
+// schema families it can't price (logs a warning), so a forward-compat family
+// doesn't break an old binary.
+export async function buildExportManifestV3(opts: { now?: number } = {}): Promise<ExportManifestV3> {
+  const [sources, verifiedGroups, modifiedGroups] = await Promise.all([
+    prisma.supportedSource.findMany({ orderBy: [{ chain: "asc" }, { dex: "asc" }] }),
+    prisma.pair.groupBy({ by: ["chain", "dex"], where: { status: { in: VERIFIED } }, _count: { _all: true } }),
     // Modified-time over ALL pairs (see pairsModifiedAt) so a demotion counts.
-    prisma.pair.groupBy({
-      by: ["chain", "dex"],
-      _max: { lastChecked: true, verdictAt: true },
-    }),
+    prisma.pair.groupBy({ by: ["chain", "dex"], _max: { lastChecked: true, verdictAt: true } }),
   ]);
 
+  const countByKey = new Map<string, number>();
+  for (const g of verifiedGroups) {
+    countByKey.set(`${g.chain}/${g.dex}`, g._count._all);
+  }
   const modifiedAt = new Map<string, number>();
   for (const g of modifiedGroups) {
     modifiedAt.set(`${g.chain}/${g.dex}`, Math.max(g._max.lastChecked ?? 0, g._max.verdictAt ?? 0));
   }
 
-  const byChain = new Map<string, ExportIndexDex[]>();
-  for (const g of verifiedGroups) {
-    if (!byChain.has(g.chain)) {
-      byChain.set(g.chain, []);
-    }
-    byChain.get(g.chain)!.push({
-      dex: g.dex,
-      url: `/api/ooo/export/${g.chain}/${g.dex}`,
-      pairCount: g._count._all,
-      lastUpdated: modifiedAt.get(`${g.chain}/${g.dex}`) ?? 0,
-    });
-  }
-
-  const chains: ExportIndexChain[] = Array.from(byChain.entries()).map(([chain, dexs]) => ({
-    chain,
-    dexs,
-  }));
+  const supportedSources: ManifestSource[] = sources.map((s) => {
+    const key = `${s.chain}/${s.dex}`;
+    const ci = chainInfo[s.chain];
+    const endpoints: ManifestEndpoint[] = [
+      { provider: s.subgraphProvider, urlTemplate: s.subgraphUrlTemplate, tier: providerTier(s.subgraphProvider) },
+      ...parseAdditionalEndpoints(s.additionalEndpoints),
+    ];
+    return {
+      chain: s.chain,
+      dex: s.dex,
+      endpoints,
+      subgraphSchemaFamily: s.subgraphSchemaFamily,
+      factoryAddress: s.factoryAddress,
+      rpcUrl: ci?.rpc ?? null,
+      blocksPerMin: ci?.blocksPerMin ?? null,
+      pairCount: countByKey.get(key) ?? 0,
+      exportUrl: `/api/ooo/export/${s.chain}/${s.dex}`,
+      lastUpdated: modifiedAt.get(key) ?? 0,
+      lastVerifiedAt: s.lastVerifiedAt,
+    };
+  });
 
   return {
     schemaVersion: EXPORT_MANIFEST_SCHEMA_VERSION,
     generatedAt: opts.now ?? nowSeconds(),
-    chains,
+    supportedSources,
   };
 }
 
@@ -187,7 +240,7 @@ export async function exportLastModified(chain: string, dex: string): Promise<nu
 // --- Public supported-pairs catalogue (T10) ------------------------------
 //
 // The PUBLIC, ungated "menu" of pairs an OoO user can query (e.g. WETH.USDC.AD)
-// — distinct from the gated provider feeds (buildExportV2 / buildExportIndex).
+// — distinct from the gated provider feeds (buildExportV2 / buildExportManifestV3).
 // Carries NO trust internals (per-pool confidence, verdict reasons, contract
 // addresses, the curation floor) — only what's queryable, deduped by canonical
 // key across chains/DEXs. Safe to expose; cacheable.

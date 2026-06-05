@@ -24,6 +24,20 @@ async function seedCleanPair(over = {}) {
 
 beforeEach(async () => {
   await resetDb();
+  // The canonical factory now comes from the SupportedSource registry (T6.5), so
+  // seed the eth/uniswap_v3 source the factory fence checks against.
+  await testPrisma.supportedSource.create({
+    data: {
+      chain: "eth",
+      dex: "uniswap_v3",
+      subgraphUrlTemplate: "https://gateway.thegraph.com/api/{API_KEY}/subgraphs/id/ABC",
+      subgraphSchemaFamily: "univ3",
+      subgraphProvider: "graph-decentralized",
+      factoryAddress: UNI_V3_FACTORY,
+      lastVerifiedAt: 0,
+      enabledAt: 0,
+    },
+  });
 });
 
 afterAll(async () => {

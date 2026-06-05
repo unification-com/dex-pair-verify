@@ -368,6 +368,11 @@ model SupportedSource {
   // Per-source override for the API-key env var (D9). Null = derive from
   // subgraphProvider via keyEnvVarFor (the normal path).
   apiKeyEnvVar         String?
+  // Additional (free-tier) subgraph endpoints beyond the primary above — an array
+  // of { provider, urlTemplate } (Studio free-tier / self-hosted-public / DEX-run,
+  // per availability). The v3 export manifest emits the primary + these as an
+  // ordered endpoint list so go-ooo can pick paid-vs-free by its own keys (T6.6).
+  additionalEndpoints  Json?
   factoryAddress       String
   // GeckoTerminal slugs for the verification pipeline's ingest (null = same as
   // chain/dex). Rows are stored under the internal chain/dex above; GT is queried

@@ -85,6 +85,12 @@ export function getSources(force = false): Promise<SourceEntry[]> {
   return cache;
 }
 
+// Drop the memoised registry so the next getSources() reloads. The integration
+// suite resets the DB between tests, so its cache must follow.
+export function invalidateSourceCache(): void {
+  cache = null;
+}
+
 export const getSource = async (chain: string, dex: string): Promise<SourceEntry | undefined> =>
   (await getSources()).find((s) => s.chain === chain && s.dex === dex);
 

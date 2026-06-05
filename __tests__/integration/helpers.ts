@@ -6,6 +6,8 @@
 
 import { PrismaClient, Prisma } from "@prisma/client";
 
+import { invalidateSourceCache } from "../../lib/sourceConfig";
+
 export const testPrisma = new PrismaClient();
 
 // --- Shared seeders for integration tests --------------------------------
@@ -74,9 +76,14 @@ const TABLES = [
   "Token",
   "Threshold",
   "CanonicalAddress",
+  "SupportedSource",
+  "CandidateDexNetwork",
 ];
 
 export async function resetDb(): Promise<void> {
   const list = TABLES.map((t) => `"public"."${t}"`).join(", ");
   await testPrisma.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE;`);
+  // The DB-backed source registry is memoised in-process — drop it so the next
+  // getSources() reloads against the freshly-reset (and per-test-seeded) DB.
+  invalidateSourceCache();
 }
