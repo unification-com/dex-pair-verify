@@ -18,6 +18,17 @@ export const usd = (n: number | null | undefined): string => {
 export const num = (n: number | null | undefined, maxFrac = 0): string =>
   n == null ? "—" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: maxFrac }).format(n);
 
+// Readable label for an unmapped chain/dex slug: "aerodrome_slipstream" →
+// "Aerodrome Slipstream", "camelot_v3" → "Camelot V3". Version tokens (v2/v3…)
+// are upper-cased; every other word is title-cased. Used as the fallback in
+// ChainName / DexName so a newly-onboarded source never renders blank.
+export const humaniseSlug = (slug: string): string =>
+  (slug || "")
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((w) => (/^v\d+$/i.test(w) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(" ");
+
 // Human age from a unix-seconds timestamp: "6h", "3d", "2w 1d", "5mo", "1y 2mo".
 export const ageStr = (ts: number | null): string => {
   if (!ts) return "unknown";

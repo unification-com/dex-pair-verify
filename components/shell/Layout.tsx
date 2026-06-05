@@ -31,7 +31,7 @@ const Layout: React.FC<Props> = ({ children, crumb }) => {
           <div className="crumb">{crumb}</div>
           <span className="grow" />
         </header>
-        {children}
+        <div className="content">{children}</div>
       </div>
       <NotificationContainer />
       <style jsx>{`

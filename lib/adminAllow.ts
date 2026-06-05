@@ -1,11 +1,12 @@
 // lib/adminAllow.ts
-// The operator allow-list. Keyed on the IMMUTABLE GitHub numeric user id
-// (account.providerAccountId) via ALLOWED_GH_IDS — not email, which can be null
-// (private-email GitHub accounts) or change. Falls back to the legacy ALLOWED_USERS
-// email list when ALLOWED_GH_IDS is unset, so an operator isn't locked out before
-// migrating .env. Used by the next-auth signIn (deny non-allowed) + session
-// (re-validate) callbacks, so the allow-list is enforced server-side on every
-// request — removing an id locks the user out on their next session read.
+// The operator allow-list. Entries may be GitHub numeric user ids OR account
+// emails, listed in EITHER ALLOWED_GH_IDS or ALLOWED_USERS — both vars are merged
+// and each entry is classified by shape (all-digits → GitHub id, otherwise email),
+// so there's no footgun about which variable an id goes in. Prefer ids: the numeric
+// id is immutable, whereas an email can be null (private-email GitHub accounts) or
+// change. Used by the next-auth signIn (deny non-allowed) + session (re-validate)
+// callbacks, so the allow-list is enforced server-side on every request — removing
+// an entry locks the user out on their next session read.
 
 const splitEnv = (v: string | undefined): string[] =>
   (v || "")
@@ -13,11 +14,14 @@ const splitEnv = (v: string | undefined): string[] =>
     .map((s) => s.trim())
     .filter(Boolean);
 
+// A GitHub numeric user id is all digits; an email never is.
+const isNumericId = (s: string): boolean => /^\d+$/.test(s);
+
 export function isAllowedOperator(opts: { githubId?: string | null; email?: string | null }): boolean {
-  const allowedIds = splitEnv(process.env.ALLOWED_GH_IDS);
-  if (allowedIds.length > 0) {
-    return !!opts.githubId && allowedIds.includes(String(opts.githubId));
-  }
-  // Backwards-compat: no ALLOWED_GH_IDS set → legacy email allow-list.
-  return !!opts.email && splitEnv(process.env.ALLOWED_USERS).includes(opts.email);
+  const entries = [...splitEnv(process.env.ALLOWED_GH_IDS), ...splitEnv(process.env.ALLOWED_USERS)];
+  const ids = entries.filter(isNumericId);
+  const emails = entries.filter((e) => !isNumericId(e));
+  if (opts.githubId && ids.includes(String(opts.githubId))) return true;
+  if (opts.email && emails.includes(opts.email)) return true;
+  return false;
 }
