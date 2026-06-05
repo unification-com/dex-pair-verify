@@ -28,3 +28,10 @@ export enum VerificationMethod {
     Cascade = "Cascade",
     Auto = "Auto",
 }
+
+// Client-safe mirror of the Prisma `CandidateStatus` enum (schema.prisma).
+export enum CandidateStatus {
+    Pending = "Pending",
+    Enabled = "Enabled",
+    Rejected = "Rejected",
+}

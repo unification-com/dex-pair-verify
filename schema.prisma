@@ -12,14 +12,14 @@ datasource db {
 // Authentication (next-auth) tables
 
 model User {
-  id                  String          @id @default(cuid())
-  name                String?
-  email               String?         @unique
-  emailVerified       DateTime?
-  image               String?
-  accounts            Account[]
-  sessions            Session[]
-  Authenticator       Authenticator[]
+  id            String          @id @default(cuid())
+  name          String?
+  email         String?         @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  Authenticator Authenticator[]
 }
 
 model Account {
@@ -102,14 +102,23 @@ enum VerificationMethod {
   Auto // assigned by the verdict engine
 }
 
+// Lifecycle of an auto-discovered (or operator-pasted) DEX/network candidate
+// before it is promoted into SupportedSource (Phase 4, 4.A). Mirrored in
+// types/types.ts.
+enum CandidateStatus {
+  Pending // surfaced by discovery / paste, awaiting operator review
+  Enabled // promoted to a SupportedSource row
+  Rejected // operator dismissed; discovery stops re-surfacing it
+}
+
 model Pair {
-  id                       String           @id @default(cuid())
+  id                       String             @id @default(cuid())
   chain                    String
   dex                      String
   contractAddress          String
-  token0                   Token            @relation("Token0", fields: [token0Id], references: [id])
+  token0                   Token              @relation("Token0", fields: [token0Id], references: [id])
   token0Id                 String
-  token1                   Token            @relation("Token1", fields: [token1Id], references: [id])
+  token1                   Token              @relation("Token1", fields: [token1Id], references: [id])
   token1Id                 String
   pair                     String
   reserve0                 Float
@@ -125,21 +134,21 @@ model Pair {
   sellers24h               Int
   volumeUsd24h             Float
   txCount                  Int
-  token0PriceCg            Float @default(0)
-  token0PriceDex           Float @default(0)
-  token1PriceCg            Float @default(0)
-  token1PriceDex           Float @default(0)
+  token0PriceCg            Float              @default(0)
+  token0PriceDex           Float              @default(0)
+  token1PriceCg            Float              @default(0)
+  token1PriceDex           Float              @default(0)
   status                   TokenPairStatus    @default(Unverified)
   verificationMethod       VerificationMethod @default(Import)
-  verificationComment      String @default("")
-  lastChecked              Int @default(0)
-  createdAt                Int @default(0)
+  verificationComment      String             @default("")
+  lastChecked              Int                @default(0)
+  createdAt                Int                @default(0)
   // Verdict-engine fields (A.2). canonicalKey caches min/max of the two
   // tokens' CoinGecko coin IDs for fast cross-DEX/cross-chain sibling lookup;
   // confidence is the weighted fence score; verdictAt is the last engine run.
   canonicalKey             String?
   confidence               Float?
-  verdictAt                Int @default(0)
+  verdictAt                Int                @default(0)
   // The verdict engine's per-fence evidence (observed values vs thresholds),
   // surfaced on the pair detail page so the operator can audit a verdict.
   verdictEvidence          Json?
@@ -148,13 +157,13 @@ model Pair {
   // not deployed by the real DEX. Immutable per pool, so read once; nullable
   // until the factory-check pass reads it. factoryCheckedAt records the attempt.
   factoryAddress           String?
-  factoryCheckedAt         Int @default(0)
+  factoryCheckedAt         Int                @default(0)
   // Review-queue triage (T9): for a NeedsReview pair, "spam" (clear-bad —
   // impostor / scam-flagged / exact-symbol spoof → bulk-rejectable) or "review"
   // (genuine-but-uncertain → manual look). null when not in NeedsReview.
   reviewTier               String?
-  duplicatePairs           DuplicatePairs[] @relation("OriginalPair")
-  dp2                      DuplicatePairs[] @relation("DuplicatePair")
+  duplicatePairs           DuplicatePairs[]   @relation("OriginalPair")
+  dp2                      DuplicatePairs[]   @relation("DuplicatePair")
 
   @@index([contractAddress(sort: Desc), chain, dex])
   @@index([dex, chain])
@@ -171,17 +180,17 @@ model Token {
   contractAddress       String
   symbol                String
   name                  String
-  status                TokenPairStatus    @default(Unverified)
-  verificationMethod    VerificationMethod @default(Import)
+  status                TokenPairStatus         @default(Unverified)
+  verificationMethod    VerificationMethod      @default(Import)
   txCount               Int
   coingeckoCoinId       String
   totalSupply           Float
   volume24hUsd          Float
   marketCapUsd          Float
   decimals              Int
-  lastChecked           Int @default(0)
-  verificationComment   String @default("")
-  createdAt             Int @default(0)
+  lastChecked           Int                     @default(0)
+  verificationComment   String                  @default("")
+  createdAt             Int                     @default(0)
   // Cheap-proxy token age for the verdict engine's meetsAge fence (A.2/D7):
   // unix seconds, seeded from the oldest pool's pool_created_at. Nullable
   // until first populated.
@@ -266,11 +275,11 @@ model DuplicatePairs {
 }
 
 model Threshold {
-  id              String @id @default(cuid())
-  chain           String
-  dex             String
-  minLiquidityUsd Int
-  minTxCount      Int
+  id                       String  @id @default(cuid())
+  chain                    String
+  dex                      String
+  minLiquidityUsd          Int
+  minTxCount               Int
   // Verdict-engine knobs (A.3), per (chain, dex). Defaults mirror
   // DEFAULT_VERDICT_CONFIG in lib/verdict.ts so existing rows behave unchanged.
   minAgeHours              Int     @default(24)
@@ -301,4 +310,69 @@ model CanonicalAddress {
   lastChecked     Int    @default(0)
 
   @@unique([coingeckoCoinId, chain])
+}
+
+// Modular DEX/network management (Phase 4, 4.A). Two tables that together
+// retire lib/sources.js (D1): CandidateDexNetwork is the review inbox for
+// newly-discovered (or operator-pasted) sources; SupportedSource is the
+// DB-backed source of truth that drives ingest + the v3 export manifest (4.C).
+
+// A DEX/network surfaced by auto-discovery (GeckoTerminal) or operator paste,
+// pending review before promotion to SupportedSource. Operational fields are
+// auto-filled where possible and confirmed by the operator at promotion —
+// GeckoTerminal exposes only id+name (Q1), so the subgraph template, factory
+// and RPC typically arrive at the operator-paste step (Q6).
+model CandidateDexNetwork {
+  id                   String          @id @default(cuid())
+  chain                String
+  dex                  String
+  status               CandidateStatus @default(Pending)
+  // Provenance: "geckoterminal-discovery" | "operator-paste" | "introspection".
+  source               String
+  // {API_KEY}-placeholder template (lib/subgraphVerify.ts toUrlTemplate) — never
+  // the literal key-bearing URL, per 4.A.subgraph-verification. Null until the
+  // operator pastes + verifies a URL (discovery can't supply it — Q1).
+  subgraphUrlTemplate  String?
+  // "univ2" | "univ3" | "custom" (lib/subgraphVerify.ts SchemaFamily); free-text
+  // so the taxonomy can grow (e.g. solidly) without a schema migration.
+  subgraphSchemaFamily String?
+  factoryAddress       String?
+  rpcUrl               String?
+  blocksPerMin         Int?
+  firstSeen            Int             @default(0)
+  notes                String          @default("")
+
+  @@unique([chain, dex])
+  @@index([status])
+}
+
+// The DB-backed source of truth for supported (chain, dex) sources — the
+// eventual replacement for lib/sources.js (D1). Populated by promoting a
+// CandidateDexNetwork row or by direct operator entry. Drives ingest and the
+// v3 export manifest (4.C) that go-ooo consumes.
+model SupportedSource {
+  id                   String  @id @default(cuid())
+  chain                String
+  dex                  String
+  // {API_KEY}-placeholder template — never the literal key-bearing URL. The
+  // export manifest emits this verbatim; each consumer substitutes its own key
+  // (4.A.subgraph-verification).
+  subgraphUrlTemplate  String
+  // Drives the field-map + go-ooo template family (Option β): "univ2" | "univ3"
+  // | "custom" (+ future families). Free-text — see CandidateDexNetwork.
+  subgraphSchemaFamily String
+  // "graph-decentralized" | "graph-studio" | "graph-hosted" | "self-hosted"
+  // (lib/subgraphVerify.ts SubgraphProvider). Picks the API-key env var at
+  // substitution time; emitted in the manifest for go-ooo.
+  subgraphProvider     String
+  // Per-source override for the API-key env var (D9). Null = derive from
+  // subgraphProvider via keyEnvVarFor (the normal path).
+  apiKeyEnvVar         String?
+  factoryAddress       String
+  // Last successful liveness re-probe (D8); 0 = never. Stale (>30d) sources are
+  // flagged in the UI + manifest, never auto-demoted.
+  lastVerifiedAt       Int     @default(0)
+  enabledAt            Int     @default(0)
+
+  @@unique([chain, dex])
 }
