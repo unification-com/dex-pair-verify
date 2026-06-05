@@ -4,20 +4,20 @@ import { useRouter } from "next/router";
 import React, { FormEvent, useEffect, useState } from "react"
 import { NotificationManager } from 'react-notifications';
 
-import ChainName from "../../../components/ChainName";
-import CoinGeckoCoinLink from "../../../components/CoinGeckoCoinLink";
-import ExplorerUrl from "../../../components/ExplorerUrl";
-import Layout from "../../../components/shell/Layout"
-import ConfidenceMeter from "../../../components/ui/ConfidenceMeter";
-import DataTable, { Column } from "../../../components/ui/DataTable";
-import Icon from "../../../components/ui/Icon";
-import PageHeader from "../../../components/ui/PageHeader";
-import StatusBadge from "../../../components/ui/StatusBadge";
-import prisma from '../../../lib/prisma';
-import { isVerifiedStatus } from "../../../lib/status";
-import { getTokenWebPresence, TokenWebPresence } from "../../../lib/tokenWebPresence";
-import { AssociatedPairProps, TokenProps } from "../../../types/props";
-import { TokenPairStatus } from "../../../types/types";
+import ChainName from "../../components/ChainName";
+import CoinGeckoCoinLink from "../../components/CoinGeckoCoinLink";
+import ExplorerUrl from "../../components/ExplorerUrl";
+import Layout from "../../components/shell/Layout"
+import ConfidenceMeter from "../../components/ui/ConfidenceMeter";
+import DataTable, { Column } from "../../components/ui/DataTable";
+import Icon from "../../components/ui/Icon";
+import PageHeader from "../../components/ui/PageHeader";
+import StatusBadge from "../../components/ui/StatusBadge";
+import prisma from '../../lib/prisma';
+import { isVerifiedStatus } from "../../lib/status";
+import { getTokenWebPresence, TokenWebPresence } from "../../lib/tokenWebPresence";
+import { AssociatedPairProps, TokenProps } from "../../types/props";
+import { TokenPairStatus } from "../../types/types";
 
 const pairSelect = {
     pair: true, id: true, contractAddress: true, reserveUsd: true, reserve0: true,
@@ -171,7 +171,7 @@ const Token: React.FC<Props> = (props) => {
                     <div className="card card-pad">
                         <div className="row spread items-center" style={{ marginBottom: "var(--sp-3)" }}>
                             <span className="eyebrow">Identity &amp; trust</span>
-                            <Link href="/admin/help"><a className="muted" style={{ fontSize: "var(--fs-xs)" }}>What do these mean? →</a></Link>
+                            <Link href="/help"><a className="muted" style={{ fontSize: "var(--fs-xs)" }}>What do these mean? →</a></Link>
                         </div>
                         <div className="trust-list">
                             <TrustRow label="CoinGecko" tone={cgId ? "pass" : "skip"} value={cgId ? "listed" : "not listed"} detail={cgId || undefined} />
@@ -249,19 +249,19 @@ const Token: React.FC<Props> = (props) => {
 
                     <div className="card card-pad">
                         <span className="eyebrow" style={{ marginBottom: "var(--sp-3)", display: "block" }}>Associated pairs ({pools.length})</span>
-                        <DataTable columns={pairCols} data={pools} rowKey={(p) => p.id} onRowClick={(p) => router.push(`/admin/p/${p.id}`)} sortInit={{ key: "reserveUsd", dir: "desc" }} empty="No pairs." />
+                        <DataTable columns={pairCols} data={pools} rowKey={(p) => p.id} onRowClick={(p) => router.push(`/p/${p.id}`)} sortInit={{ key: "reserveUsd", dir: "desc" }} empty="No pairs." />
                     </div>
 
                     {duplicateTokens.length > 0 && (
                         <details className="card raw">
                             <summary>Possible duplicates on {t.chain} ({duplicateTokens.length})</summary>
-                            <DataTable columns={tokenCols} data={duplicateTokens} rowKey={(tk) => tk.id} onRowClick={(tk) => router.push(`/admin/t/${tk.id}`)} />
+                            <DataTable columns={tokenCols} data={duplicateTokens} rowKey={(tk) => tk.id} onRowClick={(tk) => router.push(`/t/${tk.id}`)} />
                         </details>
                     )}
                     {props.similarTokens.length > 0 && (
                         <details className="card raw">
                             <summary>Similar tokens on other chains ({props.similarTokens.length})</summary>
-                            <DataTable columns={similarCols} data={props.similarTokens} rowKey={(tk) => tk.id} onRowClick={(tk) => router.push(`/admin/t/${tk.id}`)} />
+                            <DataTable columns={similarCols} data={props.similarTokens} rowKey={(tk) => tk.id} onRowClick={(tk) => router.push(`/t/${tk.id}`)} />
                         </details>
                     )}
                 </div>

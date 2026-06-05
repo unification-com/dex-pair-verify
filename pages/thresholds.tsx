@@ -2,10 +2,10 @@ import { GetServerSideProps } from "next";
 import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
-import Layout from "../../components/shell/Layout";
-import PageHeader from "../../components/ui/PageHeader";
-import prisma from "../../lib/prisma";
-import { getSources, thresholdSeedData } from "../../lib/sourceConfig";
+import Layout from "../components/shell/Layout";
+import PageHeader from "../components/ui/PageHeader";
+import prisma from "../lib/prisma";
+import { getSources, thresholdSeedData } from "../lib/sourceConfig";
 
 type ThresholdRow = {
   id: string;

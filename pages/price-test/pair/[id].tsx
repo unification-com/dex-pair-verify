@@ -1,13 +1,13 @@
 import { GetServerSideProps } from "next";
 import React from "react";
 
-import ThresholdPriceTest from "../../../../../components/PriceTest/ThresholdPriceTest";
-import Layout from "../../../../../components/shell/Layout";
-import StatusBadge from "../../../../../components/ui/StatusBadge";
-import prisma from "../../../../../lib/prisma";
-import { isVerifiedStatus, VERIFIED_STATUSES } from "../../../../../lib/status";
-import { buildThresholdMap, ThresholdMap } from "../../../../../lib/thresholds";
-import { PairProps } from "../../../../../types/props";
+import ThresholdPriceTest from "../../../components/PriceTest/ThresholdPriceTest";
+import Layout from "../../../components/shell/Layout";
+import StatusBadge from "../../../components/ui/StatusBadge";
+import prisma from "../../../lib/prisma";
+import { isVerifiedStatus, VERIFIED_STATUSES } from "../../../lib/status";
+import { buildThresholdMap, ThresholdMap } from "../../../lib/thresholds";
+import { PairProps } from "../../../types/props";
 
 export const getServerSideProps: GetServerSideProps = async ({ params }) => {
   const pair = await prisma.pair.findUnique({

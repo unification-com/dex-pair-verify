@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
-import PassRunnerLayout from "../../components/admin/PassRunnerLayout";
-import Layout from "../../components/shell/Layout";
-import { TokenPairStatus } from "../../types/types";
+import PassRunnerLayout from "../components/admin/PassRunnerLayout";
+import Layout from "../components/shell/Layout";
+import { TokenPairStatus } from "../types/types";
 
 // Each page makes one GeckoTerminal call (pools with embedded tokens). 6s
 // pacing ≈ 10 req/min — generous margin for the shared-IP throttle on the free
@@ -49,7 +49,7 @@ const Ingest: React.FC = () => {
     for (;;) {
       let json;
       try {
-        const resp = await fetch("/api/admin/ingest", {
+        const resp = await fetch("/api/ingest", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sourceIndex, page }),

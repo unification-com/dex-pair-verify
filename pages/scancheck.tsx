@@ -1,39 +1,39 @@
 import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
-import PassRunnerLayout from "../../components/admin/PassRunnerLayout";
-import Layout from "../../components/shell/Layout";
+import PassRunnerLayout from "../components/admin/PassRunnerLayout";
+import Layout from "../components/shell/Layout";
 
 // GoPlus free tier is 30 req/min; pace batches of 10 so we stay well under it.
 const CALL_DELAY_MS = 21000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const IdentityCheck: React.FC = () => {
+const ScanCheck: React.FC = () => {
   const [running, setRunning] = useState(false);
   const [done, setDone] = useState(false);
   const [processed, setProcessed] = useState(0);
-  const [confirmed, setConfirmed] = useState(0);
-  const [promoted, setPromoted] = useState(0);
+  const [flagged, setFlagged] = useState(0);
+  const [demoted, setDemoted] = useState(0);
   const [remaining, setRemaining] = useState<number | null>(null);
 
   async function run() {
     setRunning(true);
     setDone(false);
     setProcessed(0);
-    setConfirmed(0);
-    setPromoted(0);
+    setFlagged(0);
+    setDemoted(0);
     setRemaining(null);
 
     let jobStartedAt: number | undefined;
     let totalProcessed = 0;
-    let totalConfirmed = 0;
-    let totalPromoted = 0;
+    let totalFlagged = 0;
+    let totalDemoted = 0;
 
     for (;;) {
       let json;
       try {
-        const resp = await fetch("/api/admin/identitycheck", {
+        const resp = await fetch("/api/scancheck", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ jobStartedAt }),
@@ -52,20 +52,16 @@ const IdentityCheck: React.FC = () => {
       const d = json.data;
       jobStartedAt = d.jobStartedAt;
       totalProcessed += d.processed;
-      totalConfirmed += d.confirmed;
-      totalPromoted += d.promotedPairs;
+      totalFlagged += d.flagged;
+      totalDemoted += d.demotedPairs;
       setProcessed(totalProcessed);
-      setConfirmed(totalConfirmed);
-      setPromoted(totalPromoted);
+      setFlagged(totalFlagged);
+      setDemoted(totalDemoted);
       setRemaining(d.remaining);
 
       if (d.done) {
         setDone(true);
-        NotificationManager.success(
-          "Done",
-          `Checked ${totalProcessed} tokens, ${totalConfirmed} confirmed, ${totalPromoted} pairs promoted`,
-          6000,
-        );
+        NotificationManager.success("Done", `Checked ${totalProcessed} tokens, ${totalFlagged} flagged`, 6000);
         break;
       }
       // No progress but not done would loop forever — guard against it.
@@ -82,17 +78,16 @@ const IdentityCheck: React.FC = () => {
   const pct = remaining != null ? (processed + remaining > 0 ? (processed / (processed + remaining)) * 100 : 100) : done ? 100 : undefined;
 
   return (
-    <Layout crumb="Identity check">
+    <Layout crumb="Scam check">
       <PassRunnerLayout
-        step={2}
-        title="Identity check (token lists + GoPlus)"
+        step={5}
+        title="Scam check (GoPlus)"
         pace="GoPlus 30/min"
         description={<>
-          Resolves multi-source identity for tokens with no CoinGecko coin id — the ones that otherwise
-          block auto-verify. A token confirmed by ≥2 independent categories (a reputable token list AND
-          GoPlus positive signals) is treated as real, so its pair can leave Needs Review without a
-          CoinGecko listing. Confirming a token re-runs the verdict on its pairs inline. Manual verdicts
-          are untouched (R6). Re-runs only check tokens not yet checked.
+          Runs GoPlus token-security checks over the tokens in your verified pairs. A flagged token
+          (honeypot, extreme tax, self-destruct, hidden owner…) demotes any Auto-Verified pair using it
+          to Needs Review — never auto-rejected; you decide. Manual verdicts are untouched. Re-runs only
+          check tokens not yet checked.
         </>}
         running={running}
         done={done}
@@ -100,13 +95,13 @@ const IdentityCheck: React.FC = () => {
         progressPct={pct}
         stats={[
           { label: "Checked", value: processed },
-          { label: "Confirmed", value: confirmed, tone: "pass" },
-          { label: "Promoted", value: promoted, tone: "pass" },
-          ...(remaining != null ? [{ label: "Remaining", value: remaining }] : []),
+          { label: "Flagged", value: flagged, tone: "fail" },
+          { label: "Demoted", value: demoted, tone: "warn" },
+          ...(remaining != null ? [{ label: "Remaining", value: remaining } as const] : []),
         ]}
       />
     </Layout>
   );
 };
 
-export default IdentityCheck;
+export default ScanCheck;

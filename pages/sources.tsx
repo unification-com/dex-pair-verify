@@ -1,4 +1,4 @@
-// pages/admin/sources.tsx
+// pages/sources.tsx
 // Phase 4, 4.A — the candidate review console. Lists Pending CandidateDexNetwork
 // rows (from `yarn discover`), and for each lets the operator paste a subgraph
 // URL → Verify (lib/subgraphVerify via /api/admin/verifysource) → confirm the
@@ -10,11 +10,11 @@ import { GetServerSideProps } from "next";
 import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
-import Layout from "../../components/shell/Layout";
-import PageHeader from "../../components/ui/PageHeader";
-import prisma from "../../lib/prisma";
-import { decentralizedTemplate, seedForGt } from "../../lib/sourceSeeds";
-import { CandidateStatus } from "../../types/types";
+import Layout from "../components/shell/Layout";
+import PageHeader from "../components/ui/PageHeader";
+import prisma from "../lib/prisma";
+import { decentralizedTemplate, seedForGt } from "../lib/sourceSeeds";
+import { CandidateStatus } from "../types/types";
 
 type Candidate = {
   id: string;

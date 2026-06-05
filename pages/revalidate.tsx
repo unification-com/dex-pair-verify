@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
-import PassRunnerLayout from "../../components/admin/PassRunnerLayout";
-import Layout from "../../components/shell/Layout";
-import { TokenPairStatus } from "../../types/types";
+import PassRunnerLayout from "../components/admin/PassRunnerLayout";
+import Layout from "../components/shell/Layout";
+import { TokenPairStatus } from "../types/types";
 
 // Pace between batches, matching the ingest cadence. Re-validate only hits
 // CoinGecko on an intra-chain conflict (rare), and those calls share the
@@ -53,7 +53,7 @@ const Revalidate: React.FC = () => {
     for (;;) {
       let json;
       try {
-        const resp = await fetch("/api/admin/revalidate", {
+        const resp = await fetch("/api/revalidate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ batch: BATCH_SIZE, jobStartedAt }),

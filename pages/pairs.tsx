@@ -4,18 +4,18 @@ import { useRouter } from "next/router";
 import React, { useEffect, useState } from "react"
 import { NotificationManager } from 'react-notifications';
 
-import ChainName from "../../components/ChainName";
-import DexName from "../../components/DexName";
-import Pagination from "../../components/Pagination";
-import Layout from "../../components/shell/Layout"
-import ConfidenceMeter from "../../components/ui/ConfidenceMeter";
-import DataTable, { Column } from "../../components/ui/DataTable";
-import Icon from "../../components/ui/Icon";
-import PageHeader from "../../components/ui/PageHeader";
-import StatusBadge from "../../components/ui/StatusBadge";
-import prisma from '../../lib/prisma';
-import { PairProps } from "../../types/props";
-import { TokenPairStatus } from "../../types/types";
+import ChainName from "../components/ChainName";
+import DexName from "../components/DexName";
+import Pagination from "../components/Pagination";
+import Layout from "../components/shell/Layout"
+import ConfidenceMeter from "../components/ui/ConfidenceMeter";
+import DataTable, { Column } from "../components/ui/DataTable";
+import Icon from "../components/ui/Icon";
+import PageHeader from "../components/ui/PageHeader";
+import StatusBadge from "../components/ui/StatusBadge";
+import prisma from '../lib/prisma';
+import { PairProps } from "../types/props";
+import { TokenPairStatus } from "../types/types";
 
 const PAGE_SIZE = 50
 
@@ -140,7 +140,7 @@ const ListPairs: React.FC<Props> = (props) => {
     // Clear selection whenever the route (filters / page) changes.
     useEffect(() => { setSelected(new Set()); setFilter("") }, [props.chain, props.dex, props.status, props.tier, props.page])
 
-    // Build a /admin/list-pairs href, carrying the active filter and overriding parts.
+    // Build a /pairs href, carrying the active filter and overriding parts.
     const hrefWith = (over: Partial<{ status: string; chain: string; dex: string; tier: string; page: number }>): string => {
         const qs = new URLSearchParams()
         const status = over.status ?? props.status
@@ -152,7 +152,7 @@ const ListPairs: React.FC<Props> = (props) => {
         if (dex) qs.set("dex", dex)
         if (tier) qs.set("tier", tier)
         if (over.page && over.page > 1) qs.set("page", String(over.page))
-        return `/admin/list-pairs?${qs.toString()}`
+        return `/pairs?${qs.toString()}`
     }
     // Filter the pair-detail link carries (so QueueNav can walk this same queue).
     const detailQs = (() => {
@@ -286,7 +286,7 @@ const ListPairs: React.FC<Props> = (props) => {
                 selected={selected}
                 onToggle={toggleSelected}
                 onToggleAll={toggleAll}
-                onRowClick={(p) => router.push(`/admin/p/${p.id}?${detailQs}`)}
+                onRowClick={(p) => router.push(`/p/${p.id}?${detailQs}`)}
                 empty="Nothing in this queue 🎉"
             />
 

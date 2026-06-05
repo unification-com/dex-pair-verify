@@ -18,12 +18,12 @@ import React, { ReactNode } from "react";
 import Icon from "../ui/Icon";
 
 const PASSES = [
-  { step: 1, name: "Ingest", href: "/admin/ingest" },
-  { step: 2, name: "Identity", href: "/admin/identitycheck" },
-  { step: 3, name: "Canonical", href: "/admin/canonicalcheck" },
-  { step: 4, name: "Factory", href: "/admin/factorycheck" },
-  { step: 5, name: "Scam", href: "/admin/scancheck" },
-  { step: 6, name: "Re-validate", href: "/admin/revalidate" },
+  { step: 1, name: "Ingest", href: "/ingest" },
+  { step: 2, name: "Identity", href: "/identitycheck" },
+  { step: 3, name: "Canonical", href: "/canonicalcheck" },
+  { step: 4, name: "Factory", href: "/factorycheck" },
+  { step: 5, name: "Scam", href: "/scancheck" },
+  { step: 6, name: "Re-validate", href: "/revalidate" },
 ];
 
 type Stat = { label: string; value: ReactNode; tone?: string };
@@ -43,7 +43,7 @@ const PassRunnerLayout: React.FC<{
   stale?: boolean;
 }> = ({ step, title, description, pace, running, done, onRun, progressPct, stats = [], lastRun, lastResult, stale }) => (
   <div className="content">
-    <Link href="/admin"><a className="btn btn-ghost btn-sm" style={{ marginBottom: "var(--sp-5)" }}><Icon name="chevL" size={14} />Back to pipeline</a></Link>
+    <Link href="/"><a className="btn btn-ghost btn-sm" style={{ marginBottom: "var(--sp-5)" }}><Icon name="chevL" size={14} />Back to pipeline</a></Link>
     <div className="row gap-5 items-baseline" style={{ marginBottom: "var(--sp-2)" }}>
       <span className="pass-step">{step}</span><h1>{title}</h1>
     </div>

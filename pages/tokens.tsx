@@ -3,16 +3,16 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import React, { useState } from "react"
 
-import ChainName from "../../components/ChainName";
-import Pagination from "../../components/Pagination";
-import Layout from "../../components/shell/Layout"
-import DataTable, { Column } from "../../components/ui/DataTable";
-import Icon from "../../components/ui/Icon";
-import PageHeader from "../../components/ui/PageHeader";
-import StatusBadge from "../../components/ui/StatusBadge";
-import prisma from '../../lib/prisma';
-import { TokenProps } from "../../types/props";
-import { TokenPairStatus } from "../../types/types";
+import ChainName from "../components/ChainName";
+import Pagination from "../components/Pagination";
+import Layout from "../components/shell/Layout"
+import DataTable, { Column } from "../components/ui/DataTable";
+import Icon from "../components/ui/Icon";
+import PageHeader from "../components/ui/PageHeader";
+import StatusBadge from "../components/ui/StatusBadge";
+import prisma from '../lib/prisma';
+import { TokenProps } from "../types/props";
+import { TokenPairStatus } from "../types/types";
 
 const PAGE_SIZE = 50
 
@@ -97,7 +97,7 @@ const ListTokens: React.FC<Props> = (props) => {
         const chain = over.chain ?? props.chain
         if (chain) qs.set("chain", chain)
         if (over.page && over.page > 1) qs.set("page", String(over.page))
-        return `/admin/list-tokens?${qs.toString()}`
+        return `/tokens?${qs.toString()}`
     }
 
     const f = filter.trim().toLowerCase()
@@ -157,7 +157,7 @@ const ListTokens: React.FC<Props> = (props) => {
                 columns={cols}
                 data={visible}
                 rowKey={(t) => t.id}
-                onRowClick={(t) => router.push(`/admin/t/${t.id}`)}
+                onRowClick={(t) => router.push(`/t/${t.id}`)}
                 empty="No tokens in this view."
             />
 

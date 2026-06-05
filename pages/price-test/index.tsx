@@ -1,9 +1,9 @@
 import { useRouter } from "next/router";
 import React, { FormEvent, useState } from "react";
 
-import Layout from "../../../../components/shell/Layout";
-import Icon from "../../../../components/ui/Icon";
-import PageHeader from "../../../../components/ui/PageHeader";
+import Layout from "../../components/shell/Layout";
+import Icon from "../../components/ui/Icon";
+import PageHeader from "../../components/ui/PageHeader";
 
 // Entry point for the OoO price-test (the sidebar links here). Enter a symbol
 // pair → the per-pool price simulation. You can also reach this from any
@@ -17,7 +17,7 @@ const PriceTestIndex: React.FC = () => {
     e.preventDefault();
     const b = base.trim().toUpperCase();
     const t = target.trim().toUpperCase();
-    if (b && t) router.push(`/admin/p/test/${encodeURIComponent(b)}/${encodeURIComponent(t)}`);
+    if (b && t) router.push(`/price-test/${encodeURIComponent(b)}/${encodeURIComponent(t)}`);
   };
 
   return (

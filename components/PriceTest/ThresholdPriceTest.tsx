@@ -1,6 +1,6 @@
 // Splits the verified pools for a (base, target) into usable / ignored by the
 // saved per-(chain,dex) thresholds, then renders the price test. Thresholds are
-// tuned on /admin/thresholds (single source of truth — no duplicate editor here).
+// tuned on /thresholds (single source of truth — no duplicate editor here).
 import React, { useEffect, useState } from "react";
 
 import PriceTest from "./PriceTest";

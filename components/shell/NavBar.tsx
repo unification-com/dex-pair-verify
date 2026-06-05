@@ -16,12 +16,12 @@ import React from "react";
 import Icon from "../ui/Icon";
 
 const PASSES = [
-  { step: 1, id: "ingest", name: "Ingest", href: "/admin/ingest" },
-  { step: 2, id: "identitycheck", name: "Identity", href: "/admin/identitycheck" },
-  { step: 3, id: "canonicalcheck", name: "Canonical", href: "/admin/canonicalcheck" },
-  { step: 4, id: "factorycheck", name: "Factory", href: "/admin/factorycheck" },
-  { step: 5, id: "scancheck", name: "Scam", href: "/admin/scancheck" },
-  { step: 6, id: "revalidate", name: "Re-validate", href: "/admin/revalidate" },
+  { step: 1, id: "ingest", name: "Ingest", href: "/ingest" },
+  { step: 2, id: "identitycheck", name: "Identity", href: "/identitycheck" },
+  { step: 3, id: "canonicalcheck", name: "Canonical", href: "/canonicalcheck" },
+  { step: 4, id: "factorycheck", name: "Factory", href: "/factorycheck" },
+  { step: 5, id: "scancheck", name: "Scam", href: "/scancheck" },
+  { step: 6, id: "revalidate", name: "Re-validate", href: "/revalidate" },
 ];
 
 const NavBar: React.FC<{ needsReviewCount?: number }> = ({ needsReviewCount }) => {
@@ -48,9 +48,9 @@ const NavBar: React.FC<{ needsReviewCount?: number }> = ({ needsReviewCount }) =
       </div>
 
       <nav className="sb-nav">
-        <Item href="/admin" icon="home" label="Dashboard" active={router.asPath === "/admin"} />
-        <Item href="/admin/list-pairs?status=NeedsReview" icon="queue" label="Review queue" star pill={needsReviewCount ?? null} active={active("/admin/list-pairs")} />
-        <Item href="/admin/list-tokens" icon="token" label="Tokens" active={active("/admin/list-tokens")} />
+        <Item href="/" icon="home" label="Dashboard" active={router.asPath === "/"} />
+        <Item href="/pairs?status=NeedsReview" icon="queue" label="Review queue" star pill={needsReviewCount ?? null} active={active("/pairs")} />
+        <Item href="/tokens" icon="token" label="Tokens" active={active("/tokens")} />
 
         {session && <>
           <div className="sb-group-label">Pipeline</div>
@@ -61,10 +61,10 @@ const NavBar: React.FC<{ needsReviewCount?: number }> = ({ needsReviewCount }) =
           ))}
 
           <div className="sb-group-label">Tools</div>
-          <Item href="/admin/sources" icon="layers" label="Sources" active={active("/admin/sources")} />
-          <Item href="/admin/thresholds" icon="filter" label="Thresholds" active={active("/admin/thresholds")} />
-          <Item href="/admin/p/test" icon="price" label="OoO price-test" active={active("/admin/p/test")} />
-          <Item href="/admin/help" icon="help" label="Scoring guide" active={active("/admin/help")} />
+          <Item href="/sources" icon="layers" label="Sources" active={active("/sources")} />
+          <Item href="/thresholds" icon="filter" label="Thresholds" active={active("/thresholds")} />
+          <Item href="/price-test" icon="price" label="OoO price-test" active={active("/price-test")} />
+          <Item href="/help" icon="help" label="Scoring guide" active={active("/help")} />
         </>}
       </nav>
 

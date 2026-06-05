@@ -1,40 +1,39 @@
 import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
-import PassRunnerLayout from "../../components/admin/PassRunnerLayout";
-import Layout from "../../components/shell/Layout";
+import PassRunnerLayout from "../components/admin/PassRunnerLayout";
+import Layout from "../components/shell/Layout";
 
-// RPC reads are lighter than the GoPlus limit; a short pace keeps public RPCs
-// happy while staying brisk.
-const CALL_DELAY_MS = 3000;
+// CoinGecko free tier rate-limits; pace batches of 10 so we stay under it.
+const CALL_DELAY_MS = 21000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const FactoryCheck: React.FC = () => {
+const CanonicalCheck: React.FC = () => {
   const [running, setRunning] = useState(false);
   const [done, setDone] = useState(false);
   const [processed, setProcessed] = useState(0);
-  const [read, setRead] = useState(0);
-  const [mismatches, setMismatches] = useState(0);
+  const [resolved, setResolved] = useState(0);
+  const [impostors, setImpostors] = useState(0);
   const [remaining, setRemaining] = useState<number | null>(null);
 
   async function run() {
     setRunning(true);
     setDone(false);
     setProcessed(0);
-    setRead(0);
-    setMismatches(0);
+    setResolved(0);
+    setImpostors(0);
     setRemaining(null);
 
     let jobStartedAt: number | undefined;
     let totalProcessed = 0;
-    let totalRead = 0;
-    let totalMismatches = 0;
+    let totalResolved = 0;
+    let totalImpostors = 0;
 
     for (;;) {
       let json;
       try {
-        const resp = await fetch("/api/admin/factorycheck", {
+        const resp = await fetch("/api/canonicalcheck", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ jobStartedAt }),
@@ -53,18 +52,18 @@ const FactoryCheck: React.FC = () => {
       const d = json.data;
       jobStartedAt = d.jobStartedAt;
       totalProcessed += d.processed;
-      totalRead += d.factoriesRead;
-      totalMismatches += d.mismatches;
+      totalResolved += d.resolved;
+      totalImpostors += d.impostorPairs;
       setProcessed(totalProcessed);
-      setRead(totalRead);
-      setMismatches(totalMismatches);
+      setResolved(totalResolved);
+      setImpostors(totalImpostors);
       setRemaining(d.remaining);
 
       if (d.done) {
         setDone(true);
         NotificationManager.success(
           "Done",
-          `Checked ${totalProcessed} pairs, ${totalRead} factories read, ${totalMismatches} mismatches`,
+          `Checked ${totalProcessed} tokens, ${totalResolved} canonicals, ${totalImpostors} impostor pairs`,
           6000,
         );
         break;
@@ -82,17 +81,17 @@ const FactoryCheck: React.FC = () => {
   const pct = remaining != null ? (processed + remaining > 0 ? (processed / (processed + remaining)) * 100 : 100) : done ? 100 : undefined;
 
   return (
-    <Layout crumb="Factory check">
+    <Layout crumb="Canonical check">
       <PassRunnerLayout
-        step={4}
-        title="Factory check (on-chain)"
-        pace="RPC — quick"
+        step={3}
+        title="Canonical check (CoinGecko)"
+        pace="CoinGecko-paced"
         description={<>
-          Reads each pool contract&apos;s on-chain <code>factory()</code> and compares it to the canonical
-          DEX factory for that (chain, dex). A match confirms the pool was deployed by the real DEX (raising
-          confidence); a mismatch routes the pair to Needs Review — possibly an impostor, possibly a
-          legitimate secondary factory, so you decide rather than auto-reject. Factory addresses are
-          immutable, so each pair is read once. Manual verdicts are untouched (R6).
+          Resolves the CoinGecko-canonical contract address for every CoinGecko-listed pair token, so the
+          impostor fence can run on every pair — not just intra-chain conflicts. A token whose on-chain
+          address doesn&apos;t match the canonical contract for its coin id is routed to Needs Review (a
+          possible impostor, or a legitimate multi-contract/bridged variant — you decide; never
+          auto-rejected). Manual verdicts are untouched (R6). Re-runs only check tokens not yet resolved.
         </>}
         running={running}
         done={done}
@@ -100,8 +99,8 @@ const FactoryCheck: React.FC = () => {
         progressPct={pct}
         stats={[
           { label: "Checked", value: processed },
-          { label: "Factories read", value: read, tone: "pass" },
-          { label: "Mismatches", value: mismatches, tone: "warn" },
+          { label: "Resolved", value: resolved, tone: "pass" },
+          { label: "Impostors", value: impostors, tone: "warn" },
           ...(remaining != null ? [{ label: "Remaining", value: remaining }] : []),
         ]}
       />
@@ -109,4 +108,4 @@ const FactoryCheck: React.FC = () => {
   );
 };
 
-export default FactoryCheck;
+export default CanonicalCheck;
