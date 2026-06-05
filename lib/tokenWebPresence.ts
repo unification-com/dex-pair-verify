@@ -6,10 +6,14 @@
 //
 // NB: these signals are NOT a trust gate — AV-5 proved they're gameable (a spoof
 // can register a website / airdrop holders), so they inform the human, never
-// auto-verify. On-demand, cached in-process (1h TTL); every fetch degrades to a
-// blank field on failure/timeout and NEVER blocks the page.
+// auto-verify. Write-through cached on the Token row (getTokenWebPresence persists
+// on first discovery and reads the stored copy until it goes stale); every fetch
+// degrades to a blank field on failure/timeout and NEVER blocks the page.
+
+import { Prisma } from "@prisma/client";
 
 import { evmChainId } from "./chains";
+import prisma from "./prisma";
 
 export type TokenWebPresence = {
   websites: string[];
@@ -32,8 +36,9 @@ const BLOCKSCOUT: Record<string, string | null> = {
   bsc: null,
 };
 
-const TTL_MS = 60 * 60 * 1000; // 1h — web presence + holders move slowly
-const cache = new Map<string, { data: TokenWebPresence; at: number }>();
+// How long a stored copy is trusted before a re-fetch (web presence + holders
+// move slowly).
+const STORE_TTL_S = 7 * 24 * 60 * 60; // 7 days
 const blank = (): TokenWebPresence => ({ websites: [], twitter: null, telegram: null, discord: null, description: null, imageUrl: null, holders: null, transfers: null });
 
 // Only let http(s) URLs through into hrefs / img src. GeckoTerminal token info is
@@ -60,12 +65,9 @@ const fetchT = async (url: string, init?: RequestInit, ms = 4000): Promise<Respo
   }
 };
 
-export async function fetchTokenWebPresence(chain: string, address: string, now = Date.now()): Promise<TokenWebPresence> {
-  const key = `${chain}:${address.toLowerCase()}`;
-  const cached = cache.get(key);
-  if (cached && now - cached.at < TTL_MS) {
-    return cached.data;
-  }
+// Pure network fetch (GeckoTerminal + Blockscout). No caching here — the DB
+// write-through in getTokenWebPresence is the cache.
+export async function fetchTokenWebPresence(chain: string, address: string): Promise<TokenWebPresence> {
   const data = blank();
 
   // Only EVM chains we map have these explorers.
@@ -100,6 +102,28 @@ export async function fetchTokenWebPresence(chain: string, address: string, now 
     }
   }
 
-  cache.set(key, { data, at: now });
+  return data;
+}
+
+// DB write-through resolver. Returns the stored copy off the already-loaded token
+// row when it's fresh (no extra read / no network); otherwise fetches live and
+// persists it back to the row (best-effort — a write failure still returns the
+// fetched data). Pass the token row straight from the page's findUnique.
+export async function getTokenWebPresence(
+  token: { id: string; chain: string; contractAddress: string; webPresence: unknown; webPresenceCheckedAt: number },
+  now = Math.floor(Date.now() / 1000),
+): Promise<TokenWebPresence> {
+  if (token.webPresence && token.webPresenceCheckedAt > 0 && now - token.webPresenceCheckedAt < STORE_TTL_S) {
+    return token.webPresence as TokenWebPresence;
+  }
+  const data = await fetchTokenWebPresence(token.chain, token.contractAddress);
+  try {
+    await prisma.token.update({
+      where: { id: token.id },
+      data: { webPresence: data as unknown as Prisma.InputJsonValue, webPresenceCheckedAt: now },
+    });
+  } catch {
+    // persistence is best-effort — never block the page on a write failure
+  }
   return data;
 }

@@ -15,7 +15,7 @@ import PageHeader from "../../../components/ui/PageHeader";
 import StatusBadge from "../../../components/ui/StatusBadge";
 import prisma from '../../../lib/prisma';
 import { isVerifiedStatus } from "../../../lib/status";
-import { fetchTokenWebPresence, TokenWebPresence } from "../../../lib/tokenWebPresence";
+import { getTokenWebPresence, TokenWebPresence } from "../../../lib/tokenWebPresence";
 import { AssociatedPairProps, TokenProps } from "../../../types/props";
 import { TokenPairStatus } from "../../../types/types";
 
@@ -41,8 +41,9 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
         where: { symbol: token.symbol, NOT: { chain: token.chain } },
     })
     // Free decision-support enrichment (GeckoTerminal web/socials + Blockscout
-    // holders) — degrades to blank on failure, never blocks the page.
-    const web = await fetchTokenWebPresence(token.chain, token.contractAddress)
+    // holders), write-through cached on the token row; degrades to blank on
+    // failure, never blocks the page.
+    const web = await getTokenWebPresence(token)
     return { props: { token, similarTokens, web } }
 }
 

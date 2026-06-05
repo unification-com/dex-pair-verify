@@ -206,6 +206,12 @@ model Token {
   // token's (coingeckoCoinId, chain) canonical contract was last resolved into
   // the CanonicalAddress cache, so the impostor fence can run on every pair.
   canonicalCheckedAt    Int                     @default(0)
+  // Decision-support web presence (GeckoTerminal website/socials/description +
+  // Blockscout holder count), write-through-cached on the token row when a detail
+  // page is viewed (lib/tokenWebPresence.ts). NOT a trust gate — AV-5 proved these
+  // signals are gameable, so they inform the operator's manual call, never auto-verify.
+  webPresence           Json?
+  webPresenceCheckedAt  Int                     @default(0)
   pairsToken0           Pair[]                  @relation("Token0")
   pairsToken1           Pair[]                  @relation("Token1")
   duplicateTokenSymbols DuplicateTokenSymbols[] @relation("OriginalToken")
