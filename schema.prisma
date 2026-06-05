@@ -369,6 +369,15 @@ model SupportedSource {
   // subgraphProvider via keyEnvVarFor (the normal path).
   apiKeyEnvVar         String?
   factoryAddress       String
+  // GeckoTerminal slugs for the verification pipeline's ingest (null = same as
+  // chain/dex). Rows are stored under the internal chain/dex above; GT is queried
+  // by these. Carried over from lib/sources.js gtNetwork/gtDex (T6.5).
+  gtNetwork            String?
+  gtDex                String?
+  // Pipeline ingest controls (from lib/sources.js): onCoinGeckoTerminal=false skips
+  // GT ingest (e.g. qomswap, self-hosted only); lastPage caps GT pagination.
+  onCoinGeckoTerminal  Boolean @default(true)
+  lastPage             Int     @default(10)
   // Last successful liveness re-probe (D8); 0 = never. Stale (>30d) sources are
   // flagged in the UI + manifest, never auto-demoted.
   lastVerifiedAt       Int     @default(0)

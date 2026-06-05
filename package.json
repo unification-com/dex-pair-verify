@@ -25,6 +25,7 @@
     "ingest": "tsx import/ingest.ts",
     "discover": "tsx import/discover.ts",
     "validate-seeds": "tsx import/validate-seeds.ts",
+    "seed-sources": "tsx import/seed-sources.ts",
     "pipeline": "tsx import/pipeline.ts",
     "postinstall": "simple-git-hooks",
     "verify-gt": "tsx import/verify_gt.ts"
