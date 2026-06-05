@@ -57,7 +57,7 @@ export const SOURCE_SEEDS: SourceSeed[] = [
   //    Biswap V2, Uniswap-V2 arbitrum) are deliberately omitted — they stay manual. ──
 
   // Tier A — existing chains, new DEXs
-  { chain: "bsc", dex: "pancakeswap_v2", gtNetwork: "bsc", gtDex: "pancakeswap_v2", schemaFamily: "univ2", subgraphId: "Aj9TDh9SPcn7cz4DXW26ga22VnBzHhPVuKGmE4YBzDFj", factoryAddress: "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73", priceable: false, note: "univ2 but this subgraph leaves reserveUSD unpopulated — confirm the reserve field (reserveBNB?) before pricing" },
+  { chain: "bsc", dex: "pancakeswap_v2", gtNetwork: "bsc", gtDex: "pancakeswap_v2", schemaFamily: "univ2", subgraphId: "Aj9TDh9SPcn7cz4DXW26ga22VnBzHhPVuKGmE4YBzDFj", factoryAddress: "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73", priceable: true, note: "BSC univ2: tracks reserveBNB (reserveUSD unpopulated); priced via token0Price" },
   { chain: "polygon_pos", dex: "uniswap_v3", gtNetwork: "polygon_pos", gtDex: "uniswap_v3_polygon_pos", schemaFamily: "univ3", subgraphId: "3hCPRGf4z88VC5rsBKU5AA9FBBq5nF3jbKJG7VZCbhjm", factoryAddress: "0x1F98431c8aD98523631AE4a59f267346ea31F984", priceable: true },
   { chain: "bsc", dex: "uniswap_v3", gtNetwork: "bsc", gtDex: "uniswap-bsc", schemaFamily: "univ3", subgraphId: "F85MNzUGYqgSHSHRGgeVMNsdnW1KtZSVgFULumXRZTw2", factoryAddress: "0xdB1d10011AD0Ff90774D0C6Bb92e5C5c8b4461F7", priceable: true },
   { chain: "bsc", dex: "thena", gtNetwork: "bsc", gtDex: "thena-fusion", schemaFamily: "univ3", subgraphId: "34V3E1o5Kf9CMcnSdmxF7qdQCzEsw8Psa1FnFhHgGrz2", factoryAddress: "0x306F06C147f064A010530292A1EB6737c3e378e4", priceable: false, note: "Thena Fusion (Algebra): Pool lacks totalValueLockedUSD — needs Algebra-aware fields (camelot_v3's Algebra subgraph does expose it; thena's does not)" },
@@ -72,6 +72,6 @@ export const SOURCE_SEEDS: SourceSeed[] = [
   { chain: "optimism", dex: "uniswap_v3", gtNetwork: "optimism", gtDex: "uniswap_v3_optimism", schemaFamily: "univ3", subgraphId: "Jhu62RoQqrrWoxUUhWFkiMHDrqsTe7hTGb3NGiHPuf9", factoryAddress: "0x1F98431c8aD98523631AE4a59f267346ea31F984", priceable: true },
 
   // Solidly (ve(3,3)) — seeded but NOT priceable until the go-ooo Solidly template (4.B).
-  { chain: "base", dex: "aerodrome", gtNetwork: "base", gtDex: "aerodrome-base", schemaFamily: "custom", subgraphId: "GENunSHWLBXm59mBSgPzQ8metBEp9YDfdqwFr91Av1UM", factoryAddress: "0x420DD381b31aEf6683db6B902084cB0FFECe40Da", priceable: false, note: "Solidly schema — awaits go-ooo Solidly template (4.B)" },
+  { chain: "base", dex: "aerodrome_slipstream", gtNetwork: "base", gtDex: "aerodrome-slipstream", schemaFamily: "univ3", subgraphId: "GENunSHWLBXm59mBSgPzQ8metBEp9YDfdqwFr91Av1UM", factoryAddress: "0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A", priceable: true, note: "Aerodrome Slipstream (concentrated liquidity → univ3); classic Solidly aerodrome-base pools are a separate source (await a Solidly/Messari template)" },
   { chain: "optimism", dex: "velodrome", gtNetwork: "optimism", gtDex: "velodrome", schemaFamily: "custom", subgraphId: "A4Y1A82YhSLTn998BVVELC8eWzhi992k4ZitByvssxqA", factoryAddress: "0xF1046053aa5682b4F9a81b5481394DA16BE5FF5a", priceable: false, note: "Solidly schema — awaits go-ooo Solidly template (4.B)" },
 ];

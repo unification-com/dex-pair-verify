@@ -52,11 +52,13 @@ const ORIGINAL_SOURCES: BaselineSource[] = [
 const ADOPTED_GT_KEYS = new Set([
   "polygon_pos/uniswap_v3_polygon_pos",
   "bsc/uniswap-bsc",
+  "bsc/pancakeswap_v2",
   "arbitrum/uniswap_v3_arbitrum",
   "arbitrum/camelot",
   "arbitrum/camelot-v3",
   "base/uniswap-v3-base",
   "base/sushiswap-v2-base",
+  "base/aerodrome-slipstream",
   "optimism/uniswap_v3_optimism",
 ]);
 
