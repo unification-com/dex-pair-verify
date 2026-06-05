@@ -165,7 +165,7 @@ const PriceData: React.FC<{
     const poolCols: Column<PoolPrice>[] = [
         { key: "chain", label: "Chain", render: (p) => <ChainName chain={p.chain} /> },
         { key: "dex", label: "DEX", render: (p) => <DexName dex={p.dex} /> },
-        { key: "pairName", label: "Pair", sortable: true, render: (p) => p.pId ? <Link href={`/p/${p.pId}`}><a>{p.pairName}</a></Link> : <>{p.pairName}</> },
+        { key: "pairName", label: "Pair", sortable: true, render: (p) => p.pId ? <Link href={`/admin/p/${p.pId}`}><a>{p.pairName}</a></Link> : <>{p.pairName}</> },
         { key: "price", label: `${base}→${target}`, num: true, sortable: true, sortVal: (p) => targetPrice(p), render: (p) => scientificToDecimal(targetPrice(p)) },
         { key: "reserveUsd", label: "Liquidity", num: true, sortable: true, render: (p) => usd(p.reserveUsd) },
         { key: "used", label: "In calc", render: (p) => rejectedSet.has(targetPrice(p)) ? <span className="badge badge-fail badge-sm">rejected</span> : <span className="badge badge-pass badge-sm">used</span> },

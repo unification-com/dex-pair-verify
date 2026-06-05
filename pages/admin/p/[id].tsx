@@ -4,31 +4,31 @@ import { useRouter } from "next/router";
 import React, { FormEvent, useEffect, useState } from "react"
 import { NotificationManager } from 'react-notifications';
 
-import ChainName from "../../components/ChainName";
-import CoinGeckoCoinLink from "../../components/CoinGeckoCoinLink";
-import CoinGeckoPoolLink from "../../components/CoinGeckoPoolLink";
-import DexName from "../../components/DexName";
-import ExplorerUrl from "../../components/ExplorerUrl";
-import NativeToken from "../../components/NativeToken";
-import PoolUrl from "../../components/PoolUrl";
-import FenceChecklist from "../../components/review/FenceChecklist";
-import QueueNav from "../../components/review/QueueNav";
-import ReserveVsFloor from "../../components/review/ReserveVsFloor";
-import TrustBadgeRow, { TrustSignals } from "../../components/review/TrustBadgeRow";
-import Layout from "../../components/shell/Layout"
-import ConfidenceMeter from "../../components/ui/ConfidenceMeter";
-import DataTable, { Column } from "../../components/ui/DataTable";
-import Icon from "../../components/ui/Icon";
-import PageHeader from "../../components/ui/PageHeader";
-import StatusBadge from "../../components/ui/StatusBadge";
-import { deriveFences, UiFence } from "../../lib/fences";
-import prisma from '../../lib/prisma';
-import { isVerifiedStatus } from "../../lib/status";
-import { REASON_LABEL } from "../../lib/statusMeta";
-import { evaluatePair } from "../../lib/verdict";
-import { buildVerdictContext, PairWithTokens } from "../../lib/verdictRunner";
-import { PairProps } from "../../types/props";
-import { TokenPairStatus } from "../../types/types";
+import ChainName from "../../../components/ChainName";
+import CoinGeckoCoinLink from "../../../components/CoinGeckoCoinLink";
+import CoinGeckoPoolLink from "../../../components/CoinGeckoPoolLink";
+import DexName from "../../../components/DexName";
+import ExplorerUrl from "../../../components/ExplorerUrl";
+import NativeToken from "../../../components/NativeToken";
+import PoolUrl from "../../../components/PoolUrl";
+import FenceChecklist from "../../../components/review/FenceChecklist";
+import QueueNav from "../../../components/review/QueueNav";
+import ReserveVsFloor from "../../../components/review/ReserveVsFloor";
+import TrustBadgeRow, { TrustSignals } from "../../../components/review/TrustBadgeRow";
+import Layout from "../../../components/shell/Layout"
+import ConfidenceMeter from "../../../components/ui/ConfidenceMeter";
+import DataTable, { Column } from "../../../components/ui/DataTable";
+import Icon from "../../../components/ui/Icon";
+import PageHeader from "../../../components/ui/PageHeader";
+import StatusBadge from "../../../components/ui/StatusBadge";
+import { deriveFences, UiFence } from "../../../lib/fences";
+import prisma from '../../../lib/prisma';
+import { isVerifiedStatus } from "../../../lib/status";
+import { REASON_LABEL } from "../../../lib/statusMeta";
+import { evaluatePair } from "../../../lib/verdict";
+import { buildVerdictContext, PairWithTokens } from "../../../lib/verdictRunner";
+import { PairProps } from "../../../types/props";
+import { TokenPairStatus } from "../../../types/types";
 
 type VerdictView = { reasonCode: string; confidence: number | null; reason: string };
 type QueueView = { ids: string[]; filterQs: string };
@@ -176,7 +176,7 @@ const Pair: React.FC<Props> = (props) => {
   const qIndex = q ? q.ids.indexOf(props.pair.id) : -1;
   const goTo = (i: number) => {
     if (!q || i < 0 || i >= q.ids.length) return;
-    router.push(`/p/${q.ids[i]}?${q.filterQs}`);
+    router.push(`/admin/p/${q.ids[i]}?${q.filterQs}`);
   };
 
   async function setStatus(status: TokenPairStatus, comment: string): Promise<boolean> {
@@ -264,7 +264,7 @@ const Pair: React.FC<Props> = (props) => {
   const verifyOptDisabled = !bothTokensVerified;
 
   return (
-    <Layout crumb={<Link href={q ? `/list-pairs?${q.filterQs}` : "/list-pairs"}><a>‹ Review queue</a></Link>}>
+    <Layout crumb={<Link href={q ? `/admin/list-pairs?${q.filterQs}` : "/admin/list-pairs"}><a>‹ Review queue</a></Link>}>
       <PageHeader
         title={props.pair.pair}
         badge={<StatusBadge status={currentStatus} method={props.pair.verificationMethod} />}
@@ -275,7 +275,7 @@ const Pair: React.FC<Props> = (props) => {
           <ExplorerUrl chain={props.pair.chain} contractAddress={props.pair.contractAddress} linkType={"address"} />
         </span>}
         actions={isVerifiedStatus(props.pair.status)
-          ? <Link href={`/p/test/pair/${props.pair.id}`}><a className="btn btn-ghost btn-sm" target="_blank"><Icon name="price" size={14} />Price test</a></Link>
+          ? <Link href={`/admin/p/test/pair/${props.pair.id}`}><a className="btn btn-ghost btn-sm" target="_blank"><Icon name="price" size={14} />Price test</a></Link>
           : null}
       />
 
@@ -295,7 +295,7 @@ const Pair: React.FC<Props> = (props) => {
                 <KV k="Address" v={<ExplorerUrl chain={props.pair.chain} contractAddress={t.contractAddress} linkType={"token"} />} />
                 <KV k="CoinGecko" v={<CoinGeckoCoinLink coingeckoId={t.coingeckoCoinId} />} />
                 <KV k="Tx count" v={num(t.txCount)} />
-                <Link href={`/t/${t.id}`}><a className="btn btn-ghost btn-sm" style={{ marginTop: "var(--sp-4)" }}>View token →</a></Link>
+                <Link href={`/admin/t/${t.id}`}><a className="btn btn-ghost btn-sm" style={{ marginTop: "var(--sp-4)" }}>View token →</a></Link>
               </div>
             ))}
           </div>
@@ -336,13 +336,13 @@ const Pair: React.FC<Props> = (props) => {
           {duplicates.length > 0 && (
             <details className="card raw">
               <summary>Possible duplicates on {props.pair.dex} ({duplicates.length})</summary>
-              <DataTable columns={miniCols} data={duplicates} rowKey={(r) => r.id} onRowClick={(r) => router.push(`/p/${r.id}`)} />
+              <DataTable columns={miniCols} data={duplicates} rowKey={(r) => r.id} onRowClick={(r) => router.push(`/admin/p/${r.id}`)} />
             </details>
           )}
           {similar.length > 0 && (
             <details className="card raw">
               <summary>Similar pairs on other DEXs ({similar.length})</summary>
-              <DataTable columns={miniCols} data={similar} rowKey={(r) => r.id} onRowClick={(r) => router.push(`/p/${r.id}`)} sortInit={{ key: "reserveUsd", dir: "desc" }} />
+              <DataTable columns={miniCols} data={similar} rowKey={(r) => r.id} onRowClick={(r) => router.push(`/admin/p/${r.id}`)} sortInit={{ key: "reserveUsd", dir: "desc" }} />
             </details>
           )}
         </div>

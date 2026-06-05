@@ -47,13 +47,12 @@ const NavBar: React.FC<{ needsReviewCount?: number }> = ({ needsReviewCount }) =
       </div>
 
       <nav className="sb-nav">
-        <Item href="/" icon="home" label="Home" active={router.asPath === "/"} />
-        <Item href="/list-pairs?status=NeedsReview" icon="queue" label="Review queue" star pill={needsReviewCount ?? null} active={active("/list-pairs")} />
-        <Item href="/list-tokens" icon="token" label="Tokens" active={active("/list-tokens")} />
+        <Item href="/admin" icon="home" label="Dashboard" active={router.asPath === "/admin"} />
+        <Item href="/admin/list-pairs?status=NeedsReview" icon="queue" label="Review queue" star pill={needsReviewCount ?? null} active={active("/admin/list-pairs")} />
+        <Item href="/admin/list-tokens" icon="token" label="Tokens" active={active("/admin/list-tokens")} />
 
         {session && <>
           <div className="sb-group-label">Pipeline</div>
-          <Item href="/admin" icon="pipeline" label="Overview" active={router.asPath === "/admin"} />
           {PASSES.map((p) => (
             <Link key={p.id} href={p.href}><a className={`sb-link${active(p.href) ? " active" : ""}`}>
               <span className="sb-step-no">{p.step}</span><span className="lbl">{p.name}</span>
@@ -62,7 +61,7 @@ const NavBar: React.FC<{ needsReviewCount?: number }> = ({ needsReviewCount }) =
 
           <div className="sb-group-label">Tools</div>
           <Item href="/admin/thresholds" icon="filter" label="Thresholds" active={active("/admin/thresholds")} />
-          <Item href="/p/test" icon="price" label="OoO price-test" active={active("/p/test")} />
+          <Item href="/admin/p/test" icon="price" label="OoO price-test" active={active("/admin/p/test")} />
         </>}
       </nav>
 

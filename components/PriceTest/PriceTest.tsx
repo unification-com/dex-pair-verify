@@ -49,19 +49,19 @@ const PriceTest: React.FC<{
             <PageHeader
                 title={<>OoO price-test <span className="mono">{base}→{target}</span></>}
                 sub={<>Simulates the oracle price across every verified pool for this pair.</>}
-                actions={<Link href={`/p/test/${target}/${base}`}><a className="btn btn-ghost btn-sm">Reverse → {target}→{base}</a></Link>}
+                actions={<Link href={`/admin/p/test/${target}/${base}`}><a className="btn btn-ghost btn-sm">Reverse → {target}→{base}</a></Link>}
             />
 
             {usable.length > 0 && (
                 <details className="card raw" open>
                     <summary>Usable pools — above thresholds ({usable.length})</summary>
-                    <DataTable columns={cols} data={usable} rowKey={(p) => p.id} onRowClick={(p) => router.push(`/p/${p.id}`)} sortInit={{ key: "reserveUsd", dir: "desc" }} />
+                    <DataTable columns={cols} data={usable} rowKey={(p) => p.id} onRowClick={(p) => router.push(`/admin/p/${p.id}`)} sortInit={{ key: "reserveUsd", dir: "desc" }} />
                 </details>
             )}
             {ignored.length > 0 && (
                 <details className="card raw">
                     <summary>Ignored pools — reserve / tx below thresholds ({ignored.length})</summary>
-                    <DataTable columns={cols} data={ignored} rowKey={(p) => p.id} onRowClick={(p) => router.push(`/p/${p.id}`)} />
+                    <DataTable columns={cols} data={ignored} rowKey={(p) => p.id} onRowClick={(p) => router.push(`/admin/p/${p.id}`)} />
                 </details>
             )}
 

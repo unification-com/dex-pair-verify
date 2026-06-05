@@ -3,17 +3,17 @@ import { useRouter } from "next/router";
 import React, { FormEvent, useEffect, useState } from "react"
 import { NotificationManager } from 'react-notifications';
 
-import ChainName from "../../components/ChainName";
-import CoinGeckoCoinLink from "../../components/CoinGeckoCoinLink";
-import ExplorerUrl from "../../components/ExplorerUrl";
-import Layout from "../../components/shell/Layout"
-import DataTable, { Column } from "../../components/ui/DataTable";
-import Icon from "../../components/ui/Icon";
-import PageHeader from "../../components/ui/PageHeader";
-import StatusBadge from "../../components/ui/StatusBadge";
-import prisma from '../../lib/prisma';
-import { AssociatedPairProps, TokenProps } from "../../types/props";
-import { TokenPairStatus } from "../../types/types";
+import ChainName from "../../../components/ChainName";
+import CoinGeckoCoinLink from "../../../components/CoinGeckoCoinLink";
+import ExplorerUrl from "../../../components/ExplorerUrl";
+import Layout from "../../../components/shell/Layout"
+import DataTable, { Column } from "../../../components/ui/DataTable";
+import Icon from "../../../components/ui/Icon";
+import PageHeader from "../../../components/ui/PageHeader";
+import StatusBadge from "../../../components/ui/StatusBadge";
+import prisma from '../../../lib/prisma';
+import { AssociatedPairProps, TokenProps } from "../../../types/props";
+import { TokenPairStatus } from "../../../types/types";
 
 const pairSelect = {
     pair: true, id: true, contractAddress: true, reserveUsd: true, reserve0: true,
@@ -145,19 +145,19 @@ const Token: React.FC<Props> = (props) => {
 
                     <div className="card card-pad">
                         <span className="eyebrow" style={{ marginBottom: "var(--sp-3)", display: "block" }}>Associated pairs ({associatedPairs.length})</span>
-                        <DataTable columns={pairCols} data={associatedPairs} rowKey={(p) => p.id} onRowClick={(p) => router.push(`/p/${p.id}`)} sortInit={{ key: "reserveUsd", dir: "desc" }} empty="No pairs." />
+                        <DataTable columns={pairCols} data={associatedPairs} rowKey={(p) => p.id} onRowClick={(p) => router.push(`/admin/p/${p.id}`)} sortInit={{ key: "reserveUsd", dir: "desc" }} empty="No pairs." />
                     </div>
 
                     {duplicateTokens.length > 0 && (
                         <details className="card raw">
                             <summary>Possible duplicates on {props.token.chain} ({duplicateTokens.length})</summary>
-                            <DataTable columns={tokenCols} data={duplicateTokens} rowKey={(t) => t.id} onRowClick={(t) => router.push(`/t/${t.id}`)} />
+                            <DataTable columns={tokenCols} data={duplicateTokens} rowKey={(t) => t.id} onRowClick={(t) => router.push(`/admin/t/${t.id}`)} />
                         </details>
                     )}
                     {props.similarTokens.length > 0 && (
                         <details className="card raw">
                             <summary>Similar tokens on other chains ({props.similarTokens.length})</summary>
-                            <DataTable columns={similarCols} data={props.similarTokens} rowKey={(t) => t.id} onRowClick={(t) => router.push(`/t/${t.id}`)} />
+                            <DataTable columns={similarCols} data={props.similarTokens} rowKey={(t) => t.id} onRowClick={(t) => router.push(`/admin/t/${t.id}`)} />
                         </details>
                     )}
                 </div>
