@@ -107,15 +107,20 @@ describe("probeSubgraph", () => {
 });
 
 describe("dataProbeSubgraph", () => {
-  it("ok when univ2 pairs returns a row with positive reserveUSD", async () => {
-    const r = await dataProbeSubgraph("http://x", "univ2", { fetcher: dataResp("pairs", [{ id: "0xp", reserveUSD: "250000" }]) });
+  it("ok when a univ2 pair prices a token (token0Price > 0)", async () => {
+    const r = await dataProbeSubgraph("http://x", "univ2", { fetcher: dataResp("pairs", [{ id: "0xp", token0Price: "1500", reserveUSD: "250000" }]) });
     expect(r.applicable).toBe(true);
     expect(r.ok).toBe(true);
     expect(r.sampleReserveUsd).toBe(250000);
     expect(r.sampleId).toBe("0xp");
   });
-  it("ok when univ3 pools returns a row with positive TVL", async () => {
-    const r = await dataProbeSubgraph("http://x", "univ3", { fetcher: dataResp("pools", [{ id: "0xq", totalValueLockedUSD: "1234" }]) });
+  it("ok for a BSC subgraph where reserveUSD is 0 but token0Price is set (reserveBNB-tracked)", async () => {
+    const r = await dataProbeSubgraph("http://x", "univ2", { fetcher: dataResp("pairs", [{ id: "0xb", token0Price: "0.0000026", reserveUSD: "0" }]) });
+    expect(r.ok).toBe(true);
+    expect(r.sampleReserveUsd).toBe(0);
+  });
+  it("ok when a univ3 pool prices a token", async () => {
+    const r = await dataProbeSubgraph("http://x", "univ3", { fetcher: dataResp("pools", [{ id: "0xq", token0Price: "0.0005", totalValueLockedUSD: "1234" }]) });
     expect(r.ok).toBe(true);
     expect(r.sampleReserveUsd).toBe(1234);
   });
@@ -124,9 +129,10 @@ describe("dataProbeSubgraph", () => {
     expect(r.ok).toBe(false);
     expect(r.error).toContain("no rows");
   });
-  it("not ok when the top row has a zero reserve", async () => {
-    const r = await dataProbeSubgraph("http://x", "univ3", { fetcher: dataResp("pools", [{ id: "0xz", totalValueLockedUSD: "0" }]) });
+  it("not ok when no sampled pool has a positive token0Price", async () => {
+    const r = await dataProbeSubgraph("http://x", "univ3", { fetcher: dataResp("pools", [{ id: "0xz", token0Price: "0", totalValueLockedUSD: "0" }]) });
     expect(r.ok).toBe(false);
+    expect(r.error).toContain("token0Price");
   });
   it("not applicable for custom / solidly (no generic query yet)", async () => {
     const r = await dataProbeSubgraph("http://x", "custom");
@@ -144,7 +150,7 @@ describe("verifySubgraphSource", () => {
   it("returns a safe template + family + a real-data probe from a literal URL", async () => {
     const r = await verifySubgraphSource(DECENTRALIZED, {
       key: "SECRETKEY123",
-      fetcher: combined(["pools"], "pools", [{ id: "0xpool", totalValueLockedUSD: "1000000" }]),
+      fetcher: combined(["pools"], "pools", [{ id: "0xpool", token0Price: "2000", totalValueLockedUSD: "1000000" }]),
     });
     expect(r.provider).toBe("graph-decentralized");
     expect(r.keyEnvVar).toBe("THEGRAPH_API_KEY");

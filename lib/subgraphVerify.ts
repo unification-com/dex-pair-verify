@@ -126,32 +126,35 @@ export async function probeSubgraph(url: string, opts: { fetcher?: GraphqlFetche
   return { live: true, schemaFamily: classifySchemaFamily(fields), queryFields: fields };
 }
 
-// Minimal "is this subgraph returning real, usable pricing data" query per schema
-// family. univ2 fetches a pair with positive reserveUSD; univ3 (incl. Algebra,
-// which exposes the same pools/TVL fields) a pool with positive
-// totalValueLockedUSD. A `where` filter rather than an orderBy — a global sort is
-// slow on large subgraphs (times out) and surfaces univ2's notoriously corrupted
-// reserveUSD outliers. custom/solidly have no generic query (they await a dedicated
-// template), so the data probe is not applicable. Reserve values are BigDecimal, so
-// the threshold is a quoted string.
-const DATA_QUERY: Partial<Record<SchemaFamily, { query: string; collection: string; reserveField: string }>> = {
+// Minimal "is this subgraph returning usable pricing data" query per schema family.
+// We sample a handful of pairs/pools and require at least one with a positive
+// token0Price — the field go-ooo actually prices from, and the only one populated
+// across ALL chains. (BSC univ2 forks like PancakeSwap leave reserveUSD at 0 and
+// track reserveBNB instead, so a reserveUSD check false-negatives them.) reserveUSD
+// / TVL is read too, purely as a liquidity sample for display (0 on those BSC
+// subgraphs). No orderBy — a global sort is slow on big subgraphs and unnecessary
+// for a liveness check. custom/solidly have no generic query (they await a
+// dedicated template), so the data probe is not applicable.
+const DATA_QUERY: Partial<Record<SchemaFamily, { query: string; collection: string; priceField: string; reserveField: string }>> = {
   univ2: {
-    query: `{ pairs(first: 1, where: { reserveUSD_gt: "0" }) { id reserveUSD } }`,
+    query: `{ pairs(first: 5) { id token0Price reserveUSD } }`,
     collection: "pairs",
+    priceField: "token0Price",
     reserveField: "reserveUSD",
   },
   univ3: {
-    query: `{ pools(first: 1, where: { totalValueLockedUSD_gt: "0" }) { id totalValueLockedUSD } }`,
+    query: `{ pools(first: 5) { id token0Price totalValueLockedUSD } }`,
     collection: "pools",
+    priceField: "token0Price",
     reserveField: "totalValueLockedUSD",
   },
 };
 
 export type DataProbeResult = {
   applicable: boolean; // false for custom/solidly (no generic query yet)
-  ok: boolean; // true when the query returned a row with a positive reserve/TVL
+  ok: boolean; // true when a sampled pool/pair prices a token (token0Price > 0)
   rowCount: number;
-  sampleReserveUsd: number | null;
+  sampleReserveUsd: number | null; // a liquidity sample for display (0 on BSC subgraphs)
   sampleId: string | null;
   error?: string;
 };
@@ -183,16 +186,23 @@ export async function dataProbeSubgraph(
   if (rows.length === 0) {
     return { applicable: true, ok: false, rowCount: 0, sampleReserveUsd: null, sampleId: null, error: "query returned no rows (empty subgraph?)" };
   }
-  const top = rows[0];
-  const reserve = parseFloat(String(top[spec.reserveField] ?? ""));
-  const reserveOk = Number.isFinite(reserve) && reserve > 0;
+  // Usable = at least one sampled pool prices a token (token0Price > 0). reserveUSD
+  // is only a display sample (0 on BSC subgraphs that track reserveBNB instead).
+  const priced = rows.filter((r) => {
+    const p = parseFloat(String(r[spec.priceField] ?? ""));
+    return Number.isFinite(p) && p > 0;
+  });
+  const reserves = rows
+    .map((r) => parseFloat(String(r[spec.reserveField] ?? "")))
+    .filter((n) => Number.isFinite(n));
+  const ok = priced.length > 0;
   return {
     applicable: true,
-    ok: reserveOk,
+    ok,
     rowCount: rows.length,
-    sampleReserveUsd: Number.isFinite(reserve) ? reserve : null,
-    sampleId: top.id ?? null,
-    error: reserveOk ? undefined : "top row has no positive reserve/TVL",
+    sampleReserveUsd: reserves.length ? Math.max(...reserves) : null,
+    sampleId: (priced[0] ?? rows[0]).id ?? null,
+    error: ok ? undefined : "no sampled pool has a positive token0Price",
   };
 }
 
