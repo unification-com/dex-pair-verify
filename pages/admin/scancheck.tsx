@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
+import PassRunnerLayout from "../../components/admin/PassRunnerLayout";
 import Layout from "../../components/shell/Layout";
 
 // GoPlus free tier is 30 req/min; pace batches of 10 so we stay well under it.
@@ -74,31 +75,31 @@ const ScanCheck: React.FC = () => {
     setRunning(false);
   }
 
+  const pct = remaining != null ? (processed + remaining > 0 ? (processed / (processed + remaining)) * 100 : 100) : done ? 100 : undefined;
+
   return (
-    <Layout>
-      <div className="page">
-        <h1>Scam check (GoPlus)</h1>
-        <p>
-          Runs GoPlus token-security checks over the tokens in your verified pairs. A flagged
-          token (honeypot, extreme tax, self-destruct, hidden owner…) demotes any Auto-Verified
-          pair using it to Needs Review — never auto-rejected; you decide. Manual verdicts are
-          untouched. Paced for the GoPlus free-tier 30/min limit, so a first full run is slow;
-          re-runs only check tokens not yet checked.
-        </p>
-
-        <button onClick={run} disabled={running} type="button">
-          {running ? "Running…" : done ? "Run again" : "Start scam check"}
-        </button>
-
-        <h3>
-          Checked: {processed}
-          {remaining !== null && <> · Remaining: {remaining}</>}
-          {done && <> · ✓ done</>}
-        </h3>
-        <p>
-          <strong>{flagged}</strong> tokens flagged · <strong>{demoted}</strong> pairs demoted to Needs Review
-        </p>
-      </div>
+    <Layout crumb="Scam check">
+      <PassRunnerLayout
+        step={5}
+        title="Scam check (GoPlus)"
+        pace="GoPlus 30/min"
+        description={<>
+          Runs GoPlus token-security checks over the tokens in your verified pairs. A flagged token
+          (honeypot, extreme tax, self-destruct, hidden owner…) demotes any Auto-Verified pair using it
+          to Needs Review — never auto-rejected; you decide. Manual verdicts are untouched. Re-runs only
+          check tokens not yet checked.
+        </>}
+        running={running}
+        done={done}
+        onRun={run}
+        progressPct={pct}
+        stats={[
+          { label: "Checked", value: processed },
+          { label: "Flagged", value: flagged, tone: "fail" },
+          { label: "Demoted", value: demoted, tone: "warn" },
+          ...(remaining != null ? [{ label: "Remaining", value: remaining } as const] : []),
+        ]}
+      />
     </Layout>
   );
 };

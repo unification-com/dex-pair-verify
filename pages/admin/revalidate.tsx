@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
+import PassRunnerLayout from "../../components/admin/PassRunnerLayout";
 import Layout from "../../components/shell/Layout";
-import StatusBadge from "../../components/ui/StatusBadge";
 import { TokenPairStatus } from "../../types/types";
 
 // Pace between batches, matching the ingest cadence. Re-validate only hits
@@ -22,6 +22,13 @@ const TALLY_ORDER: string[] = [
   "skippedManual",
   "error",
 ];
+
+const toneFor = (k: string): string | undefined =>
+  k === TokenPairStatus.AutoVerified ? "pass"
+    : k === TokenPairStatus.NeedsReview ? "info"
+      : k === TokenPairStatus.AutoRejected || k === TokenPairStatus.NotCurrentlyUsable ? "fail"
+        : k === TokenPairStatus.Duplicate ? "warn"
+          : undefined;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -88,48 +95,30 @@ const Revalidate: React.FC = () => {
     setRunning(false);
   }
 
-  const isVerdictStatus = (k: string): k is TokenPairStatus =>
-    (Object.values(TokenPairStatus) as string[]).includes(k);
+  const pct = remaining != null ? (processed + remaining > 0 ? (processed / (processed + remaining)) * 100 : 100) : done ? 100 : undefined;
+  const tallyStats = TALLY_ORDER.filter((k) => tallies[k]).map((k) => ({ label: k, value: tallies[k], tone: toneFor(k) }));
 
   return (
-    <Layout>
-      <div className="page">
-        <h1>Re-validate all pairs</h1>
-        <p>
-          Runs the verdict engine across every pair in throttled batches of {BATCH_SIZE}.
-          Operator (Manual) verdicts are never overridden. Safe to stop and restart — it
-          resumes where it left off.
-        </p>
-
-        <button onClick={run} disabled={running} type="button">
-          {running ? "Running…" : done ? "Run again" : "Start re-validation"}
-        </button>
-
-        <h3>
-          Processed: {processed}
-          {remaining !== null && <> · Remaining: {remaining}</>}
-          {done && <> · ✓ done</>}
-        </h3>
-
-        {Object.keys(tallies).length > 0 && (
-          <table>
-            <thead>
-              <tr>
-                <th>Verdict</th>
-                <th>Count</th>
-              </tr>
-            </thead>
-            <tbody>
-              {TALLY_ORDER.filter((k) => tallies[k]).map((k) => (
-                <tr key={k}>
-                  <td>{isVerdictStatus(k) ? <StatusBadge status={k} method={""} /> : k}</td>
-                  <td>{tallies[k]}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+    <Layout crumb="Re-validate">
+      <PassRunnerLayout
+        step={6}
+        title="Re-validate all pairs"
+        pace="no external calls"
+        description={<>
+          Runs the verdict engine across every pair in throttled batches of {BATCH_SIZE}. Operator (Manual)
+          verdicts are never overridden. Safe to stop and restart — it resumes where it left off. Run after
+          changing thresholds to apply them everywhere.
+        </>}
+        running={running}
+        done={done}
+        onRun={run}
+        progressPct={pct}
+        stats={[
+          { label: "Processed", value: processed },
+          ...(remaining != null ? [{ label: "Remaining", value: remaining }] : []),
+          ...tallyStats,
+        ]}
+      />
     </Layout>
   );
 };

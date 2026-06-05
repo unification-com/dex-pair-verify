@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
+import PassRunnerLayout from "../../components/admin/PassRunnerLayout";
 import Layout from "../../components/shell/Layout";
 
 // RPC reads are lighter than the GoPlus limit; a short pace keeps public RPCs
@@ -78,33 +79,32 @@ const FactoryCheck: React.FC = () => {
     setRunning(false);
   }
 
+  const pct = remaining != null ? (processed + remaining > 0 ? (processed / (processed + remaining)) * 100 : 100) : done ? 100 : undefined;
+
   return (
-    <Layout>
-      <div className="page">
-        <h1>Factory check (on-chain)</h1>
-        <p>
-          Reads each pool contract&apos;s on-chain <code>factory()</code> and compares it to the
-          canonical DEX factory for that (chain, dex). A match confirms the pool was deployed by the
-          real DEX (raising confidence); a mismatch routes the pair to Needs Review — possibly an
-          impostor, possibly a legitimate secondary factory, so you decide rather than auto-reject.
-          Factory addresses are immutable, so each pair is read once; re-runs only check pairs not
-          yet read. Manual verdicts are untouched (R6).
-        </p>
-
-        <button onClick={run} disabled={running} type="button">
-          {running ? "Running…" : done ? "Run again" : "Start factory check"}
-        </button>
-
-        <h3>
-          Checked: {processed}
-          {remaining !== null && <> · Remaining: {remaining}</>}
-          {done && <> · ✓ done</>}
-        </h3>
-        <p>
-          <strong>{read}</strong> factories read · <strong>{mismatches}</strong> mismatches routed
-          to Needs Review
-        </p>
-      </div>
+    <Layout crumb="Factory check">
+      <PassRunnerLayout
+        step={4}
+        title="Factory check (on-chain)"
+        pace="RPC — quick"
+        description={<>
+          Reads each pool contract&apos;s on-chain <code>factory()</code> and compares it to the canonical
+          DEX factory for that (chain, dex). A match confirms the pool was deployed by the real DEX (raising
+          confidence); a mismatch routes the pair to Needs Review — possibly an impostor, possibly a
+          legitimate secondary factory, so you decide rather than auto-reject. Factory addresses are
+          immutable, so each pair is read once. Manual verdicts are untouched (R6).
+        </>}
+        running={running}
+        done={done}
+        onRun={run}
+        progressPct={pct}
+        stats={[
+          { label: "Checked", value: processed },
+          { label: "Factories read", value: read, tone: "pass" },
+          { label: "Mismatches", value: mismatches, tone: "warn" },
+          ...(remaining != null ? [{ label: "Remaining", value: remaining }] : []),
+        ]}
+      />
     </Layout>
   );
 };

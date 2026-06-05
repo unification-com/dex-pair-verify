@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
+import PassRunnerLayout from "../../components/admin/PassRunnerLayout";
 import Layout from "../../components/shell/Layout";
-import StatusBadge from "../../components/ui/StatusBadge";
 import { TokenPairStatus } from "../../types/types";
 
 // Each page makes one GeckoTerminal call (pools with embedded tokens). 6s
@@ -18,6 +18,12 @@ const TALLY_ORDER: string[] = [
   "skippedManual",
   "error",
 ];
+
+const toneFor = (k: string): string | undefined =>
+  k === TokenPairStatus.AutoVerified ? "pass"
+    : k === TokenPairStatus.NeedsReview ? "info"
+      : k === TokenPairStatus.AutoRejected || k === TokenPairStatus.NotCurrentlyUsable ? "fail"
+        : undefined;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -65,7 +71,7 @@ const Ingest: React.FC = () => {
         break;
       }
 
-      setCurrent(`${d.chain}_${d.dex} · page ${d.page}${d.skipped ? " (skipped — not on GeckoTerminal)" : ""}`);
+      setCurrent(`${d.chain}_${d.dex} · page ${d.page}${d.skipped ? " (skipped)" : ""}`);
       totalPairs += d.pairs ?? 0;
       for (const [k, v] of Object.entries((d.tallies ?? {}) as Record<string, number>)) {
         acc[k] = (acc[k] ?? 0) + v;
@@ -87,48 +93,28 @@ const Ingest: React.FC = () => {
     setRunning(false);
   }
 
-  const isVerdictStatus = (k: string): k is TokenPairStatus =>
-    (Object.values(TokenPairStatus) as string[]).includes(k);
+  const tallyStats = TALLY_ORDER.filter((k) => tallies[k]).map((k) => ({ label: k, value: tallies[k], tone: toneFor(k) }));
 
   return (
-    <Layout>
-      <div className="page">
-        <h1>Ingest from GeckoTerminal</h1>
-        <p>
-          Discovers + hydrates pools from GeckoTerminal for every supported (chain, dex) and
-          assigns a verdict to each pair inline. Paced to respect the API rate limit. Operator
-          (Manual) verdicts are never overridden.
-        </p>
-
-        <button onClick={run} disabled={running} type="button">
-          {running ? "Running…" : done ? "Run again" : "Start ingest"}
-        </button>
-
-        <h3>
-          Pairs ingested: {pairs}
-          {current && <> · {current}</>}
-          {done && <> · ✓ done</>}
-        </h3>
-
-        {Object.keys(tallies).length > 0 && (
-          <table>
-            <thead>
-              <tr>
-                <th>Verdict</th>
-                <th>Count</th>
-              </tr>
-            </thead>
-            <tbody>
-              {TALLY_ORDER.filter((k) => tallies[k]).map((k) => (
-                <tr key={k}>
-                  <td>{isVerdictStatus(k) ? <StatusBadge status={k} method={""} /> : k}</td>
-                  <td>{tallies[k]}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+    <Layout crumb="Ingest">
+      <PassRunnerLayout
+        step={1}
+        title="Ingest from GeckoTerminal"
+        pace="GeckoTerminal"
+        description={<>
+          Discovers + hydrates pools from GeckoTerminal for every supported (chain, dex) and assigns a
+          verdict to each pair inline. Paced to respect the API rate limit. Operator (Manual) verdicts are
+          never overridden. Set <code>GECKO_API_KEY</code> in <code>.env</code> to lift the CoinGecko ceiling.
+        </>}
+        running={running}
+        done={done}
+        onRun={run}
+        stats={[
+          { label: "Pairs ingested", value: pairs },
+          ...(running && current ? [{ label: "Current", value: current }] : []),
+          ...tallyStats,
+        ]}
+      />
     </Layout>
   );
 };

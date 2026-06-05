@@ -1,11 +1,23 @@
 import Link from "next/link";
-import React, {useEffect, useState} from "react";
+import { useRouter } from "next/router";
+import React, { useEffect, useState } from "react";
 
 import PriceData from "./PriceData";
-import {PairProps} from "../../types/props";
-import NoneSortableTable from "../SortableTable/NoneSortableTable";
+import { PairProps } from "../../types/props";
+import ChainName from "../ChainName";
+import DexName from "../DexName";
+import DataTable, { Column } from "../ui/DataTable";
+import PageHeader from "../ui/PageHeader";
 
-
+const usd = (n: number) => {
+    if (n == null) return "—";
+    const a = Math.abs(n);
+    if (a >= 1e9) return "$" + (n / 1e9).toFixed(2) + "B";
+    if (a >= 1e6) return "$" + (n / 1e6).toFixed(2) + "M";
+    if (a >= 1e3) return "$" + (n / 1e3).toFixed(1) + "k";
+    return "$" + n.toFixed(2);
+};
+const num = (n: number) => new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 }).format(n);
 
 const PriceTest: React.FC<{
     base: string,
@@ -13,7 +25,7 @@ const PriceTest: React.FC<{
     usablePairs: PairProps[],
     ignoredPairs: PairProps[],
 }> = ({ base, target, usablePairs, ignoredPairs }) => {
-
+    const router = useRouter()
     const [usable, setUsable] = useState(usablePairs)
     const [ignored, setIgnored] = useState(ignoredPairs)
 
@@ -22,66 +34,45 @@ const PriceTest: React.FC<{
         setIgnored(ignoredPairs)
     }, [usablePairs, ignoredPairs]);
 
-    const columns = [
-        { label: "Chain", accessor: "chain", sortable: true, sortbyOrder: "asc", cellType: "display" },
-        { label: "Dex", accessor: "dex", sortable: true, sortbyOrder: "asc", cellType: "display" },
-        { label: "Pair", accessor: "pair", sortable: true, sortbyOrder: "asc", cellType: "display" },
-        { label: "Tx Count", accessor: "txCount", sortable: true, cellType: "number" },
-        { label: "Market Cap USD", accessor: "marketCapUsd", sortable: true, cellType: "usd" },
-        { label: "Reserve USD", accessor: "reserveUsd", sortable: true, cellType: "usd" },
-        { label: "# Buys (24h)", accessor: "buys24h", sortable: true, cellType: "number" },
-        { label: "# Sells (24h)", accessor: "sells24h", sortable: true, cellType: "number" },
-        { label: "Edit", accessor: "id", sortable: false, cellType: "edit_link", meta: {url: "/p/__ID__", text: "View/Edit"} },
-    ];
+    const cols: Column<PairProps>[] = [
+        { key: "chain", label: "Chain", render: (p) => <ChainName chain={p.chain} /> },
+        { key: "dex", label: "DEX", render: (p) => <DexName dex={p.dex} /> },
+        { key: "pair", label: "Pair", sortable: true },
+        { key: "reserveUsd", label: "Reserve", num: true, sortable: true, render: (p) => usd(p.reserveUsd) },
+        { key: "txCount", label: "Tx", num: true, sortable: true, render: (p) => num(p.txCount) },
+        { key: "buys24h", label: "Buys", num: true, sortable: true, render: (p) => num(p.buys24h) },
+        { key: "sells24h", label: "Sells", num: true, sortable: true, render: (p) => num(p.sells24h) },
+    ]
 
     return (
         <div key={`pair_price_test_${base}-${target}`}>
-            <h1>Pair</h1>
-            <h2>Test prices for {base} to {target} &nbsp;
-                (Try &nbsp;
-                <Link
-                    href={`/p/test/${target}/${base}`}>
-                    <a>{target}-{base}</a>
-                </Link>
-                )</h2>
-
-            {
-                (usable.length) > 0 &&
-                <>
-                    <h4><span style={{color: "green"}}>Usable</span> pairs from all DEXs</h4>
-                    <NoneSortableTable
-                        key={`test_pair_usable_list_${base}-${target}`}
-                        caption=""
-                        data={usable}
-                        columns={columns}
-                    />
-                </>
-            }
-
-            {
-                (ignored.length) > 0 &&
-                <>
-                    <h4><span style={{color: "red"}}>Ignored</span> pairs with Reserve USD and Tx Count below
-                        thresholds</h4>
-                    <NoneSortableTable
-                        key={`test_pair_ignore_list_${base}-${target}`}
-                        caption=""
-                        data={ignored}
-                        columns={columns}
-                    />
-                </>
-            }
-
-            <PriceData
-                key={`price-data-${base}-${target}`}
-                base={base}
-                target={target}
-                pairs={usable}
+            <PageHeader
+                title={<>OoO price-test <span className="mono">{base}→{target}</span></>}
+                sub={<>Simulates the oracle price across every verified pool for this pair.</>}
+                actions={<Link href={`/p/test/${target}/${base}`}><a className="btn btn-ghost btn-sm">Reverse → {target}→{base}</a></Link>}
             />
 
+            {usable.length > 0 && (
+                <details className="card raw" open>
+                    <summary>Usable pools — above thresholds ({usable.length})</summary>
+                    <DataTable columns={cols} data={usable} rowKey={(p) => p.id} onRowClick={(p) => router.push(`/p/${p.id}`)} sortInit={{ key: "reserveUsd", dir: "desc" }} />
+                </details>
+            )}
+            {ignored.length > 0 && (
+                <details className="card raw">
+                    <summary>Ignored pools — reserve / tx below thresholds ({ignored.length})</summary>
+                    <DataTable columns={cols} data={ignored} rowKey={(p) => p.id} onRowClick={(p) => router.push(`/p/${p.id}`)} />
+                </details>
+            )}
+
+            <PriceData key={`price-data-${base}-${target}`} base={base} target={target} pairs={usable} />
+
+            <style jsx>{`
+                .raw { padding: var(--sp-4) var(--sp-5); margin-bottom: var(--sp-5); }
+                .raw > summary { cursor: pointer; font-weight: 600; font-size: var(--fs-sm); color: var(--text-1); }
+            `}</style>
         </div>
     )
-
 }
 
 export default PriceTest;

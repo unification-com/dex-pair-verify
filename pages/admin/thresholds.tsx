@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
 import Layout from "../../components/shell/Layout";
+import PageHeader from "../../components/ui/PageHeader";
 import prisma from "../../lib/prisma";
 import { getSourceByIndex, sourceCount, thresholdSeedData } from "../../lib/sourceConfig";
 
@@ -76,21 +77,19 @@ const Thresholds: React.FC<{ thresholds: ThresholdRow[] }> = ({ thresholds }) =>
   }
 
   return (
-    <Layout>
-      <div className="page">
-        <h1>Verdict thresholds</h1>
-        <p>
-          Per-(chain, dex) tuning for the auto-verify engine. Pairs must clear these gates to
-          AutoVerify; a CG/DEX price mismatch beyond the tolerance routes to Needs Review.
-          Defaults are conservative — loosen per source as you build confidence.
-        </p>
-        <table>
+    <Layout crumb="Thresholds">
+      <PageHeader
+        title="Verdict thresholds"
+        sub="Per-(chain, dex) tuning for the auto-verify engine. Pairs must clear these gates to Auto-Verify; a CG/DEX price mismatch beyond tolerance routes to Needs Review. Defaults are conservative — loosen per source as you build confidence. Re-validate to apply."
+      />
+      <div className="card" style={{ overflowX: "auto" }}>
+        <table className="data">
           <thead>
             <tr>
               <th>Chain</th>
               <th>DEX</th>
               {NUM_FIELDS.map((f) => (
-                <th key={f.key}>{f.label}</th>
+                <th key={f.key} className="num">{f.label}</th>
               ))}
               <th>Require CG</th>
               <th />
@@ -99,28 +98,30 @@ const Thresholds: React.FC<{ thresholds: ThresholdRow[] }> = ({ thresholds }) =>
           <tbody>
             {rows.map((row) => (
               <tr key={row.id}>
-                <td>{row.chain}</td>
-                <td>{row.dex}</td>
+                <td className="mono">{row.chain}</td>
+                <td className="mono">{row.dex}</td>
                 {NUM_FIELDS.map((f) => (
-                  <td key={f.key}>
+                  <td key={f.key} className="num">
                     <input
+                      className="input"
                       type="number"
                       step={f.step}
                       value={row[f.key] as number}
-                      style={{ width: "6rem" }}
+                      style={{ width: "5.5rem" }}
                       onChange={(e) => update(row.id, f.key, Number(e.target.value))}
                     />
                   </td>
                 ))}
-                <td>
+                <td style={{ textAlign: "center" }}>
                   <input
+                    className="ckbox"
                     type="checkbox"
                     checked={row.requireCgListed}
                     onChange={(e) => update(row.id, "requireCgListed", e.target.checked)}
                   />
                 </td>
                 <td>
-                  <button type="button" onClick={() => save(row)}>Save</button>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => save(row)}>Save</button>
                 </td>
               </tr>
             ))}

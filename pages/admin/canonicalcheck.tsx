@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
+import PassRunnerLayout from "../../components/admin/PassRunnerLayout";
 import Layout from "../../components/shell/Layout";
 
 // CoinGecko free tier rate-limits; pace batches of 10 so we stay under it.
@@ -77,33 +78,32 @@ const CanonicalCheck: React.FC = () => {
     setRunning(false);
   }
 
+  const pct = remaining != null ? (processed + remaining > 0 ? (processed / (processed + remaining)) * 100 : 100) : done ? 100 : undefined;
+
   return (
-    <Layout>
-      <div className="page">
-        <h1>Canonical check (CoinGecko)</h1>
-        <p>
-          Resolves the CoinGecko-canonical contract address for every CoinGecko-listed pair token,
-          so the impostor fence can run on every pair — not just intra-chain conflicts. A token whose
-          on-chain address doesn&apos;t match the canonical contract for its coin id is routed to
-          Needs Review (a possible impostor, or a legitimate multi-contract/bridged variant — you
-          decide; never auto-rejected). Manual verdicts are untouched (R6). Paced for the CoinGecko
-          free-tier limit, so a first full run is slow; re-runs only check tokens not yet resolved.
-        </p>
-
-        <button onClick={run} disabled={running} type="button">
-          {running ? "Running…" : done ? "Run again" : "Start canonical check"}
-        </button>
-
-        <h3>
-          Checked: {processed}
-          {remaining !== null && <> · Remaining: {remaining}</>}
-          {done && <> · ✓ done</>}
-        </h3>
-        <p>
-          <strong>{resolved}</strong> canonical addresses resolved · <strong>{impostors}</strong>{" "}
-          pairs routed to Needs Review (possible impostor)
-        </p>
-      </div>
+    <Layout crumb="Canonical check">
+      <PassRunnerLayout
+        step={3}
+        title="Canonical check (CoinGecko)"
+        pace="CoinGecko-paced"
+        description={<>
+          Resolves the CoinGecko-canonical contract address for every CoinGecko-listed pair token, so the
+          impostor fence can run on every pair — not just intra-chain conflicts. A token whose on-chain
+          address doesn&apos;t match the canonical contract for its coin id is routed to Needs Review (a
+          possible impostor, or a legitimate multi-contract/bridged variant — you decide; never
+          auto-rejected). Manual verdicts are untouched (R6). Re-runs only check tokens not yet resolved.
+        </>}
+        running={running}
+        done={done}
+        onRun={run}
+        progressPct={pct}
+        stats={[
+          { label: "Checked", value: processed },
+          { label: "Resolved", value: resolved, tone: "pass" },
+          { label: "Impostors", value: impostors, tone: "warn" },
+          ...(remaining != null ? [{ label: "Remaining", value: remaining }] : []),
+        ]}
+      />
     </Layout>
   );
 };

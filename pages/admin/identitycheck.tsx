@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { NotificationManager } from "react-notifications";
 
+import PassRunnerLayout from "../../components/admin/PassRunnerLayout";
 import Layout from "../../components/shell/Layout";
 
 // GoPlus free tier is 30 req/min; pace batches of 10 so we stay well under it.
@@ -78,34 +79,32 @@ const IdentityCheck: React.FC = () => {
     setRunning(false);
   }
 
+  const pct = remaining != null ? (processed + remaining > 0 ? (processed / (processed + remaining)) * 100 : 100) : done ? 100 : undefined;
+
   return (
-    <Layout>
-      <div className="page">
-        <h1>Identity check (token lists + GoPlus)</h1>
-        <p>
-          Resolves multi-source identity for tokens with no CoinGecko coin id — the ones that
-          otherwise block auto-verify. A token confirmed by ≥2 independent categories (a reputable
-          token list AND GoPlus positive signals) is treated as a real token, so its pair can leave
-          Needs Review without a CoinGecko listing. Confirming a token re-runs the verdict on its
-          pairs inline, so promotions happen as you go. Manual verdicts are untouched (R6). Paced
-          for the GoPlus free-tier 30/min limit, so a first full run is slow; re-runs only check
-          tokens not yet checked.
-        </p>
-
-        <button onClick={run} disabled={running} type="button">
-          {running ? "Running…" : done ? "Run again" : "Start identity check"}
-        </button>
-
-        <h3>
-          Checked: {processed}
-          {remaining !== null && <> · Remaining: {remaining}</>}
-          {done && <> · ✓ done</>}
-        </h3>
-        <p>
-          <strong>{confirmed}</strong> tokens identity-confirmed · <strong>{promoted}</strong> pairs
-          promoted to Auto-Verified
-        </p>
-      </div>
+    <Layout crumb="Identity check">
+      <PassRunnerLayout
+        step={2}
+        title="Identity check (token lists + GoPlus)"
+        pace="GoPlus 30/min"
+        description={<>
+          Resolves multi-source identity for tokens with no CoinGecko coin id — the ones that otherwise
+          block auto-verify. A token confirmed by ≥2 independent categories (a reputable token list AND
+          GoPlus positive signals) is treated as real, so its pair can leave Needs Review without a
+          CoinGecko listing. Confirming a token re-runs the verdict on its pairs inline. Manual verdicts
+          are untouched (R6). Re-runs only check tokens not yet checked.
+        </>}
+        running={running}
+        done={done}
+        onRun={run}
+        progressPct={pct}
+        stats={[
+          { label: "Checked", value: processed },
+          { label: "Confirmed", value: confirmed, tone: "pass" },
+          { label: "Promoted", value: promoted, tone: "pass" },
+          ...(remaining != null ? [{ label: "Remaining", value: remaining }] : []),
+        ]}
+      />
     </Layout>
   );
 };
