@@ -15,6 +15,7 @@ import PageHeader from "../../../components/ui/PageHeader";
 import StatusBadge from "../../../components/ui/StatusBadge";
 import prisma from '../../../lib/prisma';
 import { isVerifiedStatus } from "../../../lib/status";
+import { fetchTokenWebPresence, TokenWebPresence } from "../../../lib/tokenWebPresence";
 import { AssociatedPairProps, TokenProps } from "../../../types/props";
 import { TokenPairStatus } from "../../../types/types";
 
@@ -39,12 +40,16 @@ export const getServerSideProps: GetServerSideProps = async ({ params }) => {
     const similarTokens = await prisma.token.findMany({
         where: { symbol: token.symbol, NOT: { chain: token.chain } },
     })
-    return { props: { token, similarTokens } }
+    // Free decision-support enrichment (GeckoTerminal web/socials + Blockscout
+    // holders) — degrades to blank on failure, never blocks the page.
+    const web = await fetchTokenWebPresence(token.chain, token.contractAddress)
+    return { props: { token, similarTokens, web } }
 }
 
 type Props = {
     token: TokenProps;
     similarTokens: TokenProps[];
+    web: TokenWebPresence;
 }
 
 const usd = (n: number | null | undefined) => {
@@ -64,6 +69,7 @@ const ageStr = (ts: number | null) => {
     if (h < 24 * 90) return Math.round(h / 24) + "d";
     return Math.round(h / 720) + "mo";
 };
+const hostOf = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
 
 const KV: React.FC<{ k: React.ReactNode; v: React.ReactNode }> = ({ k, v }) => (
     <div className="kv-row"><span className="muted">{k}</span><span className="mono" style={{ textAlign: "right" }}>{v}</span></div>
@@ -172,6 +178,35 @@ const Token: React.FC<Props> = (props) => {
                             <TrustRow label="Age" tone="skip" value={ageStr(t.deploymentTimestamp)} />
                         </div>
                     </div>
+
+                    {(props.web.websites.length > 0 || props.web.twitter || props.web.telegram || props.web.discord || props.web.description || props.web.holders != null) && (
+                        <div className="card card-pad">
+                            <div className="row spread items-center" style={{ marginBottom: "var(--sp-3)" }}>
+                                <span className="eyebrow">Web presence</span>
+                                <span className="muted" style={{ fontSize: "var(--fs-xs)" }}>decision support · not a trust gate</span>
+                            </div>
+                            <div className="row gap-4 items-start wrap">
+                                {props.web.imageUrl ? (
+                                    // eslint-disable-next-line @next/next/no-img-element -- remote token logo from GeckoTerminal
+                                    <img src={props.web.imageUrl} alt="" width={40} height={40} style={{ borderRadius: 8, flex: "none" }} />
+                                ) : null}
+                                <div className="col gap-3" style={{ flex: 1, minWidth: 0 }}>
+                                    {props.web.description ? <p className="muted" style={{ fontSize: "var(--fs-sm)", margin: 0 }}>{props.web.description}</p> : null}
+                                    <div className="row gap-4 wrap" style={{ fontSize: "var(--fs-sm)" }}>
+                                        {props.web.websites.map((w, i) => <a key={`web_${i}`} href={w} target="_blank" rel="noreferrer">{hostOf(w)}</a>)}
+                                        {props.web.twitter ? <a href={props.web.twitter} target="_blank" rel="noreferrer">Twitter</a> : null}
+                                        {props.web.telegram ? <a href={props.web.telegram} target="_blank" rel="noreferrer">Telegram</a> : null}
+                                        {props.web.discord ? <a href={props.web.discord} target="_blank" rel="noreferrer">Discord</a> : null}
+                                        {props.web.websites.length === 0 && !props.web.twitter && !props.web.telegram && !props.web.discord ? <span className="muted">no links on GeckoTerminal</span> : null}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="kv-grid" style={{ marginTop: "var(--sp-3)" }}>
+                                <KV k="Holders (Blockscout)" v={props.web.holders != null ? num(props.web.holders) : "—"} />
+                                <KV k="Transfers" v={props.web.transfers != null ? num(props.web.transfers) : "—"} />
+                            </div>
+                        </div>
+                    )}
 
                     <div className="card card-pad">
                         <span className="eyebrow" style={{ display: "block", marginBottom: "var(--sp-1)" }}>Across its pools</span>
