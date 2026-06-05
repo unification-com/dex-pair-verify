@@ -5,16 +5,10 @@
 import "../lib/env";
 
 import { fetchGtDexes, NetworkDexes, verifySource } from "../lib/gtVerify";
-import { getSourceByIndex, gtNetworkFor, SourceEntry, sourceCount } from "../lib/sourceConfig";
+import { getSources, gtNetworkFor } from "../lib/sourceConfig";
 
 const run = async (): Promise<void> => {
-  const sources: SourceEntry[] = [];
-  for (let i = 0; i < sourceCount; i += 1) {
-    const s = getSourceByIndex(i);
-    if (s) {
-      sources.push(s);
-    }
-  }
+  const sources = await getSources();
 
   const dexesByNetwork: Record<string, NetworkDexes> = {};
   const distinctNetworks = Array.from(new Set(sources.map((s) => gtNetworkFor(s))));

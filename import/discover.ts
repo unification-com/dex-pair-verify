@@ -17,6 +17,7 @@ import "../lib/env";
 
 import { fetchGtDexes } from "../lib/gtVerify";
 import prisma from "../lib/prisma";
+import { getSources } from "../lib/sourceConfig";
 import {
   DISCOVERY_NETWORKS,
   discoveryKey,
@@ -32,7 +33,7 @@ const main = async (): Promise<void> => {
   const networkArgs = args.filter((a) => a !== "--all");
   const networks = networkArgs.length > 0 ? networkArgs : DISCOVERY_NETWORKS;
 
-  const supported = supportedGtKeys();
+  const supported = supportedGtKeys(await getSources());
 
   // Every existing candidate (any status) is "known" — Pending (already queued),
   // Enabled (already promoted) or Rejected (operator dismissed, D4). Keyed by the

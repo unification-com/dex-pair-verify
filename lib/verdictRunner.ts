@@ -159,7 +159,7 @@ export async function buildVerdictContext(
     intraChainImpostorLoser,
     tokenScamFlagged: pair.token0.isScamFlagged || pair.token1.isScamFlagged,
     pairFactoryAddress: pair.factoryAddress, // read on-chain by the factory-check pass (T2)
-    canonicalFactoryAddress: getCanonicalFactoryAddress(pair.chain, pair.dex),
+    canonicalFactoryAddress: await getCanonicalFactoryAddress(pair.chain, pair.dex),
   };
 
   const input: VerdictPairInput = {

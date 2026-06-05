@@ -1,6 +1,6 @@
 import {requireAdminApi} from "../../../lib/apiAuth";
 import {ingestPoolPage} from "../../../lib/ingest";
-import {getSourceByIndex, sourceCount} from "../../../lib/sourceConfig";
+import {getSources} from "../../../lib/sourceConfig";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -16,7 +16,9 @@ export default async function handler(
     const idx = Math.max(0, Number(req.body?.sourceIndex) || 0)
     const page = Math.max(1, Number(req.body?.page) || 1)
 
-    const source = getSourceByIndex(idx)
+    const sources = await getSources()
+    const sourceCount = sources.length
+    const source = sources[idx]
     if (!source) {
         return res.status(200).json({ success: true, data: { done: true } })
     }

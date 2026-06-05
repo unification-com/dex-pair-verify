@@ -12,7 +12,7 @@
 // fetch loops + DB writes live in import/discover.ts (mirrors gtVerify.ts ↔
 // verify_gt.ts).
 
-import { getSourceByIndex, gtDexFor, gtNetworkFor, sourceCount } from "./sourceConfig";
+import { gtDexFor, gtNetworkFor, SourceEntry } from "./sourceConfig";
 
 // A GT (network, dex) tuple as discovered — the candidate's identity until an
 // operator maps it onto internal chain/dex ids at promotion. A discovered
@@ -22,20 +22,14 @@ export type DiscoveredSource = { gtNetwork: string; gtDex: string };
 // `${gtNetwork}/${gtDex}` — the dedupe key for a discovered tuple.
 export const discoveryKey = (gtNetwork: string, gtDex: string): string => `${gtNetwork}/${gtDex}`;
 
-// The GT (network, dex) keys we already wire via lib/sources.js. Discovery never
-// re-surfaces these. Built from the live source config so it tracks edits, and
-// resolves each source's GT slugs (which can differ from our internal ids, e.g.
-// dex `bsc_pancakeswap_v3` → GT `pancakeswap-v3-bsc`).
-//
-// NOTE (T6.5): once lib/sources.js is retired into SupportedSource, fold the
-// migrated rows' GT keys in here too, or discovery will re-surface them.
-export function supportedGtKeys(): Set<string> {
+// The GT (network, dex) keys for the sources we already support — discovery never
+// re-surfaces these. Pass the live registry (await getSources()); each source's GT
+// slugs can differ from its internal ids (e.g. dex `bsc_pancakeswap_v3` → GT
+// `pancakeswap-v3-bsc`), which gtNetworkFor/gtDexFor resolve.
+export function supportedGtKeys(sources: SourceEntry[]): Set<string> {
   const keys = new Set<string>();
-  for (let i = 0; i < sourceCount; i += 1) {
-    const s = getSourceByIndex(i);
-    if (s) {
-      keys.add(discoveryKey(gtNetworkFor(s), gtDexFor(s)));
-    }
+  for (const s of sources) {
+    keys.add(discoveryKey(gtNetworkFor(s), gtDexFor(s)));
   }
   return keys;
 }

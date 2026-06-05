@@ -2,7 +2,8 @@ import {ApolloClient, gql, InMemoryCache} from "@apollo/client";
 
 import {requireAdminApi} from "../../../lib/apiAuth";
 import {chainInfo} from "../../../lib/chains"
-import {dataSources} from "../../../lib/sources"
+import {getSource} from "../../../lib/sourceConfig"
+import {applyUrlTemplate, keyEnvVarFor, SubgraphProvider} from "../../../lib/subgraphVerify"
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -96,21 +97,23 @@ export default async function handler(
     retData.dex = dex
     retData.addresses = addrStr
 
-    let poolsName = null
-    let url = null
-
-    for(let i = 0; i < dataSources.length; i += 1) {
-        const ds = dataSources[i]
-        if(chain === ds.chain && dex === ds.dex) {
-            poolsName = ds.graphql.poolsName
-            url = ds.graphql.url
-        }
-    }
-
-    if(!poolsName || !url) {
+    // Resolve the subgraph from the DB registry. poolsName comes from the schema
+    // family (univ2 → pairs, univ3 → pools); the URL is the {API_KEY} template with
+    // this provider's key substituted in (operator's own key, never persisted).
+    const source = await getSource(chain, dex)
+    if(!source?.subgraphUrlTemplate) {
         retData.error = `could not find subgraph info`
         return res.status(400).json(retData)
     }
+    const poolsName = source.subgraphSchemaFamily === "univ2" ? "pairs"
+        : source.subgraphSchemaFamily === "univ3" ? "pools" : null
+    if(!poolsName) {
+        retData.error = `price-test does not support the "${source.subgraphSchemaFamily}" schema family`
+        return res.status(400).json(retData)
+    }
+    const keyEnvVar = source.apiKeyEnvVar || keyEnvVarFor(source.subgraphProvider as SubgraphProvider)
+    const key = keyEnvVar ? process.env[keyEnvVar] ?? "" : ""
+    const url = applyUrlTemplate(source.subgraphUrlTemplate, key)
 
     const client = new ApolloClient({
         uri: url,

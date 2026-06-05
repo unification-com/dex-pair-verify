@@ -1,60 +1,36 @@
 // import/seed-sources.ts
-// Phase 4, T6.5 — migrate the current lib/sources.js registry into the
-// SupportedSource table (+ seed each one's Threshold row), giving exact parity
-// with what drives the pipeline today. Idempotent (upsert on chain_dex). Run with:
+// Phase 4, T6.5 — seed/restore the SupportedSource table from the code bootstrap
+// (lib/baselineSources.ts) + each source's Threshold row. Idempotent (upsert on
+// chain_dex). Run with:
 //   yarn seed-sources
 //
-// This is the migration step: it reads the live lib/sources.js (the current truth)
-// and templates each subgraph URL ({API_KEY} placeholder — the literal key is
-// never persisted) so the registry can move to the DB. NEW 4.D targets are NOT
-// seeded here — they're onboarded via /admin/sources once their chain plumbing
-// (lib/chains.ts RPC/CG platform) lands. After sourceConfig reads SupportedSource
-// (next step), lib/sources.js is deleted.
+// This is the recovery path: wipe the DB and re-run this to get the original
+// production sources back from code. The runtime pipeline reads the DB, so
+// operator-promoted sources (added via /admin/sources) live only in the DB and are
+// not re-created here — restore those from a DB backup or re-promote.
 
 import "../lib/env";
 
+import { BASELINE_SOURCES } from "../lib/baselineSources";
 import prisma from "../lib/prisma";
 import { thresholdSeedData } from "../lib/sourceConfig";
-import { dataSources } from "../lib/sources";
-import { detectProvider, SchemaFamily, toUrlTemplate } from "../lib/subgraphVerify";
 
 const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 
-// The graphql sub-shape we read off each raw lib/sources.js entry.
-type RawSource = {
-  chain: string;
-  dex: string;
-  gtNetwork?: string;
-  gtDex?: string;
-  canonicalFactoryAddress?: string;
-  onCoinGeckoTerminal?: boolean;
-  last_page?: number;
-  graphql: { poolsName: string; url: string };
-};
-
-// univ2 exposes a `pairs` collection, univ3 a `pools` one; anything else is custom.
-const familyFromPoolsName = (poolsName: string): SchemaFamily =>
-  poolsName === "pairs" ? "univ2" : poolsName === "pools" ? "univ3" : "custom";
-
 const main = async (): Promise<void> => {
-  const sources = dataSources as unknown as RawSource[];
   const now = nowSeconds();
-  console.log(`Migrating ${sources.length} lib/sources.js source(s) into SupportedSource…\n`);
+  console.log(`Seeding ${BASELINE_SOURCES.length} baseline source(s) into SupportedSource…\n`);
 
-  for (const s of sources) {
-    // toUrlTemplate rewrites the decentralised-gateway key segment to {API_KEY};
-    // self-hosted / hosted URLs (qomswap) pass through unchanged.
-    const { template } = toUrlTemplate(s.graphql.url);
-    const provider = detectProvider(s.graphql.url);
+  for (const s of BASELINE_SOURCES) {
     const data = {
-      subgraphUrlTemplate: template,
-      subgraphSchemaFamily: familyFromPoolsName(s.graphql.poolsName),
-      subgraphProvider: provider,
-      factoryAddress: s.canonicalFactoryAddress ?? "",
+      subgraphUrlTemplate: s.subgraphUrlTemplate,
+      subgraphSchemaFamily: s.schemaFamily,
+      subgraphProvider: s.subgraphProvider,
+      factoryAddress: s.factoryAddress,
       gtNetwork: s.gtNetwork ?? null,
       gtDex: s.gtDex ?? null,
-      onCoinGeckoTerminal: s.onCoinGeckoTerminal ?? true,
-      lastPage: s.last_page ?? 10,
+      onCoinGeckoTerminal: s.onCoinGeckoTerminal,
+      lastPage: s.lastPage,
       lastVerifiedAt: now,
     };
 
@@ -70,7 +46,7 @@ const main = async (): Promise<void> => {
       await prisma.threshold.create({ data: thresholdSeedData(s.chain, s.dex) });
     }
 
-    console.log(`  ✓ ${s.chain}/${s.dex}  (${data.subgraphProvider} · ${data.subgraphSchemaFamily}${data.onCoinGeckoTerminal ? "" : " · not-on-GT"})`);
+    console.log(`  ✓ ${s.chain}/${s.dex}  (${s.subgraphProvider} · ${s.schemaFamily}${s.onCoinGeckoTerminal ? "" : " · not-on-GT"})`);
   }
 
   const count = await prisma.supportedSource.count();

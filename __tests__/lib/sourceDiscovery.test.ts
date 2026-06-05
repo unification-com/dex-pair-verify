@@ -19,16 +19,21 @@ describe("discoveryKey", () => {
 });
 
 describe("supportedGtKeys", () => {
-  it("includes wired sources by their GT slugs (defaulting network/dex to our ids)", () => {
-    const keys = supportedGtKeys();
+  const registry = [
+    { chain: "eth", dex: "uniswap_v2" },
+    { chain: "polygon_pos", dex: "quickswap_v3" },
+    // internal dex bsc_pancakeswap_v3, but GT calls it pancakeswap-v3-bsc
+    { chain: "bsc", dex: "bsc_pancakeswap_v3", gtDex: "pancakeswap-v3-bsc" },
+  ];
+
+  it("builds keys by GT slug, defaulting network/dex to the internal ids", () => {
+    const keys = supportedGtKeys(registry);
     expect(keys.has("eth/uniswap_v2")).toBe(true);
-    expect(keys.has("eth/uniswap_v3")).toBe(true);
     expect(keys.has("polygon_pos/quickswap_v3")).toBe(true);
   });
 
   it("resolves the GT dex override, not the internal id", () => {
-    const keys = supportedGtKeys();
-    // bsc source's internal dex is bsc_pancakeswap_v3, but GT calls it pancakeswap-v3-bsc.
+    const keys = supportedGtKeys(registry);
     expect(keys.has("bsc/pancakeswap-v3-bsc")).toBe(true);
     expect(keys.has("bsc/bsc_pancakeswap_v3")).toBe(false);
   });

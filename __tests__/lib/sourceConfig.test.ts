@@ -1,34 +1,34 @@
-// Tests for lib/sourceConfig.ts — the typed accessors over lib/sources.js.
+// Tests for the synchronous, code-backed parts of lib/sourceConfig.ts +
+// lib/baselineSources.ts. The DB-backed accessors (getSources / getSource /
+// getCanonicalFactoryAddress) are exercised by the integration suite, since they
+// read SupportedSource; here we cover the bootstrap registry and threshold seeding.
 
 import { describe, expect, it } from "vitest";
 
-import { getCanonicalFactoryAddress, getSourceByIndex, sourceCount, thresholdSeedData } from "../../lib/sourceConfig";
+import { BASELINE_SOURCES } from "../../lib/baselineSources";
+import { thresholdSeedData } from "../../lib/sourceConfig";
 
-describe("getCanonicalFactoryAddress", () => {
-  it("returns the verified canonical factory for a known source", () => {
-    expect(getCanonicalFactoryAddress("eth", "uniswap_v3")).toBe("0x1F98431c8aD98523631AE4a59f267346ea31F984");
-    expect(getCanonicalFactoryAddress("bsc", "bsc_pancakeswap_v3")).toBe("0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865");
+describe("BASELINE_SOURCES (the code bootstrap that re-seeds a wiped DB)", () => {
+  it("carries the original production sources with their factories", () => {
+    const byKey = new Map(BASELINE_SOURCES.map((s) => [`${s.chain}/${s.dex}`, s]));
+    expect(byKey.get("eth/uniswap_v3")?.factoryAddress).toBe("0x1F98431c8aD98523631AE4a59f267346ea31F984");
+    expect(byKey.get("bsc/bsc_pancakeswap_v3")?.factoryAddress).toBe("0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865");
+    expect(byKey.get("bsc/bsc_pancakeswap_v3")?.gtDex).toBe("pancakeswap-v3-bsc");
   });
 
-  it("returns null for the operator-TODO qomswap factory (empty string)", () => {
-    expect(getCanonicalFactoryAddress("qom", "qomswap_v2")).toBeNull();
+  it("templates every decentralised URL with {API_KEY} — never a literal key", () => {
+    for (const s of BASELINE_SOURCES) {
+      if (s.subgraphProvider === "graph-decentralized") {
+        expect(s.subgraphUrlTemplate).toContain("{API_KEY}");
+      }
+    }
   });
 
-  it("returns null for an unknown source", () => {
-    expect(getCanonicalFactoryAddress("eth", "not-a-dex")).toBeNull();
-  });
-});
-
-describe("source indexing", () => {
-  it("reports a positive source count and indexes in range", () => {
-    expect(sourceCount).toBeGreaterThan(0);
-    const first = getSourceByIndex(0);
-    expect(first?.chain).toBeTruthy();
-    expect(first?.dex).toBeTruthy();
-  });
-
-  it("returns undefined for an out-of-range index", () => {
-    expect(getSourceByIndex(9999)).toBeUndefined();
+  it("keeps qomswap parked: self-hosted, off GeckoTerminal, factory uncurated", () => {
+    const qom = BASELINE_SOURCES.find((s) => s.chain === "qom");
+    expect(qom?.subgraphProvider).toBe("self-hosted");
+    expect(qom?.onCoinGeckoTerminal).toBe(false);
+    expect(qom?.factoryAddress).toBe("");
   });
 });
 

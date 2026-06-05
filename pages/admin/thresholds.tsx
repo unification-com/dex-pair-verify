@@ -5,7 +5,7 @@ import { NotificationManager } from "react-notifications";
 import Layout from "../../components/shell/Layout";
 import PageHeader from "../../components/ui/PageHeader";
 import prisma from "../../lib/prisma";
-import { getSourceByIndex, sourceCount, thresholdSeedData } from "../../lib/sourceConfig";
+import { getSources, thresholdSeedData } from "../../lib/sourceConfig";
 
 type ThresholdRow = {
   id: string;
@@ -40,11 +40,8 @@ const NUM_FIELDS: { key: keyof ThresholdRow; label: string; step?: string }[] = 
 export const getServerSideProps: GetServerSideProps = async () => {
   // Ensure a threshold row exists for every configured source so the operator
   // can tune them all, even before any ingest has created rows lazily.
-  for (let i = 0; i < sourceCount; i += 1) {
-    const s = getSourceByIndex(i);
-    if (!s) {
-      continue;
-    }
+  const sources = await getSources();
+  for (const s of sources) {
     const existing = await prisma.threshold.findFirst({ where: { chain: s.chain, dex: s.dex } });
     if (!existing) {
       await prisma.threshold.create({ data: thresholdSeedData(s.chain, s.dex) });

@@ -3,13 +3,15 @@
 // Populates the DuplicateTokenSymbols / DuplicatePairs tables surfaced on the
 // token + pair detail pages. Run with: yarn find-duplicates
 
+import "../lib/env";
+
 import {
   getAllPairsForChainDex,
   getAllTokenSymbolsForChain,
   getOrAddDuplicatePair,
   getOrAddDuplicateTokenSymbol,
 } from "./db";
-import { dataSources } from "../lib/sources";
+import { getSources } from "../lib/sourceConfig";
 
 const processTokensForChain = async (chain: string): Promise<number> => {
   console.log(chain);
@@ -70,8 +72,9 @@ const run = async (): Promise<string> => {
     pairs: {},
   };
 
+  const sources = await getSources();
   const chains: string[] = [];
-  for (const poolMeta of dataSources) {
+  for (const poolMeta of sources) {
     if (!chains.includes(poolMeta.chain)) {
       chains.push(poolMeta.chain);
     }
@@ -82,7 +85,7 @@ const run = async (): Promise<string> => {
   }
 
   console.log("Pairs");
-  for (const poolMeta of dataSources) {
+  for (const poolMeta of sources) {
     const { chain, dex } = poolMeta;
     if (duplicates.pairs[chain] === undefined) {
       duplicates.pairs[chain] = {};

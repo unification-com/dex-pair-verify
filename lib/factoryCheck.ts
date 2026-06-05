@@ -71,7 +71,7 @@ export async function runFactoryCheckForPair(
     data: { factoryAddress: factory, factoryCheckedAt: now },
   });
 
-  const canonical = getCanonicalFactoryAddress(pair.chain, pair.dex);
+  const canonical = await getCanonicalFactoryAddress(pair.chain, pair.dex);
   const mismatch = !!factory && !!canonical && !addrEq(factory, canonical);
 
   // Only the case where we actually learned a factory can change the verdict.

@@ -2,6 +2,7 @@ import { utils as web3Utils } from "web3";
 
 import { requireAdminApi } from "../../../lib/apiAuth";
 import prisma from "../../../lib/prisma";
+import { getSources } from "../../../lib/sourceConfig";
 import { detectProvider } from "../../../lib/subgraphVerify";
 import { CandidateStatus } from "../../../types/types";
 
@@ -99,6 +100,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         where: { id: candidateId },
         data: { status: CandidateStatus.Enabled },
       });
+
+      // Refresh the in-process source cache so the pipeline picks up the new source
+      // without a restart (T6.5).
+      await getSources(true);
 
       return res.status(200).json({ success: true, data: source });
     }

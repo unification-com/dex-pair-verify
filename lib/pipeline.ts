@@ -14,7 +14,7 @@ import {
   tokensToRescore,
   tokensToScamCheck,
 } from "./scamCheck";
-import { getSourceByIndex, gtDexFor, gtNetworkFor, sourceCount } from "./sourceConfig";
+import { getSources, gtDexFor, gtNetworkFor } from "./sourceConfig";
 import { runVerdictForPair } from "./verdictRunner";
 
 export type Logger = (msg: string) => void;
@@ -65,9 +65,9 @@ export async function ingestAll(opts: { log?: Logger } = {}): Promise<IngestSumm
   const tallies: Record<string, number> = {};
   let pairs = 0;
 
-  for (let i = 0; i < sourceCount; i += 1) {
-    const s = getSourceByIndex(i);
-    if (!s || s.onCoinGeckoTerminal === false) {
+  const sources = await getSources();
+  for (const s of sources) {
+    if (s.onCoinGeckoTerminal === false) {
       continue;
     }
     const lastPage = s.last_page ?? 10;
