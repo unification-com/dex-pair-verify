@@ -65,10 +65,19 @@ const num = (n: number | null | undefined) =>
     n == null ? "—" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: 2 }).format(n);
 const ageStr = (ts: number | null) => {
     if (!ts) return "unknown";
-    const h = (Date.now() / 1000 - ts) / 3600;
-    if (h < 24) return Math.round(h) + "h";
-    if (h < 24 * 90) return Math.round(h / 24) + "d";
-    return Math.round(h / 720) + "mo";
+    const days = Math.max(0, Date.now() / 1000 - ts) / 86400;
+    if (days < 1) return Math.max(1, Math.round(days * 24)) + "h";          // < 1 day → hours
+    if (days < 7) return Math.round(days) + "d";                            // < 1 week → days
+    if (days < 30.44) {                                                     // < 1 month → weeks + days
+        const w = Math.floor(days / 7);
+        const d = Math.round(days - w * 7);
+        return d > 0 ? `${w}w ${d}d` : `${w}w`;
+    }
+    const months = Math.floor(days / 30.44);
+    if (months < 12) return months + "mo";                                  // 1–12 months → months
+    const y = Math.floor(months / 12);                                      // > 12 months → years + months
+    const mo = months - y * 12;
+    return mo > 0 ? `${y}y ${mo}mo` : `${y}y`;
 };
 const hostOf = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
 
@@ -226,10 +235,14 @@ const Token: React.FC<Props> = (props) => {
                     {t.scamCheckedAt > 0 && t.goPlusData && (
                         <details className="card raw">
                             <summary>GoPlus security signals</summary>
-                            <div className="kv-grid">
+                            <div className="gp-grid">
                                 {Object.entries(t.goPlusData)
                                     .filter(([, v]) => typeof v === "string" || typeof v === "number")
-                                    .map(([k, v]) => <KV key={`gp_${k}`} k={k} v={String(v)} />)}
+                                    .map(([k, v]) => (
+                                        <div key={`gp_${k}`} className="gp-row">
+                                            <span className="muted">{k}:</span> <span className="mono">{String(v)}</span>
+                                        </div>
+                                    ))}
                             </div>
                         </details>
                     )}
@@ -288,6 +301,8 @@ const Token: React.FC<Props> = (props) => {
                 .trust-sub { display: flex; align-items: center; gap: var(--sp-3); padding: 2px 0 2px var(--sp-6); font-size: var(--fs-xs); }
                 .raw { padding: var(--sp-4) var(--sp-5); }
                 .raw > summary { cursor: pointer; font-weight: 600; font-size: var(--fs-sm); color: var(--text-1); }
+                .gp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px var(--sp-7); padding-top: var(--sp-3); }
+                .gp-row { font-size: var(--fs-xs); padding: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                 @media (max-width: 1024px) { .tok-grid { grid-template-columns: 1fr; } .tok-rail { position: static; } }
             `}</style>
         </Layout>

@@ -137,6 +137,39 @@ const Help: React.FC<Props> = ({ config }) => {
         </section>
 
         <section className="card card-pad">
+          <h3>GoPlus security signals</h3>
+          <p className="muted">
+            The Scam scan calls GoPlus&apos;s token-security API and stores the raw response on the token (shown
+            on the token page). Only <strong>strong, direct</strong> evidence that a holder can&apos;t safely sell
+            <em> flags</em> a token — demoting any Auto-Verified pair using it to Needs Review (never auto-rejected;
+            you decide). Everything else is informational.
+          </p>
+          <div className="gp-block">
+            <span className="eyebrow">Flags the token → Needs Review</span>
+            <ul className="tight">
+              <li><span className="mono">is_honeypot</span> — buyable but not sellable. The strongest signal.</li>
+              <li><span className="mono">cannot_sell_all</span> — a holder can&apos;t sell their whole balance.</li>
+              <li><span className="mono">selfdestruct</span> — the contract can self-destruct.</li>
+              <li><span className="mono">buy_tax</span> / <span className="mono">sell_tax</span> — transfer taxes; above <strong>10%</strong> counts as a scam signal.</li>
+            </ul>
+          </div>
+          <div className="gp-block">
+            <span className="eyebrow">Deliberately ignored (false-positive on legit tokens)</span>
+            <ul className="tight">
+              <li><span className="mono">hidden_owner</span>, <span className="mono">honeypot_with_same_creator</span>, <span className="mono">mintable</span>, <span className="mono">pausable</span> — normal for legitimate upgradeable / governance / launchpad contracts; they wrongly demoted real tokens (RSR, BAND, OCEAN…), so they don&apos;t flag here.</li>
+            </ul>
+          </div>
+          <div className="gp-block">
+            <span className="eyebrow">Informational / positive (not a scam flag)</span>
+            <ul className="tight">
+              <li><span className="mono">holder_count</span> — number of holders (also in the web-presence panel).</li>
+              <li><span className="mono">is_open_source</span> — source verified. With a healthy holder count or <span className="mono">trust_list</span> membership it feeds the <em>identity</em> check (a positive legitimacy signal), not the scam check.</li>
+              <li><span className="mono">is_proxy</span>, <span className="mono">is_in_dex</span>, <span className="mono">owner_address</span>, the tax values — context for your manual call.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section className="card card-pad">
           <h3>Verdict reason codes</h3>
           <div className="reason-list">
             {Object.entries(REASON_LABEL).map(([code, label]) => (
@@ -151,6 +184,8 @@ const Help: React.FC<Props> = ({ config }) => {
         h3 { font-size: var(--fs-lg); margin-bottom: var(--sp-3); }
         .formula { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-md); padding: var(--sp-3) var(--sp-4); margin: var(--sp-3) 0; color: var(--accent-text); }
         ul.tight { margin: var(--sp-3) 0 0; padding-left: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-3); color: var(--text-1); font-size: var(--fs-sm); }
+        .gp-block { margin-top: var(--sp-4); }
+        .gp-block .eyebrow { display: block; }
         .status-list { display: flex; flex-direction: column; gap: var(--sp-3); }
         .status-row { display: flex; align-items: center; gap: var(--sp-4); font-size: var(--fs-sm); padding: var(--sp-2) 0; }
         .fgroup { margin-top: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); }

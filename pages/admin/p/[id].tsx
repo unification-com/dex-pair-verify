@@ -23,7 +23,7 @@ import PageHeader from "../../../components/ui/PageHeader";
 import StatusBadge from "../../../components/ui/StatusBadge";
 import { deriveFences, UiFence } from "../../../lib/fences";
 import prisma from '../../../lib/prisma';
-import { isVerifiedStatus } from "../../../lib/status";
+import { isVerifiedStatus, VERIFIED_STATUSES } from "../../../lib/status";
 import { REASON_LABEL } from "../../../lib/statusMeta";
 import { evaluatePair } from "../../../lib/verdict";
 import { buildVerdictContext, PairWithTokens } from "../../../lib/verdictRunner";
@@ -73,13 +73,32 @@ export const getServerSideProps: GetServerSideProps = async ({ params, query }) 
       : context.pairFactoryAddress.toLowerCase() === context.canonicalFactoryAddress.toLowerCase() ? "canonical" : "mismatch";
   const id0 = !!(input.token0.coingeckoCoinId || input.token0.identityConfirmed);
   const id1 = !!(input.token1.coingeckoCoinId || input.token1.identityConfirmed);
+
+  // Sibling badge: distinct (chain, dex) where the SAME pair is verified elsewhere
+  // — matched by canonical key (rigorous, cgId-based) OR the same symbol pair (what
+  // the operator sees in "Similar pairs"; cross-chain bridged variants have
+  // different cgIds so they only match by symbol). Union, deduped, excluding this
+  // pair, verified-only — so a rejected clone (e.g. a thin xDai listing) doesn't count.
+  const sibs = await prisma.pair.findMany({
+    where: {
+      id: { not: full.id },
+      status: { in: [...VERIFIED_STATUSES] },
+      OR: [
+        { pair: { in: [`${full.token0.symbol}-${full.token1.symbol}`, `${full.token1.symbol}-${full.token0.symbol}`] } },
+        ...(context.canonicalKey ? [{ canonicalKey: context.canonicalKey }] : []),
+      ],
+    },
+    select: { chain: true, dex: true },
+  });
+  const verifiedSiblings = new Set(sibs.map((s) => `${s.chain}:${s.dex}`)).size;
+
   const signals: TrustSignals = {
     identityConfirmed: id0 && id1,
     canonical,
     factory,
     scamFlagged: context.tokenScamFlagged,
     scamReason: full.token0.isScamFlagged ? full.token0.scamReason : full.token1.isScamFlagged ? full.token1.scamReason : null,
-    verifiedOnOtherDexs: context.hasVerifiedSibling ? 1 : 0,
+    verifiedOnOtherDexs: verifiedSiblings,
   };
 
   // Display row (shaped + serialisable, as before) + the secondary tables.
