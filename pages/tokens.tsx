@@ -87,7 +87,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     const [tokens, totalCount, statusGroups, chainGroups] = await Promise.all([
         prisma.token.findMany({
             where,
-            orderBy: [{ symbol: 'asc' }],
+            orderBy,
             skip: (page - 1) * PAGE_SIZE,
             take: PAGE_SIZE,
         }),

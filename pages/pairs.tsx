@@ -120,7 +120,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
                 token1: { select: { symbol: true, id: true, status: true } },
                 _count: { select: { duplicatePairs: true } },
             },
-            orderBy: [{ reserveNativeCurrency: 'desc' }],
+            orderBy,
             skip: (page - 1) * PAGE_SIZE,
             take: PAGE_SIZE,
         }),
