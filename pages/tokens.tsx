@@ -14,7 +14,6 @@ import { usd, num } from "../lib/format";
 import { isOperatorCtx } from "../lib/operatorGate";
 import prisma from '../lib/prisma';
 import { VERIFIED_STATUSES } from "../lib/status";
-import { TokenProps } from "../types/props";
 import { TokenPairStatus } from "../types/types";
 
 const PAGE_SIZE = 50
@@ -29,48 +28,77 @@ const TOKEN_TABS: { status: TokenPairStatus; label: string }[] = [
 const cleanParam = (v: unknown): string | null =>
     typeof v === "string" && v !== "" && v !== "undefined" ? v : null;
 
-// Whitelisted sortable columns → a prisma orderBy (so ?sort= can't inject a field)
-// + the normalised key/dir that drives the header indicator. Sorting runs in the DB
-// across the WHOLE result set, then we paginate. Default is symbol ascending.
-function tokenSort(sort: string | null, dir: string | null) {
-  const d: "asc" | "desc" = dir === "asc" ? "asc" : "desc";
-  switch (sort) {
-    case "symbol": return { orderBy: [{ symbol: d }], sortKey: "symbol", sortDir: d };
-    case "volume24hUsd": return { orderBy: [{ volume24hUsd: d }], sortKey: "volume24hUsd", sortDir: d };
-    case "txCount": return { orderBy: [{ txCount: d }], sortKey: "txCount", sortDir: d };
-    default: return { orderBy: [{ symbol: "asc" as const }], sortKey: "symbol", sortDir: "asc" };
-  }
+// A token list row: identity fields + pool-derived aggregates. Token-level market
+// data (volume / market cap / tx count) isn't captured by ingest — it only writes
+// pair-level stats — so the only meaningful sortable numbers a token has come from
+// summing its pools: total liquidity and pool count.
+type ListToken = {
+    id: string; symbol: string; name: string; chain: string;
+    coingeckoCoinId: string | null; status: TokenPairStatus;
+    isScamFlagged: boolean; scamReason: string | null;
+    liquidityUsd: number; poolCount: number;
 }
+const tokenSelect = { id: true, symbol: true, name: true, chain: true, coingeckoCoinId: true, status: true, isScamFlagged: true, scamReason: true }
+
+// Sortable columns + the normalised key/dir that drives the header indicator. The
+// sort runs in-memory across the WHOLE filtered set (the aggregates are computed,
+// not DB columns), then we paginate — so it spans the dataset, not just the page.
+const TOKEN_SORT_KEYS = ["symbol", "liquidityUsd", "poolCount"]
+function normalizeTokenSort(sort: string | null, dir: string | null): { sortKey: string; sortDir: "asc" | "desc" } {
+    const sortKey = sort && TOKEN_SORT_KEYS.includes(sort) ? sort : "liquidityUsd"
+    const sortDir: "asc" | "desc" = dir === "asc" ? "asc" : dir === "desc" ? "desc" : sortKey === "symbol" ? "asc" : "desc"
+    return { sortKey, sortDir }
+}
+function compareTokens(a: ListToken, b: ListToken, key: string, dir: "asc" | "desc"): number {
+    let r = 0
+    if (key === "symbol") r = a.symbol.localeCompare(b.symbol)
+    else if (key === "poolCount") r = a.poolCount - b.poolCount
+    else r = a.liquidityUsd - b.liquidityUsd
+    return dir === "asc" ? r : -r
+}
+
+// Sum pool liquidity + pool count per token across BOTH sides of every pair.
+async function tokenAggregates(): Promise<{ liq: Map<string, number>; cnt: Map<string, number> }> {
+    const [g0, g1] = await Promise.all([
+        prisma.pair.groupBy({ by: ['token0Id'], _sum: { reserveUsd: true }, _count: { _all: true } }),
+        prisma.pair.groupBy({ by: ['token1Id'], _sum: { reserveUsd: true }, _count: { _all: true } }),
+    ])
+    const liq = new Map<string, number>(); const cnt = new Map<string, number>()
+    for (const g of g0) { liq.set(g.token0Id, (liq.get(g.token0Id) ?? 0) + (g._sum.reserveUsd ?? 0)); cnt.set(g.token0Id, (cnt.get(g.token0Id) ?? 0) + g._count._all) }
+    for (const g of g1) { liq.set(g.token1Id, (liq.get(g.token1Id) ?? 0) + (g._sum.reserveUsd ?? 0)); cnt.set(g.token1Id, (cnt.get(g.token1Id) ?? 0) + g._count._all) }
+    return { liq, cnt }
+}
+
+type RawToken = Omit<ListToken, "liquidityUsd" | "poolCount">
+const enrich = (rows: RawToken[], liq: Map<string, number>, cnt: Map<string, number>): ListToken[] =>
+    rows.map((t) => ({ ...t, liquidityUsd: liq.get(t.id) ?? 0, poolCount: cnt.get(t.id) ?? 0 }))
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const operator = await isOperatorCtx(ctx);
   const { query } = ctx;
   const chain = cleanParam(query?.chain)
   const page = Math.max(1, Number(query?.page || 1))
-  const { orderBy, sortKey, sortDir } = tokenSort(cleanParam(query?.sort), cleanParam(query?.dir))
+  const { sortKey, sortDir } = normalizeTokenSort(cleanParam(query?.sort), cleanParam(query?.dir))
+  const paginate = (all: ListToken[]) => all.slice((page - 1) * PAGE_SIZE, (page - 1) * PAGE_SIZE + PAGE_SIZE)
 
   // Public visitors get a read-only listing of VERIFIED tokens only.
   if (!operator) {
     const where = { status: { in: [...VERIFIED_STATUSES] }, ...(chain ? { chain } : {}) }
-    const [tokens, totalCount, chainGroups] = await Promise.all([
-      prisma.token.findMany({
-        where,
-        orderBy,
-        skip: (page - 1) * PAGE_SIZE,
-        take: PAGE_SIZE,
-      }),
-      prisma.token.count({ where }),
+    const [rows, agg, chainGroups] = await Promise.all([
+      prisma.token.findMany({ where, select: tokenSelect }),
+      tokenAggregates(),
       prisma.token.groupBy({ by: ['chain'], where: { status: { in: [...VERIFIED_STATUSES] } }, _count: { _all: true } }),
     ])
+    const all = enrich(rows as RawToken[], agg.liq, agg.cnt).sort((a, b) => compareTokens(a, b, sortKey, sortDir))
     const chains = Array.from(new Set(chainGroups.map((g) => g.chain))).sort()
     return {
       props: {
         isOperator: false,
-        tokens,
+        tokens: paginate(all),
         chain: chain ?? "",
         page,
-        totalPages: Math.max(1, Math.ceil(totalCount / PAGE_SIZE)),
-        totalCount,
+        totalPages: Math.max(1, Math.ceil(all.length / PAGE_SIZE)),
+        totalCount: all.length,
         chains,
         sort: sortKey,
         dir: sortDir,
@@ -79,22 +107,17 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   }
 
     const qStatus = String(query?.status || TokenPairStatus.Unverified) as TokenPairStatus
-
     const scope: Record<string, string> = {}
     if (chain) scope.chain = chain
     const where = { ...scope, status: qStatus }
 
-    const [tokens, totalCount, statusGroups, chainGroups] = await Promise.all([
-        prisma.token.findMany({
-            where,
-            orderBy,
-            skip: (page - 1) * PAGE_SIZE,
-            take: PAGE_SIZE,
-        }),
-        prisma.token.count({ where }),
+    const [rows, agg, statusGroups, chainGroups] = await Promise.all([
+        prisma.token.findMany({ where, select: tokenSelect }),
+        tokenAggregates(),
         prisma.token.groupBy({ by: ['status'], where: scope, _count: { _all: true } }),
         prisma.token.groupBy({ by: ['chain'], _count: { _all: true } }),
     ]);
+    const all = enrich(rows as RawToken[], agg.liq, agg.cnt).sort((a, b) => compareTokens(a, b, sortKey, sortDir))
 
     const statusCounts: Record<string, number> = {}
     for (const g of statusGroups) statusCounts[g.status] = g._count._all
@@ -103,12 +126,12 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     return {
         props: {
             isOperator: true,
-            tokens,
+            tokens: paginate(all),
             chain: chain ?? "",
             status: qStatus,
             page,
-            totalPages: Math.max(1, Math.ceil(totalCount / PAGE_SIZE)),
-            totalCount,
+            totalPages: Math.max(1, Math.ceil(all.length / PAGE_SIZE)),
+            totalCount: all.length,
             statusCounts,
             chains,
             sort: sortKey,
@@ -119,7 +142,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
 
 type OperatorProps = {
     isOperator: true,
-    tokens: TokenProps[],
+    tokens: ListToken[],
     chain: string,
     status: TokenPairStatus,
     page: number,
@@ -132,7 +155,7 @@ type OperatorProps = {
 }
 type PublicProps = {
     isOperator: false,
-    tokens: TokenProps[],
+    tokens: ListToken[],
     chain: string,
     page: number,
     totalPages: number,
@@ -143,9 +166,10 @@ type PublicProps = {
 }
 type Props = OperatorProps | PublicProps;
 
-// Token columns shared by both views; identity badge + market columns are public
-// market facts (no trust internals).
-const baseTokenCols = (): Column<TokenProps>[] => [
+// Token columns shared by both views. Liquidity + Pools are summed from the
+// token's pairs (token-level market data isn't ingested), so they're the only
+// numbers that actually vary — and the only useful things to sort by.
+const baseTokenCols = (): Column<ListToken>[] => [
     {
         key: "symbol", label: "Token", sortable: true, render: (t) => (
             <div style={{ display: "flex", flexDirection: "column" }}>
@@ -159,8 +183,8 @@ const baseTokenCols = (): Column<TokenProps>[] => [
         key: "identity", label: "Identity", render: (t) =>
             t.coingeckoCoinId ? <span className="badge badge-pass badge-sm">CoinGecko</span> : <span className="muted">—</span>,
     },
-    { key: "volume24hUsd", label: "24h Vol", num: true, sortable: true, render: (t) => usd(t.volume24hUsd) },
-    { key: "txCount", label: "Tx", num: true, sortable: true, render: (t) => num(t.txCount) },
+    { key: "liquidityUsd", label: "Liquidity", num: true, sortable: true, render: (t) => usd(t.liquidityUsd) },
+    { key: "poolCount", label: "Pools", num: true, sortable: true, render: (t) => num(t.poolCount) },
     { key: "status", label: "Status", render: (t) => <StatusBadge status={t.status} size="sm" /> },
 ];
 
@@ -243,11 +267,11 @@ const OperatorTokens: React.FC<OperatorProps> = (props) => {
         ? props.tokens.filter((t) => `${t.symbol} ${t.name}`.toLowerCase().includes(f))
         : props.tokens
 
-    // The operator view inserts a Scam column before the market columns.
-    const cols: Column<TokenProps>[] = [...baseTokenCols()]
+    // The operator view inserts a Scam column before the aggregate columns.
+    const cols: Column<ListToken>[] = [...baseTokenCols()]
     cols.splice(3, 0, {
         key: "scam", label: "Scam", render: (t) =>
-            t.isScamFlagged ? <span className="badge badge-fail badge-sm" title={t.scamReason}>flagged</span> : <span className="muted">clear</span>,
+            t.isScamFlagged ? <span className="badge badge-fail badge-sm" title={t.scamReason ?? undefined}>flagged</span> : <span className="muted">clear</span>,
     })
 
     return (
