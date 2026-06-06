@@ -1,8 +1,10 @@
 // Shared export builder (A.6). One implementation of the export shape, reused by
-// the session-gated GitHub-upload endpoint (pages/api/ooo/export.ts) and the
-// bearer-token API endpoint (pages/api/ooo/export/[chain]/[dex].ts) so the two paths
-// can never drift. Only verified pairs (operator-confirmed OR engine-auto-
-// verified) are ever emitted — see VERIFIED_STATUSES.
+// the session-gated GitHub-upload endpoint (pages/api/ooo/v1/export.ts) and the
+// bearer-token API endpoint (pages/api/ooo/v1/export/[chain]/[dex].ts) so the two
+// paths can never drift. The public API is versioned under /api/ooo/v1/* so a
+// future breaking change can ship as /v2 without breaking older go-ooo clients.
+// Only verified pairs (operator-confirmed OR engine-auto-verified) are ever
+// emitted — see VERIFIED_STATUSES.
 
 import { Prisma } from "@prisma/client";
 
@@ -216,7 +218,7 @@ export async function buildExportManifestV3(opts: { now?: number } = {}): Promis
       rpcUrl: ci?.rpc ?? null,
       blocksPerMin: ci?.blocksPerMin ?? null,
       pairCount: countByKey.get(key) ?? 0,
-      exportUrl: `/api/ooo/export/${s.chain}/${s.dex}`,
+      exportUrl: `/api/ooo/v1/export/${s.chain}/${s.dex}`,
       lastUpdated: modifiedAt.get(key) ?? 0,
       lastVerifiedAt: s.lastVerifiedAt,
     };

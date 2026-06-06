@@ -29,11 +29,25 @@ const TOKEN_TABS: { status: TokenPairStatus; label: string }[] = [
 const cleanParam = (v: unknown): string | null =>
     typeof v === "string" && v !== "" && v !== "undefined" ? v : null;
 
+// Whitelisted sortable columns → a prisma orderBy (so ?sort= can't inject a field)
+// + the normalised key/dir that drives the header indicator. Sorting runs in the DB
+// across the WHOLE result set, then we paginate. Default is symbol ascending.
+function tokenSort(sort: string | null, dir: string | null) {
+  const d: "asc" | "desc" = dir === "asc" ? "asc" : "desc";
+  switch (sort) {
+    case "symbol": return { orderBy: [{ symbol: d }], sortKey: "symbol", sortDir: d };
+    case "volume24hUsd": return { orderBy: [{ volume24hUsd: d }], sortKey: "volume24hUsd", sortDir: d };
+    case "txCount": return { orderBy: [{ txCount: d }], sortKey: "txCount", sortDir: d };
+    default: return { orderBy: [{ symbol: "asc" as const }], sortKey: "symbol", sortDir: "asc" };
+  }
+}
+
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const operator = await isOperatorCtx(ctx);
   const { query } = ctx;
   const chain = cleanParam(query?.chain)
   const page = Math.max(1, Number(query?.page || 1))
+  const { orderBy, sortKey, sortDir } = tokenSort(cleanParam(query?.sort), cleanParam(query?.dir))
 
   // Public visitors get a read-only listing of VERIFIED tokens only.
   if (!operator) {
@@ -41,7 +55,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     const [tokens, totalCount, chainGroups] = await Promise.all([
       prisma.token.findMany({
         where,
-        orderBy: [{ symbol: 'asc' }],
+        orderBy,
         skip: (page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
       }),
@@ -58,6 +72,8 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
         totalPages: Math.max(1, Math.ceil(totalCount / PAGE_SIZE)),
         totalCount,
         chains,
+        sort: sortKey,
+        dir: sortDir,
       },
     }
   }
@@ -95,6 +111,8 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
             totalCount,
             statusCounts,
             chains,
+            sort: sortKey,
+            dir: sortDir,
         },
     };
 }
@@ -109,6 +127,8 @@ type OperatorProps = {
     totalCount: number,
     statusCounts: Record<string, number>,
     chains: string[],
+    sort: string,
+    dir: string,
 }
 type PublicProps = {
     isOperator: false,
@@ -118,6 +138,8 @@ type PublicProps = {
     totalPages: number,
     totalCount: number,
     chains: string[],
+    sort: string,
+    dir: string,
 }
 type Props = OperatorProps | PublicProps;
 
@@ -146,10 +168,13 @@ const PublicTokens: React.FC<PublicProps> = (props) => {
     const router = useRouter()
     const [filter, setFilter] = useState("")
 
-    const hrefWith = (over: Partial<{ chain: string; page: number }>): string => {
+    const hrefWith = (over: Partial<{ chain: string; page: number; sort: string; dir: string }>): string => {
         const qs = new URLSearchParams()
         const chain = over.chain ?? props.chain
+        const sort = over.sort ?? props.sort
+        const dir = over.dir ?? props.dir
         if (chain) qs.set("chain", chain)
+        if (sort) { qs.set("sort", sort); if (dir) qs.set("dir", dir) }
         if (over.page && over.page > 1) qs.set("page", String(over.page))
         const s = qs.toString()
         return s ? `/tokens?${s}` : "/tokens"
@@ -180,6 +205,8 @@ const PublicTokens: React.FC<PublicProps> = (props) => {
                 data={visible}
                 rowKey={(t) => t.id}
                 onRowClick={(t) => router.push(`/t/${t.id}`)}
+                serverSort={props.sort ? { key: props.sort, dir: props.dir === "asc" ? "asc" : "desc" } : null}
+                onSortChange={(key, d) => router.push(hrefWith({ sort: key, dir: d, page: 1 }))}
                 empty="No verified tokens in this view."
             />
 
@@ -199,11 +226,14 @@ const OperatorTokens: React.FC<OperatorProps> = (props) => {
     const router = useRouter()
     const [filter, setFilter] = useState("")
 
-    const hrefWith = (over: Partial<{ status: string; chain: string; page: number }>): string => {
+    const hrefWith = (over: Partial<{ status: string; chain: string; page: number; sort: string; dir: string }>): string => {
         const qs = new URLSearchParams()
         qs.set("status", over.status ?? props.status)
         const chain = over.chain ?? props.chain
+        const sort = over.sort ?? props.sort
+        const dir = over.dir ?? props.dir
         if (chain) qs.set("chain", chain)
+        if (sort) { qs.set("sort", sort); if (dir) qs.set("dir", dir) }
         if (over.page && over.page > 1) qs.set("page", String(over.page))
         return `/tokens?${qs.toString()}`
     }
@@ -250,6 +280,8 @@ const OperatorTokens: React.FC<OperatorProps> = (props) => {
                 data={visible}
                 rowKey={(t) => t.id}
                 onRowClick={(t) => router.push(`/t/${t.id}`)}
+                serverSort={props.sort ? { key: props.sort, dir: props.dir === "asc" ? "asc" : "desc" } : null}
+                onSortChange={(key, d) => router.push(hrefWith({ sort: key, dir: d, page: 1 }))}
                 empty="No tokens in this view."
             />
 

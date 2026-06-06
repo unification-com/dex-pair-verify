@@ -15,6 +15,12 @@ module.exports = {
       // sources, help, ingest, identitycheck, canonicalcheck, factorycheck,
       // scancheck, revalidate, thresholds — same slug at the root.
       { source: "/admin/:slug", destination: "/:slug", permanent: false },
+      // The go-ooo export/catalogue API is versioned under /api/ooo/v1/* so a future
+      // breaking change can ship as /v2. Bridge the old unversioned paths to v1.
+      { source: "/api/ooo/export/manifest", destination: "/api/ooo/v1/export/manifest", permanent: false },
+      { source: "/api/ooo/export/:chain/:dex", destination: "/api/ooo/v1/export/:chain/:dex", permanent: false },
+      { source: "/api/ooo/export", destination: "/api/ooo/v1/export", permanent: false },
+      { source: "/api/ooo/pairs", destination: "/api/ooo/v1/pairs", permanent: false },
     ];
   },
 };

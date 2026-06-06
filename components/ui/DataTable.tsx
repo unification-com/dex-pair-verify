@@ -30,14 +30,22 @@ type Props<T> = {
   onToggleAll?: (allSelected: boolean) => void;
   onRowClick?: (row: T) => void;
   sortInit?: { key: string; dir: "asc" | "desc" };
+  // Server-sort mode: when `onSortChange` is given, the table does NOT sort `data`
+  // itself (it's already ordered by the server, across the WHOLE dataset, not just
+  // this page) — header clicks call back so the page can re-query. `serverSort`
+  // drives the active-column indicator.
+  serverSort?: { key: string; dir: "asc" | "desc" } | null;
+  onSortChange?: (key: string, dir: "asc" | "desc") => void;
   empty?: ReactNode;
 };
 
-function DataTable<T>({ columns, data, rowKey, selectable, selected, onToggle, onToggleAll, onRowClick, sortInit, empty }: Props<T>) {
+function DataTable<T>({ columns, data, rowKey, selectable, selected, onToggle, onToggleAll, onRowClick, sortInit, serverSort, onSortChange, empty }: Props<T>) {
   const [sort, setSort] = useState(sortInit || null);
+  const serverMode = !!onSortChange;
+  const activeSort = serverMode ? serverSort ?? null : sort;
 
   const sorted = useMemo(() => {
-    if (!sort) return data;
+    if (serverMode || !sort) return data; // server mode: data already ordered upstream
     const col = columns.find((c) => c.key === sort.key);
     const acc = col?.sortVal || ((r: T) => (r as Record<string, number | string | null>)[sort.key]);
     const arr = [...data].sort((a, b) => {
@@ -47,11 +55,14 @@ function DataTable<T>({ columns, data, rowKey, selectable, selected, onToggle, o
       return String(x).localeCompare(String(y));
     });
     return sort.dir === "desc" ? arr.reverse() : arr;
-  }, [data, sort, columns]);
+  }, [data, sort, columns, serverMode]);
 
   const clickSort = (c: Column<T>) => {
     if (!c.sortable) return;
-    setSort((s) => (s && s.key === c.key ? { key: c.key, dir: s.dir === "asc" ? "desc" : "asc" } : { key: c.key, dir: c.num ? "desc" : "asc" }));
+    const cur = activeSort;
+    const nextDir: "asc" | "desc" = cur && cur.key === c.key ? (cur.dir === "asc" ? "desc" : "asc") : (c.num ? "desc" : "asc");
+    if (serverMode) { onSortChange?.(c.key, nextDir); return; }
+    setSort({ key: c.key, dir: nextDir });
   };
   const allSel = !!selectable && data.length > 0 && selected != null && data.every((r) => selected.has(rowKey(r)));
 
@@ -64,7 +75,7 @@ function DataTable<T>({ columns, data, rowKey, selectable, selected, onToggle, o
             {columns.map((c) => (
               <th key={c.key} className={(c.num ? "num " : "") + (c.sortable ? "sortable" : "")} style={c.width ? { width: c.width } : undefined} onClick={() => clickSort(c)}>
                 {c.label}
-                {c.sortable && sort?.key === c.key ? <span className="sort-ind">{sort.dir === "asc" ? "↑" : "↓"}</span> : null}
+                {c.sortable && activeSort?.key === c.key ? <span className="sort-ind">{activeSort.dir === "asc" ? "↑" : "↓"}</span> : null}
               </th>
             ))}
           </tr>

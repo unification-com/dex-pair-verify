@@ -138,7 +138,7 @@ const AdminHome: React.FC<OperatorProps> = (props) => {
                 <span className="grow" />
                 <Link href={`/pairs?chain=${encodeURIComponent(s.chain)}&dex=${encodeURIComponent(s.dex)}&status=NeedsReview`}><a className="link-sm">Pairs</a></Link>
                 <Link href={`/tokens?chain=${encodeURIComponent(s.chain)}`}><a className="link-sm">Tokens</a></Link>
-                <Link href={`/api/ooo/export?chain=${encodeURIComponent(s.chain)}&dex=${encodeURIComponent(s.dex)}&download=1`}><a className="link-sm">Export</a></Link>
+                <Link href={`/api/ooo/v1/export?chain=${encodeURIComponent(s.chain)}&dex=${encodeURIComponent(s.dex)}&download=1`}><a className="link-sm">Export</a></Link>
               </div>
             ))}
           </div>

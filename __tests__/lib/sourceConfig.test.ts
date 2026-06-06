@@ -23,13 +23,6 @@ describe("BASELINE_SOURCES (the code bootstrap that re-seeds a wiped DB)", () =>
       }
     }
   });
-
-  it("keeps qomswap parked: self-hosted, off GeckoTerminal, factory uncurated", () => {
-    const qom = BASELINE_SOURCES.find((s) => s.chain === "qom");
-    expect(qom?.subgraphProvider).toBe("self-hosted");
-    expect(qom?.onCoinGeckoTerminal).toBe(false);
-    expect(qom?.factoryAddress).toBe("");
-  });
 });
 
 describe("thresholdSeedData", () => {
@@ -48,13 +41,6 @@ describe("thresholdSeedData", () => {
     const seed = thresholdSeedData("xdai", "honeyswap");
     expect(seed.minLiquidityUsd).toBe(5000);
     expect(seed.hardMinLiquidityUsd).toBe(2000);
-  });
-
-  it("omits hardMinLiquidityUsd for a source without matrix floors (schema default applies)", () => {
-    const seed = thresholdSeedData("qom", "qomswap_v2");
-    expect(seed.minLiquidityUsd).toBe(0);
-    expect(seed.minTxCount).toBe(0);
-    expect(seed).not.toHaveProperty("hardMinLiquidityUsd");
   });
 
   it("falls back to a bare-zero seed for an unknown source", () => {

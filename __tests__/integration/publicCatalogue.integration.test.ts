@@ -8,7 +8,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { resetDb, seedPair, seedToken, testPrisma } from "./helpers";
 import { buildPublicPairsCatalogue } from "../../lib/export";
 import { __resetRateLimit } from "../../lib/rateLimit";
-import pairsHandler from "../../pages/api/ooo/pairs";
+import pairsHandler from "../../pages/api/ooo/v1/pairs";
 import { TokenPairStatus } from "../../types/types";
 
 const NOW = 1_700_000_000;

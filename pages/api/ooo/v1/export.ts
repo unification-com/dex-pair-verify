@@ -1,5 +1,5 @@
-import {requireAdminApi} from "../../../lib/apiAuth";
-import {buildExportV2} from "../../../lib/export";
+import {requireAdminApi} from "../../../../lib/apiAuth";
+import {buildExportV2} from "../../../../lib/export";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 

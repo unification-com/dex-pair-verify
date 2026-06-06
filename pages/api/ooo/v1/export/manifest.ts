@@ -1,13 +1,13 @@
-import {buildExportManifestV3} from "../../../../lib/export";
-import {checkBearerToken, parseBearer, tokenPrefix} from "../../../../lib/exportAuth";
-import {rateLimit} from "../../../../lib/rateLimit";
+import {buildExportManifestV3} from "../../../../../lib/export";
+import {checkBearerToken, parseBearer, tokenPrefix} from "../../../../../lib/exportAuth";
+import {rateLimit} from "../../../../../lib/rateLimit";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
 // Bearer-token discovery manifest (4.C, v3): the SupportedSource registry — each
 // source's subgraph endpoint list, schema family, factory, rpc + verified pair
 // count — so go-ooo consumes it as its source of truth instead of a hard-coded
-// list. Lives at /api/ooo/export/manifest alongside the per-(chain,dex) bearer export.
+// list. Lives at /api/ooo/v1/export/manifest alongside the per-(chain,dex) bearer export.
 const RATE_LIMIT = 60;
 const RATE_WINDOW_MS = 60_000;
 

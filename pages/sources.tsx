@@ -19,6 +19,7 @@ import StatCard from "../components/dashboard/StatCard";
 import DexName from "../components/DexName";
 import Layout from "../components/shell/Layout";
 import PageHeader from "../components/ui/PageHeader";
+import { usd } from "../lib/format";
 import { isOperatorCtx } from "../lib/operatorGate";
 import prisma from "../lib/prisma";
 import { decentralizedTemplate, seedForGt } from "../lib/sourceSeeds";
@@ -147,6 +148,8 @@ type FormState = {
   dataApplicable: boolean | null;
   dataOk: boolean | null;
   sampleReserveUsd: number | null;
+  rowCount: number;
+  samples: { id: string; price: number | null; reserve: number | null }[];
   dataError: string | null;
   // Transient flags:
   verifying: boolean;
@@ -154,6 +157,9 @@ type FormState = {
 };
 
 const fmtDate = (s: number): string => (s > 0 ? new Date(s * 1000).toISOString().slice(0, 10) : "—");
+
+// Compact a token0Price sample for display (magnitude varies wildly across pairs).
+const fmtPrice = (n: number | null): string => (n == null ? "—" : n >= 1 ? n.toFixed(4) : n.toPrecision(4));
 
 // Read-only supported-sources listing for the public.
 const PublicSources: React.FC<PublicProps> = (props) => (
@@ -245,6 +251,8 @@ const OperatorSources: React.FC<OperatorProps> = (initial) => {
       dataApplicable: null,
       dataOk: null,
       sampleReserveUsd: null,
+      rowCount: 0,
+      samples: [],
       dataError: null,
       verifying: false,
       busy: false,
@@ -289,6 +297,8 @@ const OperatorSources: React.FC<OperatorProps> = (initial) => {
         dataApplicable: res.dataApplicable ?? null,
         dataOk: res.dataOk ?? null,
         sampleReserveUsd: res.sampleReserveUsd ?? null,
+        rowCount: res.rowCount ?? 0,
+        samples: res.samples ?? [],
         dataError: res.dataError ?? null,
       });
       if (res.live && res.dataOk) {
@@ -455,23 +465,48 @@ const OperatorSources: React.FC<OperatorProps> = (initial) => {
 
                     {form.live !== null ? (
                       <div className="verify-out">
-                        <span className={`badge badge-${form.live ? "pass" : "warn"} badge-sm`}>
-                          {form.live ? "live" : "not confirmed live"}
-                        </span>
-                        {form.dataApplicable ? (
-                          <span className={`badge badge-${form.dataOk ? "pass" : "warn"} badge-sm`} title={form.dataError || ""}>
-                            {form.dataOk ? `data ✓ ~$${Math.round(form.sampleReserveUsd ?? 0).toLocaleString("en-GB")}` : "no usable data"}
-                          </span>
-                        ) : form.live ? (
-                          <span className="badge badge-neutral badge-sm">data n/a</span>
+                        <div className="vo-badges">
+                          <span className={`badge badge-${form.live ? "pass" : "warn"} badge-sm`}>{form.live ? "live" : "not confirmed live"}</span>
+                          {form.dataApplicable ? (
+                            <span className={`badge badge-${form.dataOk ? "pass" : "warn"} badge-sm`} title={form.dataError || ""}>{form.dataOk ? "returning data" : "no usable data"}</span>
+                          ) : form.live ? (
+                            <span className="badge badge-neutral badge-sm">data probe n/a</span>
+                          ) : null}
+                          <span className="badge badge-neutral badge-sm">{form.provider}</span>
+                          <span className="badge badge-neutral badge-sm">schema: {form.schemaFamily}</span>
+                          {form.verifyError ? <span className="badge badge-fail badge-sm" title={form.verifyError}>probe error</span> : null}
+                        </div>
+
+                        <div className="vo-meta">
+                          {form.keyEnvVar ? <div><span className="muted">API-key env var</span><span className="mono">{form.keyEnvVar}</span></div> : null}
+                          {form.template ? <div className="vo-wide"><span className="muted">Template (API-key placeholder)</span><span className="mono vo-break">{form.template}</span></div> : null}
+                        </div>
+
+                        {form.dataApplicable && form.samples.length > 0 ? (
+                          <div className="vo-section">
+                            <span className="muted vo-h">Sample data — first {Math.min(5, form.rowCount)} of the {form.schemaFamily === "univ3" ? "pools" : "pairs"} go-ooo would query</span>
+                            <div className="vo-tbl">
+                              <div className="vo-tr vo-th"><span>id</span><span>token0Price</span><span>reserve / TVL</span></div>
+                              {form.samples.slice(0, 5).map((s) => (
+                                <div key={s.id} className="vo-tr">
+                                  <span className="mono truncate" title={s.id}>{s.id}</span>
+                                  <span className={`mono${s.price && s.price > 0 ? "" : " muted"}`}>{fmtPrice(s.price)}</span>
+                                  <span className="mono">{s.reserve != null ? usd(s.reserve) : "—"}</span>
+                                </div>
+                              ))}
+                            </div>
+                            {!form.dataOk && form.dataError ? <span className="muted" style={{ fontSize: "var(--fs-xs)" }}>{form.dataError}</span> : null}
+                          </div>
                         ) : null}
-                        <span className="muted">provider: <span className="mono">{form.provider}</span></span>
-                        {form.keyEnvVar ? <span className="muted">key: <span className="mono">{form.keyEnvVar}</span></span> : null}
-                        {form.template ? <span className="muted">template: <span className="mono truncate" title={form.template}>{form.template}</span></span> : null}
+
                         {form.queryFields.length > 0 ? (
-                          <span className="muted">fields: <span className="mono">{form.queryFields.slice(0, 8).join(", ")}{form.queryFields.length > 8 ? "…" : ""}</span></span>
+                          <div className="vo-section">
+                            <span className="muted vo-h">Schema query fields ({form.queryFields.length})</span>
+                            <div className="vo-fields">
+                              {form.queryFields.map((f) => <span key={f} className="vo-chip mono">{f}</span>)}
+                            </div>
+                          </div>
                         ) : null}
-                        {form.verifyError ? <span className="badge badge-fail badge-sm" title={form.verifyError}>probe error</span> : null}
                       </div>
                     ) : null}
 
@@ -529,8 +564,20 @@ const OperatorSources: React.FC<OperatorProps> = (initial) => {
         .cand-meta { font-size: var(--fs-xs); }
         .cand-panel { margin-top: var(--sp-4); padding-top: var(--sp-4); border-top: 1px solid var(--border); }
         .fld-label { display: block; font-size: var(--fs-xs); color: var(--text-3); margin-bottom: var(--sp-1); }
-        .verify-out { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); margin: var(--sp-3) 0; font-size: var(--fs-xs); }
-        .verify-out .mono { max-width: 22rem; display: inline-block; vertical-align: bottom; }
+        .verify-out { display: flex; flex-direction: column; gap: var(--sp-3); margin: var(--sp-3) 0; }
+        .vo-badges { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+        .vo-meta { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2) var(--sp-5); font-size: var(--fs-xs); }
+        .vo-meta > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+        .vo-meta .vo-wide { grid-column: 1 / -1; }
+        .vo-break { word-break: break-all; }
+        .vo-section { display: flex; flex-direction: column; gap: var(--sp-2); }
+        .vo-h { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.04em; }
+        .vo-tbl { display: flex; flex-direction: column; font-size: var(--fs-xs); border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; }
+        .vo-tr { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--border); align-items: center; }
+        .vo-tr:last-child { border-bottom: 0; }
+        .vo-th { color: var(--text-3); background: var(--bg-3); }
+        .vo-fields { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+        .vo-chip { font-size: var(--fs-xs); padding: 2px 8px; border-radius: var(--r-pill); border: 1px solid var(--border-strong); color: var(--text-1); }
         .fld-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); margin-top: var(--sp-4); }
         .fld-wide { grid-column: 1 / -1; }
         @media (max-width: 720px) { .fld-grid { grid-template-columns: 1fr; } }

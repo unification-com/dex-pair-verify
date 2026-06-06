@@ -1,11 +1,11 @@
-import { buildPublicPairsCatalogue, publicCatalogueLastModified } from "../../../lib/export";
-import { rateLimit } from "../../../lib/rateLimit";
+import { buildPublicPairsCatalogue, publicCatalogueLastModified } from "../../../../lib/export";
+import { rateLimit } from "../../../../lib/rateLimit";
 
 import type { NextApiRequest, NextApiResponse } from "next";
 
 // PUBLIC, UNGATED supported-pairs catalogue (T10) — the "menu" of queryable pairs
 // for OoO users (e.g. WETH.USDC.AD). Distinct from the gated provider feeds
-// (/api/ooo/export/*, bearer-token): it carries NO trust internals, only what can
+// (/api/ooo/v1/export/*, bearer-token): it carries NO trust internals, only what can
 // be queried, so it's safe to expose without a token. Cacheable + If-Modified-Since
 // aware; a light per-IP rate limit guards against abuse (the data is non-sensitive,
 // so the cache does most of the work).

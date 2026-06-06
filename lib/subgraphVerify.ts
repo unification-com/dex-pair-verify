@@ -150,14 +150,30 @@ const DATA_QUERY: Partial<Record<SchemaFamily, { query: string; collection: stri
   },
 };
 
+// One sampled pair/pool row, surfaced so the operator can eyeball real data
+// before promoting (id + the priced token0Price + the reserve/TVL field).
+export type DataSample = { id: string; price: number | null; reserve: number | null };
+
 export type DataProbeResult = {
   applicable: boolean; // false for custom/solidly (no generic query yet)
   ok: boolean; // true when a sampled pool/pair prices a token (token0Price > 0)
   rowCount: number;
   sampleReserveUsd: number | null; // a liquidity sample for display (0 on BSC subgraphs)
   sampleId: string | null;
+  samples: DataSample[]; // the sampled rows (id + price + reserve) for display
   error?: string;
 };
+
+// Empty result shared by every short-circuit return below (DRY).
+const emptyData = (applicable: boolean, error: string): DataProbeResult => ({
+  applicable,
+  ok: false,
+  rowCount: 0,
+  sampleReserveUsd: null,
+  sampleId: null,
+  samples: [],
+  error,
+});
 
 // Real-data liveness/usability probe: runs the schema family's minimal query (the
 // same one the pipeline uses) and checks a row comes back with a positive
@@ -170,50 +186,45 @@ export async function dataProbeSubgraph(
 ): Promise<DataProbeResult> {
   const spec = DATA_QUERY[schemaFamily];
   if (!spec) {
-    return { applicable: false, ok: false, rowCount: 0, sampleReserveUsd: null, sampleId: null, error: `no generic data query for schema family "${schemaFamily}"` };
+    return emptyData(false, `no generic data query for schema family "${schemaFamily}"`);
   }
   const fetcher = opts.fetcher ?? defaultGraphqlFetch;
   const json = (await fetcher(url, spec.query)) as
     | { data?: Record<string, { id: string; [k: string]: unknown }[]>; errors?: { message?: string }[] }
     | null;
   if (!json) {
-    return { applicable: true, ok: false, rowCount: 0, sampleReserveUsd: null, sampleId: null, error: "no response / non-2xx / timeout" };
+    return emptyData(true, "no response / non-2xx / timeout");
   }
   if (json.errors?.length) {
-    return { applicable: true, ok: false, rowCount: 0, sampleReserveUsd: null, sampleId: null, error: json.errors.map((e) => e.message).join("; ") };
+    return emptyData(true, json.errors.map((e) => e.message).join("; "));
   }
   const rows = json.data?.[spec.collection] ?? [];
   if (rows.length === 0) {
-    return { applicable: true, ok: false, rowCount: 0, sampleReserveUsd: null, sampleId: null, error: "query returned no rows (empty subgraph?)" };
+    return emptyData(true, "query returned no rows (empty subgraph?)");
   }
+  // Per-row sample (id + priced token0Price + reserve/TVL), surfaced for display.
+  const samples: DataSample[] = rows.map((r) => {
+    const p = parseFloat(String(r[spec.priceField] ?? ""));
+    const rv = parseFloat(String(r[spec.reserveField] ?? ""));
+    return { id: r.id, price: Number.isFinite(p) ? p : null, reserve: Number.isFinite(rv) ? rv : null };
+  });
   // Usable = at least one sampled pool prices a token (token0Price > 0). reserveUSD
   // is only a display sample (0 on BSC subgraphs that track reserveBNB instead).
-  const priced = rows.filter((r) => {
-    const p = parseFloat(String(r[spec.priceField] ?? ""));
-    return Number.isFinite(p) && p > 0;
-  });
-  const reserves = rows
-    .map((r) => parseFloat(String(r[spec.reserveField] ?? "")))
-    .filter((n) => Number.isFinite(n));
+  const priced = samples.filter((s) => s.price != null && s.price > 0);
+  const reserves = samples.map((s) => s.reserve).filter((n): n is number => n != null);
   const ok = priced.length > 0;
   return {
     applicable: true,
     ok,
     rowCount: rows.length,
     sampleReserveUsd: reserves.length ? Math.max(...reserves) : null,
-    sampleId: (priced[0] ?? rows[0]).id ?? null,
+    sampleId: (priced[0] ?? samples[0]).id ?? null,
+    samples,
     error: ok ? undefined : "no sampled pool has a positive token0Price",
   };
 }
 
-const skippedDataProbe = (error: string): DataProbeResult => ({
-  applicable: false,
-  ok: false,
-  rowCount: 0,
-  sampleReserveUsd: null,
-  sampleId: null,
-  error,
-});
+const skippedDataProbe = (error: string): DataProbeResult => emptyData(false, error);
 
 export type VerifyResult = {
   provider: SubgraphProvider;

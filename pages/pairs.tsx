@@ -39,6 +39,21 @@ const cleanParam = (v: unknown): string | null =>
 
 type Source = { chain: string; dex: string };
 
+// Whitelisted sortable columns → a prisma orderBy (so the ?sort= param can't inject
+// a field) + the normalised key/dir that drives the header indicator. Sorting runs
+// in the DB across the WHOLE result set, then we paginate — not just this page.
+function pairSort(sort: string | null, dir: string | null) {
+  const d: "asc" | "desc" = dir === "asc" ? "asc" : "desc";
+  switch (sort) {
+    case "pair": return { orderBy: [{ pair: d }], sortKey: "pair", sortDir: d };
+    case "reserveUsd": return { orderBy: [{ reserveUsd: d }], sortKey: "reserveUsd", sortDir: d };
+    case "txCount": return { orderBy: [{ txCount: d }], sortKey: "txCount", sortDir: d };
+    case "confidence": return { orderBy: [{ confidence: d }], sortKey: "confidence", sortDir: d };
+    case "reviewTier": return { orderBy: [{ reviewTier: d }], sortKey: "reviewTier", sortDir: d };
+    default: return { orderBy: [{ reserveNativeCurrency: "desc" as const }], sortKey: "", sortDir: "" };
+  }
+}
+
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const operator = await isOperatorCtx(ctx);
   const { query } = ctx;
@@ -46,6 +61,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const chain = cleanParam(query?.chain)
   const dex = cleanParam(query?.dex)
   const page = Math.max(1, Number(query?.page || 1))
+  const { orderBy, sortKey, sortDir } = pairSort(cleanParam(query?.sort), cleanParam(query?.dir))
 
   // Public visitors get a read-only listing of VERIFIED pairs only — no review
   // queue, no triage, no confidence/driver internals, no actions.
@@ -62,7 +78,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
           token0: { select: { symbol: true, id: true, status: true } },
           token1: { select: { symbol: true, id: true, status: true } },
         },
-        orderBy: [{ reserveNativeCurrency: 'desc' }],
+        orderBy,
         skip: (page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
       }),
@@ -82,6 +98,8 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
         totalCount,
         chains,
         sources,
+        sort: sortKey,
+        dir: sortDir,
       },
     }
   }
@@ -141,6 +159,8 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
             floorMap,
             chains,
             sources,
+            sort: sortKey,
+            dir: sortDir,
         },
     };
 }
@@ -160,6 +180,8 @@ type OperatorProps = {
     floorMap: Record<string, Record<string, number>>,
     chains: string[],
     sources: Source[],
+    sort: string,
+    dir: string,
 }
 type PublicProps = {
     isOperator: false,
@@ -171,6 +193,8 @@ type PublicProps = {
     totalCount: number,
     chains: string[],
     sources: Source[],
+    sort: string,
+    dir: string,
 }
 type Props = OperatorProps | PublicProps;
 
@@ -185,12 +209,15 @@ const PublicPairs: React.FC<PublicProps> = (props) => {
     const [filter, setFilter] = useState("")
     useEffect(() => { setFilter("") }, [props.chain, props.dex, props.page])
 
-    const hrefWith = (over: Partial<{ chain: string; dex: string; page: number }>): string => {
+    const hrefWith = (over: Partial<{ chain: string; dex: string; page: number; sort: string; dir: string }>): string => {
         const qs = new URLSearchParams()
         const chain = over.chain ?? props.chain
         const dex = over.dex ?? props.dex
+        const sort = over.sort ?? props.sort
+        const dir = over.dir ?? props.dir
         if (chain) qs.set("chain", chain)
         if (dex) qs.set("dex", dex)
+        if (sort) { qs.set("sort", sort); if (dir) qs.set("dir", dir) }
         if (over.page && over.page > 1) qs.set("page", String(over.page))
         const s = qs.toString()
         return s ? `/pairs?${s}` : "/pairs"
@@ -242,6 +269,8 @@ const PublicPairs: React.FC<PublicProps> = (props) => {
                 data={visible}
                 rowKey={(p) => p.id}
                 onRowClick={(p) => router.push(`/p/${p.id}`)}
+                serverSort={props.sort ? { key: props.sort, dir: props.dir === "asc" ? "asc" : "desc" } : null}
+                onSortChange={(key, d) => router.push(hrefWith({ sort: key, dir: d, page: 1 }))}
                 empty="No verified pairs in this view."
             />
 
@@ -266,16 +295,19 @@ const OperatorPairs: React.FC<OperatorProps> = (props) => {
     useEffect(() => { setSelected(new Set()); setFilter("") }, [props.chain, props.dex, props.status, props.tier, props.page])
 
     // Build a /pairs href, carrying the active filter and overriding parts.
-    const hrefWith = (over: Partial<{ status: string; chain: string; dex: string; tier: string; page: number }>): string => {
+    const hrefWith = (over: Partial<{ status: string; chain: string; dex: string; tier: string; page: number; sort: string; dir: string }>): string => {
         const qs = new URLSearchParams()
         const status = over.status ?? props.status
         const chain = over.chain ?? props.chain
         const dex = over.dex ?? props.dex
         const tier = over.tier ?? (over.status && over.status !== props.status ? "" : props.tier)
+        const sort = over.sort ?? props.sort
+        const dir = over.dir ?? props.dir
         qs.set("status", status)
         if (chain) qs.set("chain", chain)
         if (dex) qs.set("dex", dex)
         if (tier) qs.set("tier", tier)
+        if (sort) { qs.set("sort", sort); if (dir) qs.set("dir", dir) }
         if (over.page && over.page > 1) qs.set("page", String(over.page))
         return `/pairs?${qs.toString()}`
     }
@@ -412,6 +444,8 @@ const OperatorPairs: React.FC<OperatorProps> = (props) => {
                 onToggle={toggleSelected}
                 onToggleAll={toggleAll}
                 onRowClick={(p) => router.push(`/p/${p.id}?${detailQs}`)}
+                serverSort={props.sort ? { key: props.sort, dir: props.dir === "asc" ? "asc" : "desc" } : null}
+                onSortChange={(key, d) => router.push(hrefWith({ sort: key, dir: d, page: 1 }))}
                 empty="Nothing in this queue 🎉"
             />
 

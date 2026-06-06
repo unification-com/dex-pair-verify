@@ -32,6 +32,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       dataApplicable: r.dataProbe.applicable,
       dataOk: r.dataProbe.ok,
       sampleReserveUsd: r.dataProbe.sampleReserveUsd,
+      rowCount: r.dataProbe.rowCount,
+      sampleId: r.dataProbe.sampleId,
+      samples: r.dataProbe.samples,
       dataError: r.dataProbe.error ?? null,
     });
   } catch (err) {
