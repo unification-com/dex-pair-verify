@@ -10,7 +10,7 @@ const TONE: Record<OrganicityLabel, { tone: string; text: string }> = {
   organic: { tone: "pass", text: "organic" },
   mixed: { tone: "warn", text: "mixed" },
   "wash-like": { tone: "fail", text: "wash-like" },
-  thin: { tone: "skip", text: "thin activity" },
+  quiet: { tone: "skip", text: "quiet (24h)" },
 };
 
 // 24h trading organicity (unique traders vs trade count, summed across the token's
@@ -32,10 +32,15 @@ const TokenOrganicity: React.FC<{ s: OrganicitySummary }> = ({ s }) => {
         <KV
           k="Unique traders per trade"
           v={s.tradersPerTrade != null ? s.tradersPerTrade.toFixed(2) : "—"}
-          hint="Distinct buyer+seller wallets ÷ buy+sell transactions (0–1). Low = many trades from few wallets (wash-like); near 1 = organic."
+          hint="Distinct buyer+seller wallets ÷ buy+sell transactions (0–1). Low can mean wash trading OR a small active community — a hint to look, not a verdict."
         />
         <KV k="Pools with activity" v={num(s.pools)} />
       </div>
+      {s.label === "quiet" ? (
+        <p className="muted" style={{ fontSize: "var(--fs-xs)", margin: "var(--sp-3) 0 0" }}>
+          Sparse 24h trading — too little to judge organicity. A quiet day is normal for a genuine niche token, not a red flag.
+        </p>
+      ) : null}
       <style jsx>{`
         .kv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--sp-7); padding-top: var(--sp-3); }
       `}</style>

@@ -11,7 +11,7 @@
 
 export type PoolTrades = { buys24h: number; sells24h: number; buyers24h: number; sellers24h: number };
 
-export type OrganicityLabel = "organic" | "mixed" | "wash-like" | "thin";
+export type OrganicityLabel = "organic" | "mixed" | "wash-like" | "quiet";
 
 export type OrganicitySummary = {
   pools: number; // pools that had any 24h trade activity
@@ -25,8 +25,12 @@ export type OrganicitySummary = {
   label: OrganicityLabel;
 };
 
-// Below this many 24h trades there isn't enough activity to judge organicity.
-const THIN_TRADES = 30;
+// Below this many 24h trades the ratio is too small a sample to judge — a genuine
+// but quiet token (a niche project, a sleepy stable pair) must read "quiet", NOT a
+// wash/organic verdict off a handful of trades. Set deliberately high because real
+// wash trading is defined by HIGH transaction volume from few wallets, so a low
+// ratio only carries signal once there's meaningful activity behind it.
+const QUIET_TRADES = 100;
 // traders/trade thresholds, calibrated against real data: active blue-chips
 // (WETH/USDC/USDT) sit ~0.35–0.45 because legitimate repeat traders / arb bots
 // trade many times, so "organic" must include them; genuine wash trading churns
@@ -57,8 +61,8 @@ export function summariseOrganicity(pools: PoolTrades[]): OrganicitySummary {
   const tradersPerTrade = trades > 0 ? traders / trades : null;
 
   let label: OrganicityLabel;
-  if (tradersPerTrade === null || trades < THIN_TRADES) {
-    label = "thin";
+  if (tradersPerTrade === null || trades < QUIET_TRADES) {
+    label = "quiet"; // sparse 24h activity — not enough to judge, NOT a red flag
   } else if (tradersPerTrade < WASH_RATIO) {
     label = "wash-like";
   } else if (tradersPerTrade < ORGANIC_RATIO) {

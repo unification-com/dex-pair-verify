@@ -7,11 +7,11 @@ import { PoolTrades, summariseOrganicity } from "../../lib/organicity";
 const pool = (over: Partial<PoolTrades> = {}): PoolTrades => ({ buys24h: 0, sells24h: 0, buyers24h: 0, sellers24h: 0, ...over });
 
 describe("summariseOrganicity", () => {
-  it("returns thin with no label-able activity when there are no trades", () => {
+  it("returns quiet with no label-able activity when there are no trades", () => {
     const s = summariseOrganicity([]);
     expect(s.trades).toBe(0);
     expect(s.tradersPerTrade).toBeNull();
-    expect(s.label).toBe("thin");
+    expect(s.label).toBe("quiet");
   });
 
   it("sums buys/sells/buyers/sellers across pools", () => {
@@ -29,8 +29,8 @@ describe("summariseOrganicity", () => {
   });
 
   it("labels a near-1 traders/trade ratio organic", () => {
-    // 100 trades by ~100 distinct wallets.
-    const s = summariseOrganicity([pool({ buys24h: 50, sells24h: 50, buyers24h: 48, sellers24h: 47 })]);
+    // 200 trades by ~190 distinct wallets (well above the quiet floor).
+    const s = summariseOrganicity([pool({ buys24h: 100, sells24h: 100, buyers24h: 96, sellers24h: 94 })]);
     expect(s.tradersPerTrade).toBeCloseTo(0.95, 2);
     expect(s.label).toBe("organic");
   });
@@ -56,10 +56,15 @@ describe("summariseOrganicity", () => {
     expect(s.label).toBe("wash-like");
   });
 
-  it("labels sub-threshold activity thin regardless of ratio", () => {
-    // Only 10 trades — too little to judge, even if every trade is a distinct wallet.
-    const s = summariseOrganicity([pool({ buys24h: 5, sells24h: 5, buyers24h: 5, sellers24h: 5 })]);
-    expect(s.label).toBe("thin");
+  it("labels sparse activity quiet regardless of ratio (sparse genuine token, not a flag)", () => {
+    // 60 trades — below the 100-trade floor, so a low ratio here doesn't earn a
+    // wash verdict; a genuinely quiet token reads "quiet", not suspicious.
+    const churny = summariseOrganicity([pool({ buys24h: 40, sells24h: 20, buyers24h: 4, sellers24h: 2 })]);
+    expect(churny.trades).toBe(60);
+    expect(churny.label).toBe("quiet");
+    // ...and the same holds even with a perfect ratio.
+    const perfect = summariseOrganicity([pool({ buys24h: 30, sells24h: 30, buyers24h: 30, sellers24h: 30 })]);
+    expect(perfect.label).toBe("quiet");
   });
 
   it("counts only pools that had activity in `pools`", () => {
