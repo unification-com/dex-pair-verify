@@ -371,6 +371,10 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
   const totalW = scored.reduce((s, f) => s + f.weight, 0);
   const passedW = scored.filter((f) => f.ok).reduce((s, f) => s + f.weight, 0);
   const skippedN = props.fences.length - scored.length;
+  // The scored fences that FAILED — i.e. what's dragging the confidence below 100%.
+  // Surfaced as a one-line "Held on:" so a clean-scanning pair's blocker is obvious
+  // (a security scan is decision-support and never lifts these — they're the gates).
+  const heldOn = props.fences.filter((f) => f.ok === false && f.weight > 0).sort((a, b) => b.weight - a.weight);
 
   const duplicates: MiniPair[] = (props.pair.duplicatePairs || []).map((d) => toMini(d.duplicatePair));
   const similar: MiniPair[] = props.similarPairs.map(toMini);
@@ -435,6 +439,13 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
             <span className="eyebrow">Verdict</span>
             <div className="reason-chip mono">{props.verdict.reasonCode}</div>
             <p className="reason-label">{reasonLabel}</p>
+            {heldOn.length > 0 && (
+              <div className="held-on">
+                <span className="held-label">Held on</span>
+                <span className="held-fences">{heldOn.map((f) => f.label).join(" · ")}</span>
+                {heldOn[0].note ? <span className="held-note muted">{heldOn[0].note}</span> : null}
+              </div>
+            )}
             <ConfidenceMeter value={props.verdict.confidence} threshold={props.autoVerifyBar} />
             <details className="conf-breakdown">
               <summary>How is this computed?</summary>
@@ -509,6 +520,10 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
         .raw > summary { cursor: pointer; font-weight: 600; font-size: var(--fs-sm); color: var(--text-1); }
         .reason-chip { align-self: flex-start; font-size: var(--fs-xs); padding: 2px 8px; border: 1px solid var(--border-strong); border-radius: var(--r-pill); color: var(--text-1); }
         .reason-label { margin: 0; font-size: var(--fs-md); color: var(--text-0); }
+        .held-on { display: flex; flex-direction: column; gap: 2px; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm, 6px); border: 1px solid var(--warn-line, var(--warn)); background: var(--warn-dim, rgba(245,184,61,.1)); }
+        .held-label { text-transform: uppercase; letter-spacing: .04em; font-weight: 600; font-size: 10px; color: var(--warn); }
+        .held-fences { font-size: var(--fs-xs); color: var(--text-1); }
+        .held-note { font-size: var(--fs-xs); }
         .conf-breakdown > summary { cursor: pointer; font-size: var(--fs-xs); color: var(--text-2); }
         .cb-formula { margin-top: var(--sp-3); font-weight: 600; }
         .cb-note { font-size: var(--fs-xs); margin: var(--sp-2) 0 var(--sp-3); }
