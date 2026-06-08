@@ -2,7 +2,7 @@ import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 import { Web3 } from "web3";
 
-import { usd, num as fmtNum } from "../../lib/format";
+import { usd, num as fmtNum, ageStr } from "../../lib/format";
 import {
     aggregatePrices,
     getStats,
@@ -46,7 +46,8 @@ const PriceData: React.FC<{
     base: string,
     target: string,
     pairs: PairProps[],
-}> = ({ base, target, pairs }) => {
+    isPublic?: boolean,
+}> = ({ base, target, pairs, isPublic = false }) => {
 
     const [isFetching, setIsFetching] = useState(true)
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -55,6 +56,9 @@ const PriceData: React.FC<{
     const [dMax, setDMax] = useState(1)
     const [minsOfData, setMinsOfData] = useState(0)
     const [weightByLiquidity, setWeightByLiquidity] = useState(true)
+    // Public path: prices come from the 7-day-cached /api/ooo/v1/prices; track the
+    // oldest cache stamp across the (chain,dex) groups for the "cached" banner.
+    const [cacheFetchedAt, setCacheFetchedAt] = useState<number | null>(null)
 
     // Group contract addresses by (chain, dex). Memoised so the fetch effect's
     // dependency is stable.
@@ -73,12 +77,16 @@ const PriceData: React.FC<{
         setIsFetching(true)
         setErrorMsg(null)
 
+        // Public uses the 7-day-cached endpoint (latest-only — no `mins`); operator
+        // uses the live admin endpoint with the chosen minutes of history.
+        const pricesBase = isPublic ? "/api/ooo/v1/prices" : "/api/admin/getprices"
+        const minsParam = isPublic ? "" : `&mins=${minsOfData}`
         const endpoints = []
         for (const chain in contractList) {
             const chainDexs = contractList[chain];
             for (const dex in chainDexs) {
                 const contracts = chainDexs[dex]
-                const url = `/api/admin/getprices?chain=${chain}&dex=${dex}&addresses=${contracts.join(",")}&mins=${minsOfData}`
+                const url = `${pricesBase}?chain=${chain}&dex=${dex}&addresses=${contracts.join(",")}${minsParam}`
                 endpoints.push(url)
             }
         }
@@ -127,6 +135,10 @@ const PriceData: React.FC<{
                     }
                 }
                 if (fetchErrors.length > 0) setErrorMsg(fetchErrors.join(" | "))
+                if (isPublic) {
+                    const stamps = data.filter((d) => d.success && typeof d.fetchedAt === "number").map((d) => d.fetchedAt as number)
+                    setCacheFetchedAt(stamps.length ? Math.min(...stamps) : null)
+                }
                 setPriceTableData(pd)
                 setIsFetching(false)
             })
@@ -138,7 +150,7 @@ const PriceData: React.FC<{
             });
 
         return () => controller.abort()
-    }, [pairs, contractList, minsOfData]);
+    }, [pairs, contractList, minsOfData, isPublic]);
 
     // THE single aggregation, computed in render: per-pool samples (price + pool
     // liquidity) → outlier removal by each method → (liquidity-weighted) mean of
@@ -170,14 +182,21 @@ const PriceData: React.FC<{
 
     return (
         <div key={`price-data-results-${base}-${target}`}>
+            {isPublic && (
+                <div className="cached-note">
+                    Showing <strong>cached</strong> prices{cacheFetchedAt ? ` — last refreshed ${ageStr(cacheFetchedAt)} ago` : ""}, not real-time. The public simulator refreshes each pair&apos;s prices at most once every 7 days.
+                </div>
+            )}
             {/* Controls */}
             <div className="card card-pad pt-controls">
-                <label className="ctl">
-                    <span className="ctl-label">Minutes of data</span>
-                    <select className="input" defaultValue={minsOfData} onChange={(e) => setMinsOfData(parseInt(e.target.value))}>
-                        {Array.from({ length: 11 }, (_, i) => <option key={i} value={i}>{i === 0 ? "0 (latest only)" : i}</option>)}
-                    </select>
-                </label>
+                {!isPublic && (
+                    <label className="ctl">
+                        <span className="ctl-label">Minutes of data</span>
+                        <select className="input" defaultValue={minsOfData} onChange={(e) => setMinsOfData(parseInt(e.target.value))}>
+                            {Array.from({ length: 11 }, (_, i) => <option key={i} value={i}>{i === 0 ? "0 (latest only)" : i}</option>)}
+                        </select>
+                    </label>
+                )}
                 {outlierMethod === "chauvenet" && (
                     <label className="ctl">
                         <span className="ctl-label">Chauvenet dMax</span>
@@ -238,6 +257,7 @@ const PriceData: React.FC<{
             </div>
 
             <style jsx>{`
+                .cached-note { padding: var(--sp-3) var(--sp-4); margin-bottom: var(--sp-4); border: 1px solid var(--warn-line, var(--warn)); background: var(--warn-dim, rgba(245,184,61,.1)); border-radius: var(--r-md); font-size: var(--fs-sm); color: var(--text-1); }
                 .pt-controls { display: flex; gap: var(--sp-6); align-items: flex-end; flex-wrap: wrap; margin-bottom: var(--sp-5); }
                 .ctl { display: flex; flex-direction: column; gap: var(--sp-2); }
                 .ctl-label { font-size: var(--fs-xs); color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; }

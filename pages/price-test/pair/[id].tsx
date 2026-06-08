@@ -4,15 +4,15 @@ import React from "react";
 import ThresholdPriceTest from "../../../components/PriceTest/ThresholdPriceTest";
 import Layout from "../../../components/shell/Layout";
 import StatusBadge from "../../../components/ui/StatusBadge";
-import { operatorGate } from "../../../lib/operatorGate";
+import { isOperatorCtx } from "../../../lib/operatorGate";
 import prisma from "../../../lib/prisma";
 import { isVerifiedStatus, VERIFIED_STATUSES } from "../../../lib/status";
 import { buildThresholdMap, ThresholdMap } from "../../../lib/thresholds";
 import { PairProps } from "../../../types/props";
+import { TokenPairStatus } from "../../../types/types";
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
-  const gate = await operatorGate(ctx);
-  if (gate) return gate;
+  const operator = await isOperatorCtx(ctx);
   const { params } = ctx;
   const pair = await prisma.pair.findUnique({
     where: {
@@ -31,6 +31,11 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   if (pair === null) {
     return { notFound: true };
   }
+  // Public visitors can only price-test verified pairs — 404 anything else (don't
+  // leak an unverified pair's status). Operators see the "try another" message.
+  if (!operator && !isVerifiedStatus(pair.status as TokenPairStatus)) {
+    return { notFound: true };
+  }
 
   const pairs = await prisma.pair.findMany({
     where: {
@@ -45,7 +50,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const thresholds = await buildThresholdMap(pairs);
 
   return {
-    props: { pair, base: pair.token0.symbol, target: pair.token1.symbol, pairs, thresholds },
+    props: { pair, base: pair.token0.symbol, target: pair.token1.symbol, pairs, thresholds, isPublic: !operator },
   };
 };
 
@@ -55,6 +60,7 @@ type Props = {
   target: string;
   pairs: PairProps[];
   thresholds: ThresholdMap;
+  isPublic: boolean;
 };
 
 const PairTestPage: React.FC<Props> = (props) => {
@@ -76,6 +82,7 @@ const PairTestPage: React.FC<Props> = (props) => {
         target={props.target}
         pairs={props.pairs}
         thresholds={props.thresholds}
+        isPublic={props.isPublic}
       />
     </Layout>
   );

@@ -4,11 +4,11 @@ import React, { FormEvent, useState } from "react";
 import Layout from "../../components/shell/Layout";
 import Icon from "../../components/ui/Icon";
 import PageHeader from "../../components/ui/PageHeader";
-import { operatorOnlyGSSP } from "../../lib/operatorGate";
 
 // Entry point for the OoO price-test (the sidebar links here). Enter a symbol
 // pair → the per-pool price simulation. You can also reach this from any
-// verified pair's "Price test" action.
+// verified pair's "Price test" action. Public — anyone can run a simulation
+// (anonymous visitors get 7-day-cached prices; the page itself is just a form).
 const PriceTestIndex: React.FC = () => {
   const router = useRouter();
   const [base, setBase] = useState("WETH");
@@ -39,7 +39,5 @@ const PriceTestIndex: React.FC = () => {
     </Layout>
   );
 };
-
-export const getServerSideProps = operatorOnlyGSSP;
 
 export default PriceTestIndex;

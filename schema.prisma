@@ -390,3 +390,16 @@ model SupportedSource {
 
   @@unique([chain, dex])
 }
+
+// Cached OoO price-test results for the PUBLIC simulator (operator runs are always
+// live). Keyed by (chain, dex, sorted pool addresses); served for up to 7 days so
+// anonymous traffic never hits the paid subgraph. `data` holds the getprices
+// `prices` array verbatim.
+model PriceCache {
+  id        String @id @default(cuid())
+  cacheKey  String @unique
+  data      Json
+  fetchedAt Int    @default(0)
+
+  @@index([fetchedAt])
+}

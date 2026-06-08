@@ -20,6 +20,7 @@ const PAGE_SIZE = 50
 
 const TOKEN_TABS: { status: TokenPairStatus; label: string }[] = [
     { status: TokenPairStatus.Unverified, label: "Unverified" },
+    { status: TokenPairStatus.AutoVerified, label: "Auto-Verified" },
     { status: TokenPairStatus.ManualVerified, label: "Verified" },
     { status: TokenPairStatus.Duplicate, label: "Duplicate" },
     { status: TokenPairStatus.NotCurrentlyUsable, label: "Not Usable" },

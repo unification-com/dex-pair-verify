@@ -12,6 +12,7 @@ type Props = {
   target: string;
   pairs: PairProps[];
   thresholds: ThresholdMap;
+  isPublic?: boolean;
 };
 
 const ThresholdPriceTest: React.FC<Props> = (props) => {
@@ -40,6 +41,7 @@ const ThresholdPriceTest: React.FC<Props> = (props) => {
       target={props.target}
       usablePairs={usablePairs}
       ignoredPairs={ignoredPairs}
+      isPublic={props.isPublic}
     />
   );
 };

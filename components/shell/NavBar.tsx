@@ -59,6 +59,7 @@ const NavBar: React.FC<{ needsReviewCount?: number }> = ({ needsReviewCount }) =
         <Item href="/pairs" icon="queue" label="Pairs" star={isOperator} pill={isOperator ? (needsReviewCount ?? null) : null} active={active("/pairs")} />
         <Item href="/tokens" icon="token" label="Tokens" active={active("/tokens")} />
         <Item href="/sources" icon="layers" label="Sources" active={active("/sources")} />
+        <Item href="/price-test" icon="price" label="OoO price-test" active={active("/price-test")} />
 
         {/* Operator-only surface. */}
         {isOperator && <>
@@ -71,7 +72,6 @@ const NavBar: React.FC<{ needsReviewCount?: number }> = ({ needsReviewCount }) =
 
           <div className="sb-group-label">Tools</div>
           <Item href="/thresholds" icon="filter" label="Thresholds" active={active("/thresholds")} />
-          <Item href="/price-test" icon="price" label="OoO price-test" active={active("/price-test")} />
           <Item href="/help" icon="help" label="Scoring guide" active={active("/help")} />
         </>}
       </nav>

@@ -15,7 +15,8 @@ const PriceTest: React.FC<{
     target: string,
     usablePairs: PairProps[],
     ignoredPairs: PairProps[],
-}> = ({ base, target, usablePairs, ignoredPairs }) => {
+    isPublic?: boolean,
+}> = ({ base, target, usablePairs, ignoredPairs, isPublic = false }) => {
     const router = useRouter()
     const [usable, setUsable] = useState(usablePairs)
     const [ignored, setIgnored] = useState(ignoredPairs)
@@ -56,7 +57,7 @@ const PriceTest: React.FC<{
                 </details>
             )}
 
-            <PriceData key={`price-data-${base}-${target}`} base={base} target={target} pairs={usable} />
+            <PriceData key={`price-data-${base}-${target}`} base={base} target={target} pairs={usable} isPublic={isPublic} />
 
             <style jsx>{`
                 .raw { padding: var(--sp-4) var(--sp-5); margin-bottom: var(--sp-5); }

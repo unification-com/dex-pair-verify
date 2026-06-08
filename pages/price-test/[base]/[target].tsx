@@ -3,15 +3,17 @@ import React from "react";
 
 import ThresholdPriceTest from "../../../components/PriceTest/ThresholdPriceTest";
 import Layout from "../../../components/shell/Layout";
-import { operatorGate } from "../../../lib/operatorGate";
+import { isOperatorCtx } from "../../../lib/operatorGate";
 import prisma from "../../../lib/prisma";
 import { VERIFIED_STATUSES } from "../../../lib/status";
 import { buildThresholdMap, ThresholdMap } from "../../../lib/thresholds";
 import { PairProps } from "../../../types/props";
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
-  const gate = await operatorGate(ctx);
-  if (gate) return gate;
+  // Public — anyone can simulate the oracle price for a verified pair. The data is
+  // verified-only either way; the only difference is the price source (public →
+  // 7-day-cached /api/ooo/v1/prices, operator → live /api/admin/getprices).
+  const operator = await isOperatorCtx(ctx);
   const { params } = ctx;
   const base = String(params?.base);
   const target = String(params?.target);
@@ -26,7 +28,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const thresholds = await buildThresholdMap(pairs);
 
   return {
-    props: { base, target, pairs, thresholds },
+    props: { base, target, pairs, thresholds, isPublic: !operator },
   };
 };
 
@@ -35,6 +37,7 @@ type Props = {
   target: string;
   pairs: PairProps[];
   thresholds: ThresholdMap;
+  isPublic: boolean;
 };
 
 const BaseTargetTestPage: React.FC<Props> = (props) => {
@@ -45,6 +48,7 @@ const BaseTargetTestPage: React.FC<Props> = (props) => {
         target={props.target}
         pairs={props.pairs}
         thresholds={props.thresholds}
+        isPublic={props.isPublic}
       />
     </Layout>
   );
