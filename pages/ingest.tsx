@@ -50,7 +50,7 @@ const Ingest: React.FC = () => {
     for (;;) {
       let json;
       try {
-        const resp = await fetch("/api/ingest", {
+        const resp = await fetch("/api/admin/ingest", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sourceIndex, page }),

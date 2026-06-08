@@ -7,6 +7,7 @@ import { countPairsToFactoryCheck, pairsToFactoryCheck, runFactoryCheckForPair }
 import { countTokensToIdentityCheck, runIdentityCheckForToken, tokensToIdentityCheck } from "./identityCheck";
 import { ingestPoolPage } from "./ingest";
 import prisma from "./prisma";
+import { countTokensToReviewEnrich, tokensToReviewEnrich } from "./reviewEnrich";
 import {
   countTokensToScamCheck,
   rescoreScamForToken,
@@ -14,6 +15,7 @@ import {
   tokensToRescore,
   tokensToScamCheck,
 } from "./scamCheck";
+import { runSecurityScanForToken } from "./securitySignals";
 import { getSources, gtDexFor, gtNetworkFor } from "./sourceConfig";
 import { runVerdictForPair } from "./verdictRunner";
 
@@ -197,6 +199,31 @@ export async function rescoreScamPass(opts: { log?: Logger } = {}): Promise<Resc
     }
   }
   return { total: ids.length, changed, nowFlagged, cleared };
+}
+
+// Review-queue enrichment (B5). Pre-runs the on-demand enrichers (GoPlus +
+// Honeypot.is + source-verified + web presence) over the tokens in NeedsReview
+// pairs so the queue arrives pre-scanned. Heavier per token (≈4 external calls,
+// GoPlus-paced), so it's a DELIBERATE pass — not part of the default orchestrator
+// — kept bounded by being manually invoked + resumable via securityCheckedAt.
+export type ReviewEnrichSummary = { total: number; scanned: number; flagged: number };
+export async function reviewEnrichPass(opts: { log?: Logger } = {}): Promise<ReviewEnrichSummary> {
+  const log = opts.log ?? noop;
+  const now = nowS();
+  const total = await countTokensToReviewEnrich(now);
+  let scanned = 0;
+  let flagged = 0;
+  await drainBatches(
+    (b) => tokensToReviewEnrich(now, b),
+    async (id) => {
+      const out = await runSecurityScanForToken(id, { now });
+      if (out.ok) scanned += 1;
+      if (out.scam?.flagged) flagged += 1;
+    },
+    BATCH,
+    (done) => log(`[review-enrich] …${done}/${total} · ${flagged} scam-flagged`),
+  );
+  return { total, scanned, flagged };
 }
 
 export type RevalidateSummary = { count: number; tallies: Record<string, number> };

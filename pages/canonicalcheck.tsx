@@ -34,7 +34,7 @@ const CanonicalCheck: React.FC = () => {
     for (;;) {
       let json;
       try {
-        const resp = await fetch("/api/canonicalcheck", {
+        const resp = await fetch("/api/admin/canonicalcheck", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ jobStartedAt }),

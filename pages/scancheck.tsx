@@ -34,7 +34,7 @@ const ScanCheck: React.FC = () => {
     for (;;) {
       let json;
       try {
-        const resp = await fetch("/api/scancheck", {
+        const resp = await fetch("/api/admin/scancheck", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ jobStartedAt }),

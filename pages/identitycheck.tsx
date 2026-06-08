@@ -34,7 +34,7 @@ const IdentityCheck: React.FC = () => {
     for (;;) {
       let json;
       try {
-        const resp = await fetch("/api/identitycheck", {
+        const resp = await fetch("/api/admin/identitycheck", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ jobStartedAt }),

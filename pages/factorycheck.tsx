@@ -35,7 +35,7 @@ const FactoryCheck: React.FC = () => {
     for (;;) {
       let json;
       try {
-        const resp = await fetch("/api/factorycheck", {
+        const resp = await fetch("/api/admin/factorycheck", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ jobStartedAt }),

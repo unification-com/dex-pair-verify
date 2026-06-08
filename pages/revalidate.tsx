@@ -54,7 +54,7 @@ const Revalidate: React.FC = () => {
     for (;;) {
       let json;
       try {
-        const resp = await fetch("/api/revalidate", {
+        const resp = await fetch("/api/admin/revalidate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ batch: BATCH_SIZE, jobStartedAt }),
