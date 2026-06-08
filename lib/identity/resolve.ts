@@ -8,6 +8,7 @@
 
 import { aggregateIdentity } from "./aggregate";
 import { CgReverseFetcher, coingeckoReverseIdentity } from "./sources/coingecko";
+import { CmcReverseFetcher, coinmarketcapReverseIdentity } from "./sources/coinmarketcap";
 import { deriveGoplusIdentity } from "./sources/goplus";
 import { tokenListMembership, tokenListSignal } from "./sources/tokenlist";
 import { TrustWalletFetcher, trustWalletIdentity } from "./sources/trustwallet";
@@ -21,6 +22,7 @@ export type ResolveDeps = {
   fetchSecurity?: (chainId: string, address: string) => Promise<TokenSecurity | null>;
   cgReverse?: CgReverseFetcher;
   trustWallet?: TrustWalletFetcher;
+  cmcReverse?: CmcReverseFetcher;
 };
 
 export type ResolveOpts = ResolveDeps & {
@@ -57,6 +59,10 @@ export async function resolveTokenIdentity(
   // Trust Wallet curated asset registry — another self-sufficient tokenlist-class
   // source (positive-only; skips chains it doesn't map).
   signals.push(await trustWalletIdentity(chain, address, opts.trustWallet));
+
+  // CoinMarketCap reverse contract lookup — the second major aggregator, also
+  // self-sufficient (no key ⇒ no-ops; EVM chains only).
+  signals.push(await coinmarketcapReverseIdentity(chain, address, opts.cmcReverse));
 
   // GoPlus source — reuse stored security data, else fetch once.
   let security = opts.existingSecurity ?? null;

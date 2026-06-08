@@ -16,9 +16,10 @@ export const MIN_INDEPENDENT_CATEGORIES = 2;
 // second independent category to corroborate. This asymmetry is what lets us
 // promote genuine listed-but-unlinked tokens while still blocking GoPlus-only
 // spoofs.
-// CoinGecko (a direct reverse contract lookup) is authoritative like a curated
-// list — a hit means CG tracks this exact contract, so it confirms on its own.
-const SELF_SUFFICIENT_CATEGORIES = new Set<IdentitySignal["category"]>(["tokenlist", "coingecko"]);
+// CoinGecko + CoinMarketCap (direct reverse contract lookups on the two major
+// aggregators) are authoritative like a curated list — a hit means the aggregator
+// tracks this exact contract, so either confirms on its own.
+const SELF_SUFFICIENT_CATEGORIES = new Set<IdentitySignal["category"]>(["tokenlist", "coingecko", "coinmarketcap"]);
 
 export function aggregateIdentity(signals: IdentitySignal[], now: number): TokenIdentityResult {
   // Distinct confirming *categories* — a Set dedupes both repeated categories

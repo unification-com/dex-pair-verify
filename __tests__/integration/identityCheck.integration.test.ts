@@ -12,11 +12,12 @@ import { TokenPairStatus } from "../../types/types";
 const NOW = 1_700_000_000;
 
 // Deps that confirm two independent categories (token list + GoPlus trust list).
-// cgReverse + trustWallet stubbed to "not found" so the resolver never hits the
-// live CoinGecko / Trust Wallet endpoints.
+// cgReverse + trustWallet + cmcReverse stubbed to "not found" so the resolver
+// never hits the live CoinGecko / Trust Wallet / CoinMarketCap endpoints.
 const confirmingDeps = {
   cgReverse: async () => ({ id: null }),
   trustWallet: async () => false,
+  cmcReverse: async () => ({ found: false }),
   listMembership: async () => ["uniswap-default"],
   fetchSecurity: async () => ({ trust_list: "1" }),
 };
@@ -25,6 +26,7 @@ const confirmingDeps = {
 const oneCategoryDeps = {
   cgReverse: async () => ({ id: null }),
   trustWallet: async () => false,
+  cmcReverse: async () => ({ found: false }),
   listMembership: async () => [],
   fetchSecurity: async () => ({ trust_list: "1" }),
 };

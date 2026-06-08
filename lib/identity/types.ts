@@ -10,7 +10,7 @@
 
 // Independence is counted by CATEGORY, not by individual source: two token lists
 // (which often derive from each other) are NOT two independent confirmations.
-export type IdentityCategory = "tokenlist" | "onchain" | "security-api" | "coingecko";
+export type IdentityCategory = "tokenlist" | "onchain" | "security-api" | "coingecko" | "coinmarketcap";
 
 // One source's opinion on a token. `confirmed` = this source positively
 // recognises a real, legitimate ERC-20 at this (chain, address).

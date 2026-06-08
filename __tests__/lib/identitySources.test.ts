@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resolveTokenIdentity } from "../../lib/identity/resolve";
 import { coingeckoReverseIdentity } from "../../lib/identity/sources/coingecko";
+import { coinmarketcapReverseIdentity } from "../../lib/identity/sources/coinmarketcap";
 import { deriveGoplusIdentity } from "../../lib/identity/sources/goplus";
 import { __clearTokenListCache, tokenListMembership, tokenListSignal } from "../../lib/identity/sources/tokenlist";
 import { trustWalletIdentity } from "../../lib/identity/sources/trustwallet";
@@ -74,6 +75,7 @@ describe("resolveTokenIdentity", () => {
       now: NOW,
       cgReverse: async () => ({ id: null }),
       trustWallet: async () => false,
+      cmcReverse: async () => ({ found: false }),
       listMembership: async () => ["uniswap-default"],
       fetchSecurity: async () => ({ trust_list: "1" }),
     });
@@ -86,6 +88,7 @@ describe("resolveTokenIdentity", () => {
       now: NOW,
       cgReverse: async () => ({ id: null }),
       trustWallet: async () => false,
+      cmcReverse: async () => ({ found: false }),
       listMembership: async () => ["uniswap-default"],
       fetchSecurity: async () => null,
     });
@@ -98,6 +101,7 @@ describe("resolveTokenIdentity", () => {
       now: NOW,
       cgReverse: async () => ({ id: null }),
       trustWallet: async () => false,
+      cmcReverse: async () => ({ found: false }),
       listMembership: async () => [],
       fetchSecurity: async () => ({ trust_list: "1" }),
     });
@@ -111,6 +115,7 @@ describe("resolveTokenIdentity", () => {
       now: NOW,
       cgReverse: async () => ({ id: null }),
       trustWallet: async () => false,
+      cmcReverse: async () => ({ found: false }),
       existingSecurity: { trust_list: "1" },
       listMembership: async () => ["uniswap-default"],
       fetchSecurity,
@@ -159,6 +164,7 @@ describe("resolveTokenIdentity — CoinGecko self-sufficiency", () => {
       now: NOW,
       cgReverse: async () => ({ id: "based-gpt" }),
       trustWallet: async () => false,
+      cmcReverse: async () => ({ found: false }),
       listMembership: async () => [],
       fetchSecurity: async () => null,
     });
@@ -199,10 +205,51 @@ describe("resolveTokenIdentity — Trust Wallet self-sufficiency", () => {
       now: NOW,
       cgReverse: async () => ({ id: null }),
       trustWallet: async () => true,
+      cmcReverse: async () => ({ found: false }),
       listMembership: async () => [],
       fetchSecurity: async () => null,
     });
     expect(result.confirmed).toBe(true);
     expect(result.confirmedCategoryCount).toBe(1); // the single self-sufficient tokenlist category
+  });
+});
+
+describe("coinmarketcapReverseIdentity (B1d)", () => {
+  it("confirms (self-sufficient) when CoinMarketCap tracks the contract", async () => {
+    const s = await coinmarketcapReverseIdentity("eth", ADDR, async () => ({ found: true }));
+    expect(s.confirmed).toBe(true);
+    expect(s.category).toBe("coinmarketcap");
+  });
+
+  it("does not confirm when CoinMarketCap has no such contract", async () => {
+    const s = await coinmarketcapReverseIdentity("eth", ADDR, async () => ({ found: false }));
+    expect(s.confirmed).toBe(false);
+  });
+
+  it("does not confirm on an unknown (transient/no-key) result", async () => {
+    const s = await coinmarketcapReverseIdentity("eth", ADDR, async () => null);
+    expect(s.confirmed).toBe(false);
+  });
+
+  it("skips a non-EVM chain without calling the fetcher", async () => {
+    const fetcher = vi.fn(async () => ({ found: true }));
+    const s = await coinmarketcapReverseIdentity("qom", ADDR, fetcher);
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(s.confirmed).toBe(false);
+  });
+});
+
+describe("resolveTokenIdentity — CoinMarketCap self-sufficiency", () => {
+  it("confirms on a CoinMarketCap reverse-lookup hit alone (second aggregator)", async () => {
+    const { result } = await resolveTokenIdentity("eth", ADDR, {
+      now: NOW,
+      cgReverse: async () => ({ id: null }),
+      trustWallet: async () => false,
+      cmcReverse: async () => ({ found: true }),
+      listMembership: async () => [],
+      fetchSecurity: async () => null,
+    });
+    expect(result.confirmed).toBe(true);
+    expect(result.confirmedCategoryCount).toBe(1); // the single self-sufficient coinmarketcap category
   });
 });
