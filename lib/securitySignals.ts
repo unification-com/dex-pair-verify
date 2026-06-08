@@ -2,9 +2,11 @@
 // On-demand security scan for ONE token, for the operator "Run security scan"
 // button on a borderline token under review. Force-runs GoPlus (the batch gate —
 // verified-pair-only — lives in the selection query, so calling runScamCheckForToken
-// directly bypasses it) PLUS the two new decision-support sources: Honeypot.is
-// (covers GoPlus's blind spots) and Etherscan source-verified. Persists the new
-// signals on Token.securitySignals / securityCheckedAt. Never an auto-verify gate.
+// directly bypasses it) PLUS the decision-support sources: Honeypot.is (covers
+// GoPlus's blind spots), Etherscan source-verified, and a forced refresh of the
+// web-presence signals (sites/socials/holders/concentration) — so one button
+// refreshes EVERY on-demand signal. Persists onto Token.securitySignals /
+// securityCheckedAt (+ webPresence). Never an auto-verify gate.
 
 import { Prisma } from "@prisma/client";
 
@@ -13,6 +15,7 @@ import { HoneypotResult } from "./honeypot";
 import prisma from "./prisma";
 import { runScamCheckForToken, ScamCheckOutcome } from "./scamCheck";
 import { fetchSourceVerified, SourceVerifiedResult } from "./sourceVerified";
+import { getTokenWebPresence } from "./tokenWebPresence";
 
 export type SecuritySignals = {
   honeypot: HoneypotResult;
@@ -55,6 +58,11 @@ export async function runSecurityScanForToken(tokenId: string, opts: { now?: num
     where: { id: token.id },
     data: { securitySignals: signals as unknown as Prisma.InputJsonValue, securityCheckedAt: now },
   });
+
+  // 3. Force-refresh the web-presence signals too (sites/socials/holders/holder
+  //    concentration), so one button refreshes everything. Persisted on the row;
+  //    the page reload reads it back fresh. Best-effort — never fails the scan.
+  await getTokenWebPresence(token, now, { force: true });
 
   return { ok: true, scam, signals };
 }

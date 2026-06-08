@@ -1,8 +1,10 @@
 // lib/tokenWebPresence.ts
 // Free DECISION-SUPPORT lookups for a token detail view: GeckoTerminal token info
-// (website / socials / description / logo) + Blockscout holder count. Surfaced to
-// the operator so an "is this a real project?" call on an unidentified token is a
-// glance, not a research task (e.g. ARQ → arqen.trade · @arqentrade · 254 holders).
+// (website / socials / description / logo), Blockscout holder count + holder
+// concentration (top non-contract holder's share — a centralisation / rug-risk
+// cue), and a DexScreener socials fall-back for tokens GeckoTerminal has no links
+// for. Surfaced to the operator so an "is this a real project?" call on an
+// unidentified token is a glance, not a research task.
 //
 // NB: these signals are NOT a trust gate — AV-5 proved they're gameable (a spoof
 // can register a website / airdrop holders), so they inform the human, never
@@ -23,27 +25,64 @@ export type TokenWebPresence = {
   description: string | null;
   imageUrl: string | null;
   holders: number | null;
-  transfers: number | null;
+  topHolderPercent: number | null; // % of supply held by the largest NON-contract holder
 };
 
-// GeckoTerminal network slug + Blockscout base per chain key (null = no free
-// Blockscout instance, so holders are unavailable there — GT info still works).
-const GT_NET: Record<string, string> = { eth: "eth", polygon_pos: "polygon_pos", bsc: "bsc", xdai: "xdai" };
+// GeckoTerminal network slug per chain key (null/absent = GT info not fetched).
+const GT_NET: Record<string, string> = {
+  eth: "eth",
+  polygon_pos: "polygon_pos",
+  bsc: "bsc",
+  xdai: "xdai",
+  base: "base",
+  arbitrum: "arbitrum",
+  optimism: "optimism",
+};
+
+// Blockscout instance base per chain key (null = no free Blockscout instance, so
+// holders/concentration are unavailable there — GT + DexScreener still work).
+// optimism.blockscout.com 301-redirects to explorer.optimism.io; fetch follows it.
 const BLOCKSCOUT: Record<string, string | null> = {
   eth: "https://eth.blockscout.com",
   polygon_pos: "https://polygon.blockscout.com",
   xdai: "https://gnosis.blockscout.com",
+  base: "https://base.blockscout.com",
+  arbitrum: "https://arbitrum.blockscout.com",
+  // optimism.blockscout.com 301-redirects here; undici fetch doesn't follow the
+  // cross-origin redirect, so point straight at the final Blockscout host.
+  optimism: "https://explorer.optimism.io",
   bsc: null,
+};
+
+// DexScreener chain slug per chain key — for the socials fall-back only.
+const DEXSCREENER_CHAIN: Record<string, string> = {
+  eth: "ethereum",
+  bsc: "bsc",
+  polygon_pos: "polygon",
+  xdai: "gnosischain",
+  base: "base",
+  arbitrum: "arbitrum",
+  optimism: "optimism",
 };
 
 // How long a stored copy is trusted before a re-fetch (web presence + holders
 // move slowly).
 const STORE_TTL_S = 7 * 24 * 60 * 60; // 7 days
-const blank = (): TokenWebPresence => ({ websites: [], twitter: null, telegram: null, discord: null, description: null, imageUrl: null, holders: null, transfers: null });
+const blank = (): TokenWebPresence => ({
+  websites: [],
+  twitter: null,
+  telegram: null,
+  discord: null,
+  description: null,
+  imageUrl: null,
+  holders: null,
+  topHolderPercent: null,
+});
 
-// Only let http(s) URLs through into hrefs / img src. GeckoTerminal token info is
-// operator-submittable, so a malicious token could carry a `javascript:`/`data:`
-// URI → stored XSS when the operator clicks. `httpsOnly` for image sources.
+// Only let http(s) URLs through into hrefs / img src. GeckoTerminal / DexScreener
+// token info is operator-submittable, so a malicious token could carry a
+// `javascript:`/`data:` URI → stored XSS when the operator clicks. `httpsOnly`
+// for image sources.
 const safeUrl = (u: string, httpsOnly = false): string | null => {
   try {
     const p = new URL(u);
@@ -65,40 +104,136 @@ const fetchT = async (url: string, init?: RequestInit, ms = 4000): Promise<Respo
   }
 };
 
-// Pure network fetch (GeckoTerminal + Blockscout). No caching here — the DB
-// write-through in getTokenWebPresence is the cache.
+type GtInfo = Pick<TokenWebPresence, "websites" | "twitter" | "telegram" | "discord" | "description" | "imageUrl">;
+
+// GeckoTerminal token info → website / socials / description / logo.
+async function fetchGtInfo(chain: string, address: string): Promise<GtInfo> {
+  const out: GtInfo = { websites: [], twitter: null, telegram: null, discord: null, description: null, imageUrl: null };
+  const gtNet = GT_NET[chain];
+  if (!gtNet) {
+    return out;
+  }
+  const r = await fetchT(`https://api.geckoterminal.com/api/v2/networks/${gtNet}/tokens/${address}/info`, { headers: { Accept: "application/json" } });
+  if (!r?.ok) {
+    return out;
+  }
+  try {
+    const j = await r.json();
+    const a = (j?.data?.attributes ?? {}) as Record<string, unknown>;
+    if (Array.isArray(a.websites)) out.websites = (a.websites as unknown[]).filter((w): w is string => typeof w === "string" && safeUrl(w) !== null);
+    out.twitter = typeof a.twitter_handle === "string" && a.twitter_handle ? `https://twitter.com/${encodeURIComponent(a.twitter_handle)}` : null;
+    out.telegram = typeof a.telegram_handle === "string" && a.telegram_handle ? `https://t.me/${encodeURIComponent(a.telegram_handle)}` : null;
+    out.discord = typeof a.discord_url === "string" ? safeUrl(a.discord_url) : null;
+    out.description = typeof a.description === "string" && a.description.length > 0 ? a.description : null;
+    out.imageUrl = typeof a.image_url === "string" && a.image_url !== "missing.png" ? safeUrl(a.image_url, true) : null;
+  } catch {
+    /* non-JSON — leave blank */
+  }
+  return out;
+}
+
+// Blockscout holder stats from two fast calls: the token record (holder count +
+// total supply) and the holders list (largest-first). Concentration = the largest
+// NON-contract holder's share of supply — a centralisation / rug-risk cue (one EOA
+// can dump). total_supply + value are raw integer strings in the same units, so
+// decimals cancel in the ratio; BigInt avoids float overflow. (The /counters
+// endpoint also gives a transfer count but is slow + flaky under load, so we get
+// the holder count from the token record instead.)
+async function fetchHolderStats(bs: string, address: string): Promise<{ holders: number | null; topHolderPercent: number | null }> {
+  const [tokRes, holdRes] = await Promise.all([
+    fetchT(`${bs}/api/v2/tokens/${address}`),
+    fetchT(`${bs}/api/v2/tokens/${address}/holders`),
+  ]);
+  const out: { holders: number | null; topHolderPercent: number | null } = { holders: null, topHolderPercent: null };
+  if (!tokRes?.ok) {
+    return out;
+  }
+  let totalSupply = BigInt(0);
+  try {
+    const tok = await tokRes.json();
+    out.holders = tok?.holders_count != null ? Number(tok.holders_count) : null;
+    totalSupply = tok?.total_supply != null ? BigInt(String(tok.total_supply)) : BigInt(0);
+  } catch {
+    return out;
+  }
+  if (totalSupply <= BigInt(0) || !holdRes?.ok) {
+    return out;
+  }
+  try {
+    const hold = await holdRes.json();
+    const items = Array.isArray(hold?.items) ? hold.items : [];
+    for (const it of items) {
+      if (it?.address?.is_contract === true) {
+        continue;
+      }
+      const value = BigInt(String(it?.value ?? "0"));
+      out.topHolderPercent = Number((value * BigInt(10_000)) / totalSupply) / 100; // 2 dp
+      break;
+    }
+  } catch {
+    /* leave topHolderPercent null */
+  }
+  return out;
+}
+
+// DexScreener socials/websites — the fall-back when GeckoTerminal has no links.
+async function fetchDexScreenerLinks(chain: string, address: string): Promise<Partial<GtInfo> | null> {
+  const slug = DEXSCREENER_CHAIN[chain];
+  if (!slug) {
+    return null;
+  }
+  const r = await fetchT(`https://api.dexscreener.com/latest/dex/tokens/${address}`, { headers: { Accept: "application/json" } });
+  if (!r?.ok) {
+    return null;
+  }
+  try {
+    const j = await r.json();
+    const pairs = Array.isArray(j?.pairs) ? j.pairs : [];
+    const info = (pairs.find((p: Record<string, unknown>) => p?.chainId === slug && p?.info) as { info?: Record<string, unknown> } | undefined)?.info;
+    if (!info) {
+      return null;
+    }
+    const websites = Array.isArray(info.websites)
+      ? (info.websites as { url?: unknown }[]).map((w) => safeUrl(String(w?.url ?? ""))).filter((u): u is string => u !== null)
+      : [];
+    const socials = Array.isArray(info.socials) ? (info.socials as { type?: unknown; url?: unknown }[]) : [];
+    const byType = (t: string): string | null => {
+      const s = socials.find((x) => String(x?.type).toLowerCase() === t);
+      return s ? safeUrl(String(s.url ?? "")) : null;
+    };
+    return { websites, twitter: byType("twitter"), telegram: byType("telegram"), discord: byType("discord") };
+  } catch {
+    return null;
+  }
+}
+
+// Pure network fetch (GeckoTerminal + Blockscout + DexScreener). No caching here —
+// the DB write-through in getTokenWebPresence is the cache. Independent lookups run
+// concurrently; the DexScreener fall-back runs only when GT yielded no links.
 export async function fetchTokenWebPresence(chain: string, address: string): Promise<TokenWebPresence> {
   const data = blank();
+  if (evmChainId(chain) === null) {
+    return data; // only EVM chains we map have these explorers
+  }
 
-  // Only EVM chains we map have these explorers.
-  if (evmChainId(chain) !== null) {
-    const gtNet = GT_NET[chain];
-    if (gtNet) {
-      const r = await fetchT(`https://api.geckoterminal.com/api/v2/networks/${gtNet}/tokens/${address}/info`, { headers: { Accept: "application/json" } });
-      if (r?.ok) {
-        try {
-          const j = await r.json();
-          const a = (j?.data?.attributes ?? {}) as Record<string, unknown>;
-          if (Array.isArray(a.websites)) data.websites = (a.websites as unknown[]).filter((w): w is string => typeof w === "string" && safeUrl(w) !== null);
-          data.twitter = typeof a.twitter_handle === "string" && a.twitter_handle ? `https://twitter.com/${encodeURIComponent(a.twitter_handle)}` : null;
-          data.telegram = typeof a.telegram_handle === "string" && a.telegram_handle ? `https://t.me/${encodeURIComponent(a.telegram_handle)}` : null;
-          data.discord = typeof a.discord_url === "string" ? safeUrl(a.discord_url) : null;
-          data.description = typeof a.description === "string" && a.description.length > 0 ? a.description : null;
-          data.imageUrl = typeof a.image_url === "string" && a.image_url !== "missing.png" ? safeUrl(a.image_url, true) : null;
-        } catch { /* non-JSON — leave blank */ }
-      }
-    }
-    const bs = BLOCKSCOUT[chain];
-    if (bs) {
-      // /counters returns both token_holders_count + transfers_count.
-      const r = await fetchT(`${bs}/api/v2/tokens/${address}/counters`);
-      if (r?.ok) {
-        try {
-          const j = await r.json();
-          data.holders = j.token_holders_count != null ? Number(j.token_holders_count) : null;
-          data.transfers = j.transfers_count != null ? Number(j.transfers_count) : null;
-        } catch { /* leave blank */ }
-      }
+  const bs = BLOCKSCOUT[chain];
+  const [gt, holderStats] = await Promise.all([
+    fetchGtInfo(chain, address),
+    bs ? fetchHolderStats(bs, address) : Promise.resolve({ holders: null, topHolderPercent: null }),
+  ]);
+  Object.assign(data, gt);
+  data.holders = holderStats.holders;
+  data.topHolderPercent = holderStats.topHolderPercent;
+
+  // DexScreener fall-back — fill the socials/sites GeckoTerminal didn't have.
+  const hasLinks = data.websites.length > 0 || !!data.twitter || !!data.telegram || !!data.discord;
+  if (!hasLinks) {
+    const ds = await fetchDexScreenerLinks(chain, address);
+    if (ds) {
+      if (ds.websites && ds.websites.length) data.websites = ds.websites;
+      data.twitter = data.twitter ?? ds.twitter ?? null;
+      data.telegram = data.telegram ?? ds.telegram ?? null;
+      data.discord = data.discord ?? ds.discord ?? null;
     }
   }
 
@@ -108,12 +243,14 @@ export async function fetchTokenWebPresence(chain: string, address: string): Pro
 // DB write-through resolver. Returns the stored copy off the already-loaded token
 // row when it's fresh (no extra read / no network); otherwise fetches live and
 // persists it back to the row (best-effort — a write failure still returns the
-// fetched data). Pass the token row straight from the page's findUnique.
+// fetched data). Pass the token row straight from the page's findUnique. `force`
+// bypasses the cache (the operator "Run security scan" button refreshes it).
 export async function getTokenWebPresence(
   token: { id: string; chain: string; contractAddress: string; webPresence: unknown; webPresenceCheckedAt: number },
   now = Math.floor(Date.now() / 1000),
+  opts: { force?: boolean } = {},
 ): Promise<TokenWebPresence> {
-  if (token.webPresence && token.webPresenceCheckedAt > 0 && now - token.webPresenceCheckedAt < STORE_TTL_S) {
+  if (!opts.force && token.webPresence && token.webPresenceCheckedAt > 0 && now - token.webPresenceCheckedAt < STORE_TTL_S) {
     return token.webPresence as TokenWebPresence;
   }
   const data = await fetchTokenWebPresence(token.chain, token.contractAddress);

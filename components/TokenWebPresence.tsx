@@ -39,7 +39,11 @@ const TokenWebPresence: React.FC<{ web: Web }> = ({ web }) => {
       </div>
       <div className="kv-grid" style={{ marginTop: "var(--sp-3)" }}>
         <KV k="Holders (Blockscout)" v={web.holders != null ? num(web.holders) : "—"} />
-        <KV k="Transfers" v={web.transfers != null ? num(web.transfers) : "—"} />
+        <KV
+          k="Top holder (non-contract)"
+          v={web.topHolderPercent != null ? `${web.topHolderPercent}%` : "—"}
+          hint="Largest single non-contract wallet's share of supply — high = concentrated/rug-risk"
+        />
       </div>
       <style jsx>{`
         .kv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--sp-7); padding-top: var(--sp-3); }
