@@ -27,6 +27,10 @@ export const TOKEN_LISTS: { name: string; url: string }[] = [
   { name: "coingecko-bsc", url: "https://tokens.coingecko.com/binance-smart-chain/all.json" },
   { name: "coingecko-polygon", url: "https://tokens.coingecko.com/polygon-pos/all.json" },
   { name: "coingecko-xdai", url: "https://tokens.coingecko.com/xdai/all.json" },
+  // 4.D chains — were uncovered (B1b).
+  { name: "coingecko-base", url: "https://tokens.coingecko.com/base/all.json" },
+  { name: "coingecko-arbitrum", url: "https://tokens.coingecko.com/arbitrum-one/all.json" },
+  { name: "coingecko-optimism", url: "https://tokens.coingecko.com/optimistic-ethereum/all.json" },
 ];
 
 const LIST_TTL_MS = 24 * 60 * 60 * 1000;

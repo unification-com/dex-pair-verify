@@ -82,7 +82,7 @@ export async function runIdentityCheckForToken(
   }
 
   const existingSecurity = (token.goPlusData as TokenSecurity | null) ?? null;
-  const { result } = await resolveTokenIdentity(token.chain, token.contractAddress, {
+  const { result, coingeckoCoinId } = await resolveTokenIdentity(token.chain, token.contractAddress, {
     now,
     existingSecurity,
     ...(opts.deps ?? {}),
@@ -94,6 +94,9 @@ export async function runIdentityCheckForToken(
       identityData: result.signals as unknown as Prisma.InputJsonValue,
       identityConfirmed: result.confirmed,
       identityCheckedAt: now,
+      // Backfill the CoinGecko id when the reverse lookup found one — the token is
+      // now properly CG-listed (identity via cgId + the canonical check can run).
+      ...(coingeckoCoinId ? { coingeckoCoinId } : {}),
     },
   });
 

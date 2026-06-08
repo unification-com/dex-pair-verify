@@ -7,6 +7,7 @@
 // them (the DB-backed identityCheck pass enforces that scoping).
 
 import { aggregateIdentity } from "./aggregate";
+import { CgReverseFetcher, coingeckoReverseIdentity } from "./sources/coingecko";
 import { deriveGoplusIdentity } from "./sources/goplus";
 import { tokenListMembership, tokenListSignal } from "./sources/tokenlist";
 import { IdentitySignal, TokenIdentityResult } from "./types";
@@ -14,9 +15,10 @@ import { evmChainId } from "../chains";
 import { fetchTokenSecurity, goplusChainId, TokenSecurity } from "../scamCheck";
 
 export type ResolveDeps = {
-  // Injectable for tests; default to the real token-list + GoPlus calls.
+  // Injectable for tests; default to the real token-list + GoPlus + CoinGecko calls.
   listMembership?: (chainId: number, address: string) => Promise<string[]>;
   fetchSecurity?: (chainId: string, address: string) => Promise<TokenSecurity | null>;
+  cgReverse?: CgReverseFetcher;
 };
 
 export type ResolveOpts = ResolveDeps & {
@@ -31,12 +33,17 @@ export async function resolveTokenIdentity(
   chain: string,
   address: string,
   opts: ResolveOpts,
-): Promise<{ result: TokenIdentityResult; security: TokenSecurity | null }> {
+): Promise<{ result: TokenIdentityResult; security: TokenSecurity | null; coingeckoCoinId: string | null }> {
   const { now } = opts;
   const listMembership = opts.listMembership ?? ((cid, a) => tokenListMembership(cid, a, { now }));
   const fetchSecurity = opts.fetchSecurity ?? fetchTokenSecurity;
 
   const signals: IdentitySignal[] = [];
+
+  // CoinGecko reverse contract lookup — the most authoritative source; also yields
+  // a coin id for the caller to backfill onto the token.
+  const cg = await coingeckoReverseIdentity(chain, address, opts.cgReverse);
+  signals.push(cg.signal);
 
   // Token-list source — needs an EVM numeric chain id.
   const evmId = evmChainId(chain);
@@ -53,5 +60,5 @@ export async function resolveTokenIdentity(
   }
   signals.push(deriveGoplusIdentity(security));
 
-  return { result: aggregateIdentity(signals, now), security };
+  return { result: aggregateIdentity(signals, now), security, coingeckoCoinId: cg.coinId };
 }

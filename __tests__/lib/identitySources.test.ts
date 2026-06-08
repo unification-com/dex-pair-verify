@@ -4,6 +4,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resolveTokenIdentity } from "../../lib/identity/resolve";
+import { coingeckoReverseIdentity } from "../../lib/identity/sources/coingecko";
 import { deriveGoplusIdentity } from "../../lib/identity/sources/goplus";
 import { __clearTokenListCache, tokenListMembership, tokenListSignal } from "../../lib/identity/sources/tokenlist";
 
@@ -70,6 +71,7 @@ describe("resolveTokenIdentity", () => {
   it("confirms when a token list AND GoPlus both vouch (two categories)", async () => {
     const { result } = await resolveTokenIdentity("eth", ADDR, {
       now: NOW,
+      cgReverse: async () => ({ id: null }),
       listMembership: async () => ["uniswap-default"],
       fetchSecurity: async () => ({ trust_list: "1" }),
     });
@@ -80,6 +82,7 @@ describe("resolveTokenIdentity", () => {
   it("confirms on a curated token-list match alone (vetted, self-sufficient)", async () => {
     const { result } = await resolveTokenIdentity("eth", ADDR, {
       now: NOW,
+      cgReverse: async () => ({ id: null }),
       listMembership: async () => ["uniswap-default"],
       fetchSecurity: async () => null,
     });
@@ -90,6 +93,7 @@ describe("resolveTokenIdentity", () => {
   it("does NOT confirm on GoPlus alone when no list vouches (spoof guard)", async () => {
     const { result } = await resolveTokenIdentity("eth", ADDR, {
       now: NOW,
+      cgReverse: async () => ({ id: null }),
       listMembership: async () => [],
       fetchSecurity: async () => ({ trust_list: "1" }),
     });
@@ -101,6 +105,7 @@ describe("resolveTokenIdentity", () => {
     const fetchSecurity = vi.fn(async () => null);
     const { result } = await resolveTokenIdentity("eth", ADDR, {
       now: NOW,
+      cgReverse: async () => ({ id: null }),
       existingSecurity: { trust_list: "1" },
       listMembership: async () => ["uniswap-default"],
       fetchSecurity,
@@ -118,5 +123,40 @@ describe("resolveTokenIdentity", () => {
     expect(fetchSecurity).not.toHaveBeenCalled();
     expect(result.confirmedCategoryCount).toBe(0);
     expect(result.confirmed).toBe(false);
+  });
+});
+
+describe("coingeckoReverseIdentity (B1a)", () => {
+  it("confirms + returns the coin id when CoinGecko knows the contract", async () => {
+    const r = await coingeckoReverseIdentity("eth", ADDR, async () => ({ id: "based-gpt" }));
+    expect(r.coinId).toBe("based-gpt");
+    expect(r.signal.confirmed).toBe(true);
+    expect(r.signal.category).toBe("coingecko");
+  });
+
+  it("does not confirm when CoinGecko has no such contract", async () => {
+    const r = await coingeckoReverseIdentity("eth", ADDR, async () => ({ id: null }));
+    expect(r.coinId).toBeNull();
+    expect(r.signal.confirmed).toBe(false);
+  });
+
+  it("skips on a non-EVM chain without calling the fetcher", async () => {
+    const fetcher = vi.fn(async () => ({ id: "x" }));
+    const r = await coingeckoReverseIdentity("qom", ADDR, fetcher);
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(r.coinId).toBeNull();
+  });
+});
+
+describe("resolveTokenIdentity — CoinGecko self-sufficiency", () => {
+  it("confirms on a CoinGecko reverse-lookup hit alone (authoritative) + returns the coin id to backfill", async () => {
+    const { result, coingeckoCoinId } = await resolveTokenIdentity("eth", ADDR, {
+      now: NOW,
+      cgReverse: async () => ({ id: "based-gpt" }),
+      listMembership: async () => [],
+      fetchSecurity: async () => null,
+    });
+    expect(result.confirmed).toBe(true);
+    expect(coingeckoCoinId).toBe("based-gpt");
   });
 });
