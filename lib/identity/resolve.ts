@@ -10,6 +10,7 @@ import { aggregateIdentity } from "./aggregate";
 import { CgReverseFetcher, coingeckoReverseIdentity } from "./sources/coingecko";
 import { deriveGoplusIdentity } from "./sources/goplus";
 import { tokenListMembership, tokenListSignal } from "./sources/tokenlist";
+import { TrustWalletFetcher, trustWalletIdentity } from "./sources/trustwallet";
 import { IdentitySignal, TokenIdentityResult } from "./types";
 import { evmChainId } from "../chains";
 import { fetchTokenSecurity, goplusChainId, TokenSecurity } from "../scamCheck";
@@ -19,6 +20,7 @@ export type ResolveDeps = {
   listMembership?: (chainId: number, address: string) => Promise<string[]>;
   fetchSecurity?: (chainId: string, address: string) => Promise<TokenSecurity | null>;
   cgReverse?: CgReverseFetcher;
+  trustWallet?: TrustWalletFetcher;
 };
 
 export type ResolveOpts = ResolveDeps & {
@@ -51,6 +53,10 @@ export async function resolveTokenIdentity(
     const matched = await listMembership(evmId, address);
     signals.push(tokenListSignal(matched));
   }
+
+  // Trust Wallet curated asset registry — another self-sufficient tokenlist-class
+  // source (positive-only; skips chains it doesn't map).
+  signals.push(await trustWalletIdentity(chain, address, opts.trustWallet));
 
   // GoPlus source — reuse stored security data, else fetch once.
   let security = opts.existingSecurity ?? null;

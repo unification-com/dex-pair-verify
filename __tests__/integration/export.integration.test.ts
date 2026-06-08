@@ -124,7 +124,7 @@ describe("buildExportManifestV3", () => {
     const uni = m.supportedSources.find((s) => s.chain === "eth" && s.dex === "uniswap_v3");
     expect(uni?.pairCount).toBe(2);
     expect(uni?.lastUpdated).toBe(2000);
-    expect(uni?.exportUrl).toBe("/api/ooo/export/eth/uniswap_v3");
+    expect(uni?.exportUrl).toBe("/api/ooo/v1/export/eth/uniswap_v3");
     expect(uni?.subgraphSchemaFamily).toBe("univ3");
     expect(uni?.rpcUrl).toBe("https://ethereum-rpc.publicnode.com"); // from chainInfo
     expect(uni?.lastVerifiedAt).toBe(1234);

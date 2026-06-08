@@ -7,6 +7,7 @@ import { resolveTokenIdentity } from "../../lib/identity/resolve";
 import { coingeckoReverseIdentity } from "../../lib/identity/sources/coingecko";
 import { deriveGoplusIdentity } from "../../lib/identity/sources/goplus";
 import { __clearTokenListCache, tokenListMembership, tokenListSignal } from "../../lib/identity/sources/tokenlist";
+import { trustWalletIdentity } from "../../lib/identity/sources/trustwallet";
 
 const NOW = 1_700_000_000;
 const ADDR = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
@@ -72,6 +73,7 @@ describe("resolveTokenIdentity", () => {
     const { result } = await resolveTokenIdentity("eth", ADDR, {
       now: NOW,
       cgReverse: async () => ({ id: null }),
+      trustWallet: async () => false,
       listMembership: async () => ["uniswap-default"],
       fetchSecurity: async () => ({ trust_list: "1" }),
     });
@@ -83,6 +85,7 @@ describe("resolveTokenIdentity", () => {
     const { result } = await resolveTokenIdentity("eth", ADDR, {
       now: NOW,
       cgReverse: async () => ({ id: null }),
+      trustWallet: async () => false,
       listMembership: async () => ["uniswap-default"],
       fetchSecurity: async () => null,
     });
@@ -94,6 +97,7 @@ describe("resolveTokenIdentity", () => {
     const { result } = await resolveTokenIdentity("eth", ADDR, {
       now: NOW,
       cgReverse: async () => ({ id: null }),
+      trustWallet: async () => false,
       listMembership: async () => [],
       fetchSecurity: async () => ({ trust_list: "1" }),
     });
@@ -106,6 +110,7 @@ describe("resolveTokenIdentity", () => {
     const { result } = await resolveTokenIdentity("eth", ADDR, {
       now: NOW,
       cgReverse: async () => ({ id: null }),
+      trustWallet: async () => false,
       existingSecurity: { trust_list: "1" },
       listMembership: async () => ["uniswap-default"],
       fetchSecurity,
@@ -153,10 +158,51 @@ describe("resolveTokenIdentity — CoinGecko self-sufficiency", () => {
     const { result, coingeckoCoinId } = await resolveTokenIdentity("eth", ADDR, {
       now: NOW,
       cgReverse: async () => ({ id: "based-gpt" }),
+      trustWallet: async () => false,
       listMembership: async () => [],
       fetchSecurity: async () => null,
     });
     expect(result.confirmed).toBe(true);
     expect(coingeckoCoinId).toBe("based-gpt");
+  });
+});
+
+describe("trustWalletIdentity (B1c)", () => {
+  it("confirms (self-sufficient tokenlist) when the contract is in the Trust Wallet registry", async () => {
+    const s = await trustWalletIdentity("eth", ADDR, async () => true);
+    expect(s.confirmed).toBe(true);
+    expect(s.category).toBe("tokenlist");
+  });
+
+  it("does not confirm when the contract is absent from the registry", async () => {
+    const s = await trustWalletIdentity("eth", ADDR, async () => false);
+    expect(s.confirmed).toBe(false);
+  });
+
+  it("passes the EIP-55 checksummed address to the fetcher (Trust Wallet paths are case-sensitive)", async () => {
+    const fetcher = vi.fn(async () => true);
+    await trustWalletIdentity("eth", ADDR.toLowerCase(), fetcher);
+    expect(fetcher).toHaveBeenCalledWith("ethereum", ADDR); // ADDR is already checksummed
+  });
+
+  it("skips a chain it does not map without calling the fetcher", async () => {
+    const fetcher = vi.fn(async () => true);
+    const s = await trustWalletIdentity("qom", ADDR, fetcher);
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(s.confirmed).toBe(false);
+  });
+});
+
+describe("resolveTokenIdentity — Trust Wallet self-sufficiency", () => {
+  it("confirms on a Trust Wallet registry hit alone (no list, no GoPlus, no CoinGecko)", async () => {
+    const { result } = await resolveTokenIdentity("eth", ADDR, {
+      now: NOW,
+      cgReverse: async () => ({ id: null }),
+      trustWallet: async () => true,
+      listMembership: async () => [],
+      fetchSecurity: async () => null,
+    });
+    expect(result.confirmed).toBe(true);
+    expect(result.confirmedCategoryCount).toBe(1); // the single self-sufficient tokenlist category
   });
 });

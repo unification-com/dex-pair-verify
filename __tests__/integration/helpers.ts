@@ -48,14 +48,18 @@ export async function seedPair(token0Id: string, token1Id: string, over: PairOve
       reserve1: 0,
       reserveNativeCurrency: 0,
       reserveUsd: 1_000_000,
-      volumeUsd: 0,
+      // A healthy 24h volume (turnover 0.1 against the $1M reserve) so the default
+      // fixture is a realistic ACTIVE pool. The phantom-liquidity guard treats a
+      // deep reserve with ~zero turnover as fake, so a 0-volume default would
+      // wrongly flag every clean-pair fixture as phantom → NeedsReview.
+      volumeUsd: 100_000,
       marketCapUsd: 0,
       priceChangePercentage24h: 0,
       buys24h: 0,
       sells24h: 0,
       buyers24h: 0,
       sellers24h: 0,
-      volumeUsd24h: 0,
+      volumeUsd24h: 100_000,
       txCount: 5000,
       token0PriceCg: 2000,
       token0PriceDex: 2000,
