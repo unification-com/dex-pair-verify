@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveTokenIdentity } from "../../lib/identity/resolve";
 import { coingeckoReverseIdentity } from "../../lib/identity/sources/coingecko";
 import { coinmarketcapReverseIdentity } from "../../lib/identity/sources/coinmarketcap";
+import { firstPartyIdentity } from "../../lib/identity/sources/firstParty";
 import { deriveGoplusIdentity } from "../../lib/identity/sources/goplus";
 import { __clearTokenListCache, tokenListMembership, tokenListSignal } from "../../lib/identity/sources/tokenlist";
 import { trustWalletIdentity } from "../../lib/identity/sources/trustwallet";
@@ -238,6 +239,33 @@ describe("coinmarketcapReverseIdentity (B1d)", () => {
     const r = await coinmarketcapReverseIdentity("qom", ADDR, fetcher);
     expect(fetcher).not.toHaveBeenCalled();
     expect(r.signal.confirmed).toBe(false);
+  });
+});
+
+describe("firstPartyIdentity (Unification allowlist)", () => {
+  const FUND = "0xe9B076B476D8865cDF79D1Cf7DF420EE397a7f75";
+  it("confirms a first-party token (self-sufficient)", () => {
+    const s = firstPartyIdentity("eth", FUND);
+    expect(s.confirmed).toBe(true);
+    expect(s.category).toBe("first-party");
+  });
+  it("does not confirm a non-first-party token", () => {
+    expect(firstPartyIdentity("eth", ADDR).confirmed).toBe(false);
+  });
+});
+
+describe("resolveTokenIdentity — first-party self-sufficiency", () => {
+  it("confirms a FUND token on the allowlist alone (no lists, no aggregators)", async () => {
+    const { result } = await resolveTokenIdentity("eth", "0xe9B076B476D8865cDF79D1Cf7DF420EE397a7f75", {
+      now: NOW,
+      cgReverse: async () => ({ id: null }),
+      trustWallet: async () => false,
+      cmcReverse: async () => ({ found: false, slug: null }),
+      listMembership: async () => [],
+      fetchSecurity: async () => null,
+    });
+    expect(result.confirmed).toBe(true);
+    expect(result.confirmedCategoryCount).toBe(1); // just the first-party category
   });
 });
 

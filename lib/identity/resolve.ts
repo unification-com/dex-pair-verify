@@ -9,6 +9,7 @@
 import { aggregateIdentity } from "./aggregate";
 import { CgReverseFetcher, coingeckoReverseIdentity } from "./sources/coingecko";
 import { CmcReverseFetcher, coinmarketcapReverseIdentity } from "./sources/coinmarketcap";
+import { firstPartyIdentity } from "./sources/firstParty";
 import { deriveGoplusIdentity } from "./sources/goplus";
 import { tokenListMembership, tokenListSignal } from "./sources/tokenlist";
 import { TrustWalletFetcher, trustWalletIdentity } from "./sources/trustwallet";
@@ -43,6 +44,10 @@ export async function resolveTokenIdentity(
   const fetchSecurity = opts.fetchSecurity ?? fetchTokenSecurity;
 
   const signals: IdentitySignal[] = [];
+
+  // First-party allowlist — OUR own tokens, trusted absolutely. Instant (no
+  // network), self-sufficient, so it short-circuits the rest for FUND/xFUND/FUNDx.
+  signals.push(firstPartyIdentity(chain, address));
 
   // CoinGecko reverse contract lookup — the most authoritative source; also yields
   // a coin id for the caller to backfill onto the token.

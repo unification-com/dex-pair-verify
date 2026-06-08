@@ -357,6 +357,11 @@ export type VerdictContext = {
   tokenScamFlagged: boolean;
   pairFactoryAddress: string | null; // unknown until A.4.1 RPC read
   canonicalFactoryAddress: string | null; // from lib/sources.js
+  // Either token is one of OUR own tokens (FUND/xFUND/FUNDx — lib/firstParty.ts).
+  // First-party pairs are never auto-rejected and their reserve is trusted (no
+  // phantom guard) — we always want a feed for our token; the deep ones
+  // auto-verify, the thin ones route to review for manual inclusion.
+  firstParty: boolean;
 };
 
 // Stable machine-readable code for each adjudication outcome — one per branch of
@@ -421,7 +426,9 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   // token price). Withhold its liquidity for every liquidity-dependent decision —
   // so an UNIDENTIFIED phantom pool falls to AV-2 auto-reject (sub-floor), and an
   // identified one is routed to review at step 5b below.
-  const phantomLiquidity = isPhantomLiquidity(pair.reserveUsd, pair.volumeUsd, config.minLiquidityUsd);
+  // First-party (OUR) tokens: trust the reserve absolutely (a quiet 24h on FUND
+  // doesn't make its real pool a phantom), so the phantom guard is skipped.
+  const phantomLiquidity = !ctx.firstParty && isPhantomLiquidity(pair.reserveUsd, pair.volumeUsd, config.minLiquidityUsd);
   const effectiveReserveUsd = phantomLiquidity ? 0 : pair.reserveUsd;
 
   const f = {
@@ -451,6 +458,7 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
     confidence,
     reserveUsd: pair.reserveUsd,
     phantomLiquidity,
+    firstParty: ctx.firstParty,
     txCount: pair.txCount,
     turnover: f.turnover.observed,
     hasVerifiedSibling: ctx.hasVerifiedSibling,
@@ -485,8 +493,10 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   }
 
   // 2. Hard fences — short-circuit to AutoRejected (bypasses operator review).
-  //    A fence only fails (vs skips) when it had the data to fail on.
-  if (pair.reserveUsd < config.hardMinLiquidityUsd) {
+  //    A fence only fails (vs skips) when it had the data to fail on. First-party
+  //    pairs are exempt — we never hard-reject our own token's pools (a thin one
+  //    falls through to review below, not the bin).
+  if (!ctx.firstParty && pair.reserveUsd < config.hardMinLiquidityUsd) {
     return result(
       TokenPairStatus.AutoRejected,
       VERDICT_REASON.liquidityBelowHardFloor,
@@ -505,7 +515,7 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   //    token worth a look (AV-3), so it stays in review for the operator. This is
   //    reversible: a later cgId / identity-confirm + a re-validate re-evaluates it.
   if (!f.identified.ok) {
-    if (effectiveReserveUsd < config.minLiquidityUsd) {
+    if (!ctx.firstParty && effectiveReserveUsd < config.minLiquidityUsd) {
       return result(
         TokenPairStatus.AutoRejected,
         VERDICT_REASON.unidentifiedThinPool,

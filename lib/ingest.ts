@@ -10,7 +10,7 @@ import { utils as web3Utils } from "web3";
 
 import { cgKeyedFetch, GECKO_API_KEY } from "./coingecko";
 import prisma from "./prisma";
-import { thresholdSeedData } from "./sourceConfig";
+import { getSources, gtDexFor, gtNetworkFor, thresholdSeedData } from "./sourceConfig";
 import { runVerdictForPair } from "./verdictRunner";
 
 // With a (free Demo) CoinGecko API key, use CoinGecko's keyed on-chain
@@ -37,6 +37,9 @@ type GtPool = {
   relationships: {
     base_token: { data: { id: string } | null } | null;
     quote_token: { data: { id: string } | null } | null;
+    // Present on the /tokens/{addr}/pools endpoint (pools span DEXs) — used by the
+    // targeted first-party ingest to map a pool to one of our supported sources.
+    dex?: { data: { id: string } | null } | null;
   };
 };
 
@@ -235,6 +238,62 @@ async function upsertPair(
   return created.id;
 }
 
+// Ingest ONE GeckoTerminal pool into a (chain, dex): hydrate both tokens + the
+// pair, set the pair's CG prices, run the verdict inline. Returns the verdict tally
+// key, or null when the pool can't be ingested (missing addresses / token data).
+// Shared by the page ingest and the targeted first-party ingest (DRY).
+async function ingestOnePool(
+  chain: string,
+  dex: string,
+  p: GtPool,
+  tokenMap: Map<string, GtTokenData>,
+  now: number,
+): Promise<string | null> {
+  const pairAddr =
+    addressFromGtId(p.attributes.address) ??
+    (() => {
+      try {
+        return web3Utils.toChecksumAddress(p.attributes.address);
+      } catch {
+        return null;
+      }
+    })();
+  const t0Addr = addressFromGtId(p.relationships.base_token?.data?.id);
+  const t1Addr = addressFromGtId(p.relationships.quote_token?.data?.id);
+  if (!pairAddr || !t0Addr || !t1Addr) {
+    return null;
+  }
+  const gt0 = tokenMap.get(t0Addr);
+  const gt1 = tokenMap.get(t1Addr);
+  if (!gt0 || !gt1) {
+    return null; // GT returned no token data — skip rather than write blanks
+  }
+
+  const poolCreatedAt = isoToUnix(p.attributes.pool_created_at);
+  const token0Id = await upsertToken(chain, t0Addr, gt0, poolCreatedAt, now);
+  const token1Id = await upsertToken(chain, t1Addr, gt1, poolCreatedAt, now);
+  const pairId = await upsertPair(chain, dex, pairAddr, `${gt0.symbol}-${gt1.symbol}`, token0Id, token1Id, p, now);
+
+  // The pair's CG (aggregated) prices come from the token-level price_usd.
+  await prisma.pair.update({
+    where: { id: pairId },
+    data: { token0PriceCg: gt0.priceUsd, token1PriceCg: gt1.priceUsd },
+  });
+
+  const out = await runVerdictForPair(pairId);
+  return out.skippedManual ? "skippedManual" : out.result?.verdict ?? "error";
+}
+
+// Build the address → GtTokenData map from the embedded `include` tokens.
+const buildTokenMap = (tokens: GtToken[]): Map<string, GtTokenData> => {
+  const tokenMap = new Map<string, GtTokenData>();
+  for (const t of tokens) {
+    const addr = addressFromGtId(t.attributes.address) ?? web3Utils.toChecksumAddress(t.attributes.address);
+    tokenMap.set(addr, mapGtToken(t));
+  }
+  return tokenMap;
+};
+
 export type IngestPageResult = {
   hadData: boolean;
   poolCount: number;
@@ -272,47 +331,84 @@ export async function ingestPoolPage(
   }
 
   // Tokens arrive embedded in the pools response (via GT `include`).
-  const tokenMap = new Map<string, GtTokenData>();
-  for (const t of tokens) {
-    const addr = addressFromGtId(t.attributes.address) ?? web3Utils.toChecksumAddress(t.attributes.address);
-    tokenMap.set(addr, mapGtToken(t));
-  }
+  const tokenMap = buildTokenMap(tokens);
 
   const tallies: Record<string, number> = {};
   let pairs = 0;
-
   for (const p of pools) {
-    const pairAddr = addressFromGtId(p.attributes.address) ?? (() => {
-      try { return web3Utils.toChecksumAddress(p.attributes.address); } catch { return null; }
-    })();
-    const t0Addr = addressFromGtId(p.relationships.base_token?.data?.id);
-    const t1Addr = addressFromGtId(p.relationships.quote_token?.data?.id);
-    if (!pairAddr || !t0Addr || !t1Addr) {
+    const key = await ingestOnePool(chain, dex, p, tokenMap, now);
+    if (key === null) {
       continue;
     }
-    const gt0 = tokenMap.get(t0Addr);
-    const gt1 = tokenMap.get(t1Addr);
-    if (!gt0 || !gt1) {
-      continue; // GT returned no token data — skip rather than write blanks
-    }
-
-    const poolCreatedAt = isoToUnix(p.attributes.pool_created_at);
-    const token0Id = await upsertToken(chain, t0Addr, gt0, poolCreatedAt, now);
-    const token1Id = await upsertToken(chain, t1Addr, gt1, poolCreatedAt, now);
-
-    const pairId = await upsertPair(chain, dex, pairAddr, `${gt0.symbol}-${gt1.symbol}`, token0Id, token1Id, p, now);
-
-    // The pair's CG (aggregated) prices come from the token-level price_usd.
-    await prisma.pair.update({
-      where: { id: pairId },
-      data: { token0PriceCg: gt0.priceUsd, token1PriceCg: gt1.priceUsd },
-    });
-
-    const out = await runVerdictForPair(pairId);
-    const key = out.skippedManual ? "skippedManual" : (out.result?.verdict ?? "error");
     tallies[key] = (tallies[key] ?? 0) + 1;
     pairs += 1;
   }
 
   return { hadData: true, poolCount: pools.length, pairs, tallies };
+}
+
+// --- targeted first-party ingest -----------------------------------------
+
+// Fetch EVERY pool for one token (across DEXs), tokens embedded via `include`.
+export type TokenPoolsFetcher = (gtNetwork: string, address: string) => Promise<PoolPage>;
+
+const defaultTokenPoolsFetcher: TokenPoolsFetcher = async (gtNetwork, address) => {
+  const url = `${GT_BASE}/networks/${gtNetwork}/tokens/${address}/pools?include=base_token,quote_token`;
+  const json = await gtFetch(url, `token-pools ${gtNetwork}/${address}`);
+  const pools = (json?.data as GtPool[]) ?? [];
+  const tokens = ((json?.included as ({ type?: string } & GtToken)[]) ?? []).filter((r) => r.type === "token");
+  return { pools, tokens };
+};
+
+export type FirstPartyIngestResult = { ingested: number; skipped: number; tallies: Record<string, number> };
+
+// Pull all pools for a first-party token and ingest those on a DEX we support.
+// The page ingest only takes the top-ranked pools per DEX, so our own tokens'
+// pools get missed; this guarantees they're in the DB. A pool on a DEX with no
+// SupportedSource is skipped (no subgraph → not exportable to go-ooo).
+export async function ingestFirstPartyToken(
+  chain: string,
+  address: string,
+  opts: { now?: number; fetcher?: TokenPoolsFetcher } = {},
+): Promise<FirstPartyIngestResult> {
+  const now = opts.now ?? Math.floor(Date.now() / 1000);
+  const fetcher = opts.fetcher ?? defaultTokenPoolsFetcher;
+
+  // Map each supported source's GT dex slug → our internal dex id (and the GT
+  // network slug). Only pools whose DEX is in this map get ingested.
+  const sources = (await getSources()).filter((s) => s.chain === chain);
+  if (sources.length === 0) {
+    return { ingested: 0, skipped: 0, tallies: {} };
+  }
+  const gtNetwork = gtNetworkFor(sources[0]);
+  const dexByGtSlug = new Map<string, string>();
+  for (const s of sources) {
+    dexByGtSlug.set(gtDexFor(s), s.dex);
+    if (!(await prisma.threshold.findFirst({ where: { chain, dex: s.dex } }))) {
+      await prisma.threshold.create({ data: thresholdSeedData(chain, s.dex) });
+    }
+  }
+
+  const { pools, tokens } = await fetcher(gtNetwork, address);
+  const tokenMap = buildTokenMap(tokens);
+
+  const tallies: Record<string, number> = {};
+  let ingested = 0;
+  let skipped = 0;
+  for (const p of pools) {
+    const gtDexSlug = p.relationships.dex?.data?.id;
+    const dex = gtDexSlug ? dexByGtSlug.get(gtDexSlug) : undefined;
+    if (!dex) {
+      skipped += 1; // pool on a DEX we don't support — can't export it
+      continue;
+    }
+    const key = await ingestOnePool(chain, dex, p, tokenMap, now);
+    if (key === null) {
+      skipped += 1;
+      continue;
+    }
+    tallies[key] = (tallies[key] ?? 0) + 1;
+    ingested += 1;
+  }
+  return { ingested, skipped, tallies };
 }

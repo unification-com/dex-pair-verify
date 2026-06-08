@@ -4,8 +4,9 @@
 
 import { countTokensToCanonicalCheck, runCanonicalCheckForToken, tokensToCanonicalCheck } from "./canonicalCheck";
 import { countPairsToFactoryCheck, pairsToFactoryCheck, runFactoryCheckForPair } from "./factoryCheck";
+import { ingestableFirstParty } from "./firstParty";
 import { countTokensToIdentityCheck, runIdentityCheckForToken, tokensToIdentityCheck } from "./identityCheck";
-import { ingestPoolPage } from "./ingest";
+import { ingestFirstPartyToken, ingestPoolPage } from "./ingest";
 import prisma from "./prisma";
 import { countTokensToReviewEnrich, tokensToReviewEnrich } from "./reviewEnrich";
 import {
@@ -85,7 +86,36 @@ export async function ingestAll(opts: { log?: Logger } = {}): Promise<IngestSumm
       }
     }
   }
+
+  // Targeted first-party pull — guarantee our own tokens' pools are in (the
+  // page ingest above only takes top-ranked pools per DEX, so it misses them).
+  const fp = await firstPartyIngestPass({ log });
+  for (const [k, v] of Object.entries(fp.tallies)) {
+    tallies[k] = (tallies[k] ?? 0) + v;
+  }
+  pairs += fp.pools;
+
   return { pairs, tallies };
+}
+
+export type FirstPartySummary = { pools: number; tallies: Record<string, number> };
+
+// Pull EVERY pool for our first-party tokens (FUND/xFUND/FUNDx) on the chains we
+// ingest, so they're never missed by the page-based ingest. Reused by ingestAll
+// and the standalone `yarn first-party` CLI.
+export async function firstPartyIngestPass(opts: { log?: Logger } = {}): Promise<FirstPartySummary> {
+  const log = opts.log ?? noop;
+  const tallies: Record<string, number> = {};
+  let pools = 0;
+  for (const t of ingestableFirstParty()) {
+    const r = await ingestFirstPartyToken(t.chain, t.address);
+    for (const [k, v] of Object.entries(r.tallies)) {
+      tallies[k] = (tallies[k] ?? 0) + v;
+    }
+    pools += r.ingested;
+    log(`[first-party] ${t.symbol} ${t.chain}: ${r.ingested} pools ingested · ${r.skipped} skipped (unsupported DEX)`);
+  }
+  return { pools, tallies };
 }
 
 // --- enrichment passes ----------------------------------------------------

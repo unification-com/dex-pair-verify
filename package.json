@@ -24,6 +24,7 @@
     "review-enrich": "tsx import/review-enrich.ts",
     "rescore-scam": "tsx import/rescore-scam.ts",
     "ingest": "tsx import/ingest.ts",
+    "first-party": "tsx import/first-party.ts",
     "discover": "tsx import/discover.ts",
     "validate-seeds": "tsx import/validate-seeds.ts",
     "seed-sources": "tsx import/seed-sources.ts",

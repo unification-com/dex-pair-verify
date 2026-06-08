@@ -7,6 +7,7 @@
 // engine, three call sites).
 
 import { canonicalKey, fetchCanonicalContract, getCachedCanonicalAddress } from "./canonical";
+import { isFirstParty } from "./firstParty";
 import prisma from "./prisma";
 import { computeReviewTier } from "./reviewTier";
 import { getCanonicalFactoryAddress } from "./sourceConfig";
@@ -160,6 +161,8 @@ export async function buildVerdictContext(
     tokenScamFlagged: pair.token0.isScamFlagged || pair.token1.isScamFlagged,
     pairFactoryAddress: pair.factoryAddress, // read on-chain by the factory-check pass (T2)
     canonicalFactoryAddress: await getCanonicalFactoryAddress(pair.chain, pair.dex),
+    firstParty:
+      isFirstParty(pair.chain, pair.token0.contractAddress) || isFirstParty(pair.chain, pair.token1.contractAddress),
   };
 
   const input: VerdictPairInput = {

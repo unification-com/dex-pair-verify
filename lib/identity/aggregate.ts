@@ -18,8 +18,14 @@ export const MIN_INDEPENDENT_CATEGORIES = 2;
 // spoofs.
 // CoinGecko + CoinMarketCap (direct reverse contract lookups on the two major
 // aggregators) are authoritative like a curated list — a hit means the aggregator
-// tracks this exact contract, so either confirms on its own.
-const SELF_SUFFICIENT_CATEGORIES = new Set<IdentitySignal["category"]>(["tokenlist", "coingecko", "coinmarketcap"]);
+// tracks this exact contract, so either confirms on its own. "first-party" is OUR
+// own allowlist of Unification tokens — trusted absolutely.
+const SELF_SUFFICIENT_CATEGORIES = new Set<IdentitySignal["category"]>([
+  "tokenlist",
+  "coingecko",
+  "coinmarketcap",
+  "first-party",
+]);
 
 export function aggregateIdentity(signals: IdentitySignal[], now: number): TokenIdentityResult {
   // Distinct confirming *categories* — a Set dedupes both repeated categories

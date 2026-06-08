@@ -89,6 +89,7 @@ export function deriveFences(args: {
   pairFactoryAddress: string | null;
   canonicalFactoryAddress: string | null;
   config: FenceConfig;
+  firstParty?: boolean; // OUR token — liquidity floors + phantom guard waived (mirrors verdict.ts)
   now?: number; // unix seconds, defaults to Date.now()/1000
 }): UiFence[] {
   const { token0: t0, token1: t1, config: c } = args;
@@ -97,7 +98,8 @@ export function deriveFences(args: {
 
   // Phantom liquidity: a deep-looking pool with near-zero turnover reports a
   // reserveUsd that isn't real — withhold the liquidity credit (mirrors verdict.ts).
-  const phantom = isPhantomLiquidity(args.reserveUsd, args.volumeUsd, c.minLiquidityUsd);
+  // First-party tokens trust the reserve absolutely, so the guard is waived.
+  const phantom = !args.firstParty && isPhantomLiquidity(args.reserveUsd, args.volumeUsd, c.minLiquidityUsd);
   const effectiveReserve = phantom ? 0 : args.reserveUsd;
 
   // Identity
@@ -142,8 +144,9 @@ export function deriveFences(args: {
   F.push({
     key: "liquidity", group: "Liquidity & Activity", label: "Liquidity meets floor",
     ok: effectiveReserve >= c.minLiquidityUsd, observed: usd(args.reserveUsd), threshold: "floor " + usd(c.minLiquidityUsd),
-    weight: FENCE_WEIGHTS.liquidity, hard: false, hardFail: args.reserveUsd < c.hardMinLiquidityUsd,
-    note: phantom ? "reserve looks deep but 24h turnover ≈ 0 → likely phantom liquidity (credit withheld)"
+    weight: FENCE_WEIGHTS.liquidity, hard: false, hardFail: !args.firstParty && args.reserveUsd < c.hardMinLiquidityUsd,
+    note: args.firstParty ? "first-party token — liquidity floors waived (we always feed our own token)"
+      : phantom ? "reserve looks deep but 24h turnover ≈ 0 → likely phantom liquidity (credit withheld)"
       : args.reserveUsd < c.hardMinLiquidityUsd ? `below hard floor (${usd(c.hardMinLiquidityUsd)}) → auto-reject`
       : args.reserveUsd >= c.minLiquidityUsd ? "reserve above operator floor" : "reserve below operator floor",
   });

@@ -245,6 +245,7 @@ const makeCtx = (over: Partial<VerdictContext> = {}): VerdictContext => ({
   tokenScamFlagged: false,
   pairFactoryAddress: null,
   canonicalFactoryAddress: UNI_V3_FACTORY,
+  firstParty: false,
   ...over,
 });
 
@@ -275,6 +276,34 @@ describe("evaluatePair", () => {
     const r = evaluatePair(pair, makeCtx({ config: cfg, canonicalKey: null }));
     expect(r.verdict).toBe(TokenPairStatus.AutoRejected);
     expect(r.reasonCode).toBe(VERDICT_REASON.unidentifiedThinPool);
+  });
+
+  it("first-party: trusts a deep but quiet (0-volume) reserve — NOT phantom (the FUND-WETH case)", () => {
+    // Without firstParty this $1M/$0-volume pool is phantom → review; ours auto-verifies.
+    expect(evaluatePair(makePair({ volumeUsd: 0 }), makeCtx()).reasonCode).toBe(VERDICT_REASON.phantomLiquidity);
+    const r = evaluatePair(makePair({ volumeUsd: 0 }), makeCtx({ firstParty: true }));
+    expect(r.verdict).toBe(TokenPairStatus.AutoVerified);
+    expect(r.evidence.phantomLiquidity).toBe(false);
+    expect(r.evidence.firstParty).toBe(true);
+  });
+
+  it("first-party: never hard-rejected below the hard liquidity floor", () => {
+    const cfg = { ...DEFAULT_VERDICT_CONFIG, hardMinLiquidityUsd: 500 };
+    const pair = makePair({ reserveUsd: 100 }); // below the $500 hard floor
+    expect(evaluatePair(pair, makeCtx({ config: cfg })).verdict).toBe(TokenPairStatus.AutoRejected);
+    expect(evaluatePair(pair, makeCtx({ config: cfg, firstParty: true })).verdict).not.toBe(TokenPairStatus.AutoRejected);
+  });
+
+  it("first-party: an unidentified counterparty in a thin pool goes to review, not AV-2 reject", () => {
+    const cfg = { ...DEFAULT_VERDICT_CONFIG, minLiquidityUsd: 25000 };
+    const pair = makePair({
+      reserveUsd: 1000, volumeUsd: 500,
+      token1: makeToken({ contractAddress: USDC, coingeckoCoinId: null, identityConfirmed: false, canonicalAddress: null, decimals: 6, priceCg: 1, priceDex: 1 }),
+    });
+    expect(evaluatePair(pair, makeCtx({ config: cfg, canonicalKey: null })).verdict).toBe(TokenPairStatus.AutoRejected);
+    const r = evaluatePair(pair, makeCtx({ config: cfg, canonicalKey: null, firstParty: true }));
+    expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
+    expect(r.reasonCode).toBe(VERDICT_REASON.notIdentified);
   });
 
   it("does NOT flag a quiet-but-active pool (turnover above the phantom floor)", () => {
