@@ -17,7 +17,9 @@ import StatusBadge from "../components/ui/StatusBadge";
 import { usd, num } from "../lib/format";
 import { isOperatorCtx } from "../lib/operatorGate";
 import prisma from '../lib/prisma';
-import { VERIFIED_STATUSES } from "../lib/status";
+import { publicPairListSelect } from "../lib/publicSelect";
+import { cleanParam, pageParam } from "../lib/queryParams";
+import { coerceStatus, VERIFIED_STATUSES } from "../lib/status";
 import { PairProps } from "../types/props";
 import { TokenPairStatus } from "../types/types";
 
@@ -34,9 +36,6 @@ const PAIR_TABS: { status: TokenPairStatus; label: string }[] = [
     { status: TokenPairStatus.Duplicate, label: "Duplicate" },
     { status: TokenPairStatus.NotCurrentlyUsable, label: "Not Usable" },
 ]
-
-const cleanParam = (v: unknown): string | null =>
-    typeof v === "string" && v !== "" && v !== "undefined" ? v : null;
 
 type Source = { chain: string; dex: string };
 
@@ -62,7 +61,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const chain = cleanParam(query?.chain)
   const dex = cleanParam(query?.dex)
   const q = cleanParam(query?.q)
-  const page = Math.max(1, Number(query?.page || 1))
+  const page = pageParam(query?.page)
   const { orderBy, sortKey, sortDir } = pairSort(cleanParam(query?.sort), cleanParam(query?.dir))
   // Whole-dataset text search on the pair name (server-side, so it's not limited
   // to the current page). Postgres case-insensitive contains.
@@ -80,10 +79,8 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     const [pairs, totalCount, sourceGroups] = await Promise.all([
       prisma.pair.findMany({
         where,
-        include: {
-          token0: { select: { symbol: true, id: true, status: true } },
-          token1: { select: { symbol: true, id: true, status: true } },
-        },
+        // Public list: explicit select (no verdict drivers / token internals).
+        select: publicPairListSelect,
         orderBy,
         skip: (page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
@@ -111,7 +108,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     }
   }
 
-    const qStatus = String(query?.status || TokenPairStatus.NeedsReview) as TokenPairStatus
+    const qStatus = coerceStatus(query?.status, TokenPairStatus.NeedsReview)
     const tier = qStatus === TokenPairStatus.NeedsReview && query?.tier ? String(query.tier) : undefined
 
     const scope: Record<string, string> = {}

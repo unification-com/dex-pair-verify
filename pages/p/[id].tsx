@@ -26,7 +26,8 @@ import { deriveFences, UiFence } from "../../lib/fences";
 import { num as fmtNum } from "../../lib/format";
 import { isOperatorCtx } from "../../lib/operatorGate";
 import prisma from '../../lib/prisma';
-import { isVerifiedStatus, VERIFIED_STATUSES } from "../../lib/status";
+import { publicPairDetailSelect } from "../../lib/publicSelect";
+import { isStatus, isVerifiedStatus, VERIFIED_STATUSES } from "../../lib/status";
 import { REASON_LABEL } from "../../lib/statusMeta";
 import { evaluatePair } from "../../lib/verdict";
 import { buildVerdictContext, PairWithTokens } from "../../lib/verdictRunner";
@@ -60,10 +61,9 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   if (!operator) {
     const pair = await prisma.pair.findFirst({
       where: { id, status: { in: [...VERIFIED_STATUSES] } },
-      include: {
-        token0: { select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true, coingeckoCoinId: true } },
-        token1: { select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true, coingeckoCoinId: true } },
-      },
+      // Explicit public select — never an un-`select`-ed row, which would ship the
+      // verdict drivers (confidence, verdictEvidence, reviewTier, …) into __NEXT_DATA__.
+      select: publicPairDetailSelect,
     });
     if (pair === null) {
       return { notFound: true };
@@ -177,7 +177,9 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   // Optional queue context: if the operator arrived from a filtered queue, fetch
   // the ordered id list so prev/next/"X of Y" work (same order as the queue).
   let queue: QueueView | null = null;
-  const status = typeof query.status === "string" ? query.status : null;
+  // Whitelist the status against the enum — an arbitrary `?status=` string in a
+  // `where` clause throws (status is a DB enum) → 500.
+  const status = isStatus(query.status) ? query.status : null;
   if (status) {
     const where: Record<string, string> = { status };
     if (typeof query.chain === "string") where.chain = query.chain;

@@ -13,7 +13,9 @@ import StatusBadge from "../components/ui/StatusBadge";
 import { usd, num } from "../lib/format";
 import { isOperatorCtx } from "../lib/operatorGate";
 import prisma from '../lib/prisma';
-import { VERIFIED_STATUSES } from "../lib/status";
+import { publicTokenListSelect } from "../lib/publicSelect";
+import { cleanParam, pageParam } from "../lib/queryParams";
+import { coerceStatus, VERIFIED_STATUSES } from "../lib/status";
 import { TokenPairStatus } from "../types/types";
 
 const PAGE_SIZE = 50
@@ -25,9 +27,6 @@ const TOKEN_TABS: { status: TokenPairStatus; label: string }[] = [
     { status: TokenPairStatus.Duplicate, label: "Duplicate" },
     { status: TokenPairStatus.NotCurrentlyUsable, label: "Not Usable" },
 ]
-
-const cleanParam = (v: unknown): string | null =>
-    typeof v === "string" && v !== "" && v !== "undefined" ? v : null;
 
 // A token list row: identity fields + pool-derived aggregates. Token-level market
 // data (volume / market cap / tx count) isn't captured by ingest — it only writes
@@ -79,7 +78,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const { query } = ctx;
   const chain = cleanParam(query?.chain)
   const q = cleanParam(query?.q)
-  const page = Math.max(1, Number(query?.page || 1))
+  const page = pageParam(query?.page)
   const { sortKey, sortDir } = normalizeTokenSort(cleanParam(query?.sort), cleanParam(query?.dir))
   const paginate = (all: ListToken[]) => all.slice((page - 1) * PAGE_SIZE, (page - 1) * PAGE_SIZE + PAGE_SIZE)
   // Whole-dataset text search (server-side) on symbol / name / contract address.
@@ -97,7 +96,8 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   if (!operator) {
     const where = { status: { in: [...VERIFIED_STATUSES] }, ...(chain ? { chain } : {}), ...search }
     const [rows, agg, chainGroups] = await Promise.all([
-      prisma.token.findMany({ where, select: tokenSelect }),
+      // Public list: identity columns only (no scam internals).
+      prisma.token.findMany({ where, select: publicTokenListSelect }),
       tokenAggregates(),
       prisma.token.groupBy({ by: ['chain'], where: { status: { in: [...VERIFIED_STATUSES] } }, _count: { _all: true } }),
     ])
@@ -119,7 +119,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     }
   }
 
-    const qStatus = String(query?.status || TokenPairStatus.Unverified) as TokenPairStatus
+    const qStatus = coerceStatus(query?.status, TokenPairStatus.Unverified)
     const scope: Record<string, string> = {}
     if (chain) scope.chain = chain
     const where = { ...scope, status: qStatus, ...search }

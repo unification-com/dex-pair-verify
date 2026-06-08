@@ -58,6 +58,58 @@ export function applyUrlTemplate(template: string, key: string): string {
   return template.replace("{API_KEY}", key);
 }
 
+// SSRF guard for operator-pasted subgraph URLs. The verify path fetches whatever
+// URL the operator submits, so a self-hosted entry could otherwise point the
+// server at internal services (cloud metadata at 169.254.169.254, localhost admin
+// ports, RFC-1918 ranges). Require https and reject loopback / link-local /
+// private hosts. Hostname-based (no DNS resolution) — proportionate for an
+// operator-gated, defence-in-depth control.
+export class UnsafeSubgraphUrlError extends Error {}
+
+const isPrivateIpv4 = (host: string): boolean => {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!m) {
+    return false;
+  }
+  const a = Number(m[1]);
+  const b = Number(m[2]);
+  return (
+    a === 0 || a === 10 || a === 127 ||
+    (a === 169 && b === 254) ||           // link-local (cloud metadata)
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    a >= 224                              // multicast / reserved
+  );
+};
+
+const isPrivateHost = (host: string): boolean => {
+  const h = host.replace(/^\[|\]$/g, "").toLowerCase(); // strip IPv6 brackets
+  if (h === "localhost" || h.endsWith(".localhost") || h.endsWith(".local")) {
+    return true;
+  }
+  if (h.includes(":")) {
+    // IPv6 literal — loopback / unspecified / unique-local (fc00::/7) / link-local /
+    // IPv4-mapped. The ":" guard keeps these off ordinary hostnames (e.g. "fc…com").
+    return h === "::1" || h === "::" || h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe80") || h.startsWith("::ffff:");
+  }
+  return isPrivateIpv4(h);
+};
+
+export function assertSafeSubgraphUrl(rawUrl: string): void {
+  let u: URL;
+  try {
+    u = new URL(rawUrl);
+  } catch {
+    throw new UnsafeSubgraphUrlError("subgraph URL is not a valid URL");
+  }
+  if (u.protocol !== "https:") {
+    throw new UnsafeSubgraphUrlError("subgraph URL must use https");
+  }
+  if (isPrivateHost(u.hostname)) {
+    throw new UnsafeSubgraphUrlError("subgraph URL host is not allowed (private/loopback/link-local)");
+  }
+}
+
 // Classify the schema family from the subgraph's top-level query fields. UniV2-like
 // exposes a `pairs` query; UniV3-like exposes `pools`. A subgraph exposing only one
 // is unambiguous; one exposing both (rare) → custom, so the operator confirms.
@@ -82,6 +134,9 @@ const defaultGraphqlFetch: GraphqlFetcher = async (url, query) => {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
+    // Network-boundary backstop: never let a real fetch reach a private/non-https
+    // host, whatever the caller. (Tests inject a fetcher and bypass this path.)
+    assertSafeSubgraphUrl(url);
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

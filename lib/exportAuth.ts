@@ -2,6 +2,8 @@
 // comma-separated allow-list so the operator can rotate tokens without
 // downtime. The parse + allow-list checks are split out pure for testing.
 
+import { timingSafeEqual } from "crypto";
+
 import type { NextApiRequest } from "next";
 
 const allowedTokens = (): string[] =>
@@ -16,8 +18,16 @@ export const parseBearer = (authHeader: string | undefined): string | null => {
   return m ? m[1].trim() || null : null;
 };
 
+// Constant-time compare (avoid leaking the token via response-timing). Length
+// mismatch short-circuits — that only reveals length, not contents.
+const safeEqual = (a: string, b: string): boolean => {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && timingSafeEqual(ab, bb);
+};
+
 export const isAllowedToken = (token: string | null): boolean =>
-  token !== null && allowedTokens().includes(token);
+  token !== null && allowedTokens().some((t) => safeEqual(t, token));
 
 export const checkBearerToken = (req: NextApiRequest): boolean =>
   isAllowedToken(parseBearer(req.headers.authorization));

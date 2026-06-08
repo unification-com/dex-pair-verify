@@ -8,7 +8,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 // gates that skip unverified-pool / not-on-CoinGecko tokens — so a borderline token
 // under review gets a real read.
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (!(await requireAdminApi(req, res))) return;
+  if (!(await requireAdminApi(req, res, { methods: ["POST"] }))) return;
 
   const tokenid = String(req.body?.tokenid || "");
   if (!tokenid) {

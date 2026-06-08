@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { fetchPoolPrices } from "../../../../lib/priceFetch";
 import prisma from "../../../../lib/prisma";
 import { rateLimit } from "../../../../lib/rateLimit";
+import { VERIFIED_STATUSES } from "../../../../lib/status";
 
 import type { NextApiRequest, NextApiResponse } from "next";
 
@@ -38,7 +39,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ success: false, prices: [], chain, dex, error: "chain, dex and addresses required" });
   }
 
-  const cacheKey = `${chain}|${dex}|${addresses.map((a) => a.toLowerCase()).sort().join(",")}`;
+  // Cost-amplification guard: only price pools that belong to a VERIFIED pair on
+  // this (chain, dex). Without this an anonymous caller could pass arbitrary pool
+  // addresses and force a cache-missing upstream call against the operator's paid
+  // subgraph key on every request. Stored addresses may be checksummed, so match
+  // case-insensitively.
+  const verifiedPools = await prisma.pair.findMany({
+    where: { chain, dex, status: { in: [...VERIFIED_STATUSES] } },
+    select: { contractAddress: true },
+  });
+  const allowed = new Set(verifiedPools.map((p) => p.contractAddress.toLowerCase()));
+  const safeAddresses = addresses.filter((a) => allowed.has(a.toLowerCase()));
+  if (safeAddresses.length === 0) {
+    return res.status(200).json({ success: true, chain, dex, prices: [], cached: false });
+  }
+
+  const cacheKey = `${chain}|${dex}|${safeAddresses.map((a) => a.toLowerCase()).sort().join(",")}`;
   const now = Math.floor(Date.now() / 1000);
 
   const cached = await prisma.priceCache.findUnique({ where: { cacheKey } });
@@ -47,7 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // Public is always latest-only (minutes = 0).
-  const r = await fetchPoolPrices(chain, dex, addresses, 0);
+  const r = await fetchPoolPrices(chain, dex, safeAddresses, 0);
   if (!r.success) {
     // Serve a warm-but-stale cache rather than failing the page.
     if (cached) {

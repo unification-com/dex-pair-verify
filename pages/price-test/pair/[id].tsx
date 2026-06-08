@@ -6,6 +6,7 @@ import Layout from "../../../components/shell/Layout";
 import StatusBadge from "../../../components/ui/StatusBadge";
 import { isOperatorCtx } from "../../../lib/operatorGate";
 import prisma from "../../../lib/prisma";
+import { priceTestPairSelect } from "../../../lib/publicSelect";
 import { isVerifiedStatus, VERIFIED_STATUSES } from "../../../lib/status";
 import { buildThresholdMap, ThresholdMap } from "../../../lib/thresholds";
 import { PairProps } from "../../../types/props";
@@ -15,16 +16,14 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const operator = await isOperatorCtx(ctx);
   const { params } = ctx;
   const pair = await prisma.pair.findUnique({
-    where: {
-      id: String(params?.id),
-    },
-    include: {
-      token0: {
-        select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true, coingeckoCoinId: true },
-      },
-      token1: {
-        select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true, coingeckoCoinId: true },
-      },
+    where: { id: String(params?.id) },
+    // The page only reads status + name + the two token symbols (for the sibling
+    // lookup). No verdict internals leave the server.
+    select: {
+      pair: true,
+      status: true,
+      token0: { select: { symbol: true } },
+      token1: { select: { symbol: true } },
     },
   });
 
@@ -45,6 +44,8 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
       ],
       status: { in: [...VERIFIED_STATUSES] },
     },
+    // Price-test only needs market facts + pool/token ids — never verdict internals.
+    select: priceTestPairSelect,
   });
 
   const thresholds = await buildThresholdMap(pairs);

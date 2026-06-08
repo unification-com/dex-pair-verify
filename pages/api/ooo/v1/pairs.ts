@@ -48,7 +48,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const catalogue = await buildPublicPairsCatalogue();
     return res.status(200).json(catalogue);
   } catch (err) {
+    // Keep details server-side; don't reflect internals to an anonymous caller.
     console.error(err);
-    return res.status(500).json({ error: String(err) });
+    return res.status(500).json({ error: "internal error" });
   }
 }

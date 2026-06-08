@@ -7,7 +7,7 @@ const CoinGeckoPoolLink: React.FC<{ chain: string, contractAddress: string }> = 
 
     return (
         <>
-            <Link href={`https://www.geckoterminal.com/${chain}/pools/${contractAddress}`}>
+            <Link href={`https://www.geckoterminal.com/${encodeURIComponent(chain)}/pools/${encodeURIComponent(contractAddress)}`}>
                 <a target="_blank">CoinGecko Chart</a>
             </Link>
         </>

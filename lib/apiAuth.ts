@@ -15,7 +15,17 @@ import type { NextApiRequest, NextApiResponse } from "next";
 export async function requireAdminApi(
   req: NextApiRequest,
   res: NextApiResponse,
+  opts: { methods?: string[] } = {},
 ): Promise<ExtendedSessionUser | null> {
+  // Optional method allow-list (defence-in-depth against CSRF on state-mutating
+  // endpoints — they're all POST; SameSite=Lax session cookies already block the
+  // cross-site send, this rejects the wrong verb outright). Omitted → no method
+  // restriction, for the read-only endpoints (getprices / nav).
+  if (opts.methods && !opts.methods.includes(req.method ?? "")) {
+    res.setHeader("Allow", opts.methods.join(", "));
+    res.status(405).json({ success: false, err: "method not allowed" });
+    return null;
+  }
   const session = await getServerSession(req, res, authOptions);
   const user = session?.user as ExtendedSessionUser | undefined;
   if (!user) {

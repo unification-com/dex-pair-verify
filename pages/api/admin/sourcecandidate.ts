@@ -3,7 +3,7 @@ import { utils as web3Utils } from "web3";
 import { requireAdminApi } from "../../../lib/apiAuth";
 import prisma from "../../../lib/prisma";
 import { getSources } from "../../../lib/sourceConfig";
-import { detectProvider } from "../../../lib/subgraphVerify";
+import { assertSafeSubgraphUrl, detectProvider, UnsafeSubgraphUrlError } from "../../../lib/subgraphVerify";
 import { CandidateStatus } from "../../../types/types";
 
 import type { NextApiRequest, NextApiResponse } from "next";
@@ -16,7 +16,7 @@ const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 // so discovery stops re-surfacing it. One handler, action-dispatched (cf.
 // bulkpairaction.ts) so the auth gate + candidate lookup are shared.
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (!(await requireAdminApi(req, res))) return;
+  if (!(await requireAdminApi(req, res, { methods: ["POST"] }))) return;
 
   const b = req.body || {};
   const action = String(b.action || "");
@@ -63,6 +63,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           success: false,
           err: "decentralized subgraph URL must use the {API_KEY} placeholder, not a literal key",
         });
+      }
+
+      // SSRF defence-in-depth: a hand-crafted promote (bypassing the verify step)
+      // could carry an internal/non-https template host. Validate it the same way.
+      try {
+        assertSafeSubgraphUrl(subgraphUrlTemplate);
+      } catch (e) {
+        return res.status(400).json({ success: false, err: e instanceof UnsafeSubgraphUrlError ? e.message : "invalid subgraph URL" });
       }
 
       let factoryAddress: string;

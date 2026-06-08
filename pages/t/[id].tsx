@@ -21,6 +21,7 @@ import { usd, num as fmtNum, ageStr } from "../../lib/format";
 import { isOperatorCtx } from "../../lib/operatorGate";
 import { OrganicitySummary, summariseOrganicity } from "../../lib/organicity";
 import prisma from '../../lib/prisma';
+import { publicPairLiteSelect, publicTokenDetailSelect } from "../../lib/publicSelect";
 import { isVerifiedStatus, VERIFIED_STATUSES } from "../../lib/status";
 import { getTokenWebPresence, TokenWebPresence } from "../../lib/tokenWebPresence";
 import { AssociatedPairProps, TokenProps } from "../../types/props";
@@ -52,7 +53,14 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   if (!operator) {
     const token = await prisma.token.findFirst({
       where: { id, status: { in: [...VERIFIED_STATUSES] } },
-      include: { pairsToken0: { select: pairSelect }, pairsToken1: { select: pairSelect } },
+      // Explicit public select — never an un-`select`-ed row, which would ship the
+      // scam/identity internals into __NEXT_DATA__. Pools use the confidence-free
+      // lite select (no verdict drivers).
+      select: {
+        ...publicTokenDetailSelect,
+        pairsToken0: { select: publicPairLiteSelect },
+        pairsToken1: { select: publicPairLiteSelect },
+      },
     });
     if (token === null) {
       return { notFound: true };
@@ -60,7 +68,8 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     // Same free decision-support enrichment as the operator view (write-through
     // cached on the token row, so anon traffic doesn't re-fetch per request).
     const web = await getTokenWebPresence(token);
-    const { pairsToken0, pairsToken1, ...scalar } = token;
+    // Drop the relations + the cache columns; `scalar` is the public identity row.
+    const { pairsToken0, pairsToken1, webPresence: _webPresence, webPresenceCheckedAt: _webPresenceCheckedAt, ...scalar } = token;
     const pools = (pairsToken1 || []).concat(pairsToken0 || []).filter((p) => isVerifiedStatus(p.status as TokenPairStatus));
     const organicity = summariseOrganicity(pools);
     return { props: { isOperator: false, token: scalar, pools, web, organicity } };

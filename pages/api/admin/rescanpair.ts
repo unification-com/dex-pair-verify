@@ -10,7 +10,7 @@ export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
 ) {
-    if (!(await requireAdminApi(req, res))) return;
+    if (!(await requireAdminApi(req, res, { methods: ["POST"] }))) return;
 
     const pairId = req.body?.pairid
     if (!pairId) {

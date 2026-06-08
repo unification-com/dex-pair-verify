@@ -5,6 +5,7 @@ import ThresholdPriceTest from "../../../components/PriceTest/ThresholdPriceTest
 import Layout from "../../../components/shell/Layout";
 import { isOperatorCtx } from "../../../lib/operatorGate";
 import prisma from "../../../lib/prisma";
+import { priceTestPairSelect } from "../../../lib/publicSelect";
 import { VERIFIED_STATUSES } from "../../../lib/status";
 import { buildThresholdMap, ThresholdMap } from "../../../lib/thresholds";
 import { PairProps } from "../../../types/props";
@@ -23,6 +24,8 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
       OR: [{ pair: `${base}-${target}` }, { pair: `${target}-${base}` }],
       status: { in: [...VERIFIED_STATUSES] },
     },
+    // Price-test only needs market facts + pool/token ids — never verdict internals.
+    select: priceTestPairSelect,
   });
 
   const thresholds = await buildThresholdMap(pairs);

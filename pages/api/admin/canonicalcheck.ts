@@ -14,7 +14,7 @@ export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
 ) {
-    if (!(await requireAdminApi(req, res))) return;
+    if (!(await requireAdminApi(req, res, { methods: ["POST"] }))) return;
 
     const now = Math.floor(Date.now() / 1000)
     const jobStartedAt = Number(req.body?.jobStartedAt) || now

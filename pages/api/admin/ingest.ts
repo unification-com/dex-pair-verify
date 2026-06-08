@@ -11,7 +11,7 @@ export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
 ) {
-    if (!(await requireAdminApi(req, res))) return;
+    if (!(await requireAdminApi(req, res, { methods: ["POST"] }))) return;
 
     const idx = Math.max(0, Number(req.body?.sourceIndex) || 0)
     const page = Math.max(1, Number(req.body?.page) || 1)

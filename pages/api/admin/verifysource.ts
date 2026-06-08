@@ -1,5 +1,5 @@
 import { requireAdminApi } from "../../../lib/apiAuth";
-import { verifySubgraphSource } from "../../../lib/subgraphVerify";
+import { assertSafeSubgraphUrl, UnsafeSubgraphUrlError, verifySubgraphSource } from "../../../lib/subgraphVerify";
 
 import type { NextApiRequest, NextApiResponse } from "next";
 
@@ -9,11 +9,17 @@ import type { NextApiRequest, NextApiResponse } from "next";
 // schema family. The operator reviews the result before promoting the candidate
 // (sourcecandidate.ts). Uses the server's own provider key from env.
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (!(await requireAdminApi(req, res))) return;
+  if (!(await requireAdminApi(req, res, { methods: ["POST"] }))) return;
 
   const url = String(req.body?.url || "").trim();
   if (!url) {
     return res.status(400).json({ success: false, err: "url required" });
+  }
+  // SSRF guard: reject non-https / private / loopback hosts before any fetch.
+  try {
+    assertSafeSubgraphUrl(url);
+  } catch (e) {
+    return res.status(400).json({ success: false, err: e instanceof UnsafeSubgraphUrlError ? e.message : "invalid subgraph URL" });
   }
 
   try {
