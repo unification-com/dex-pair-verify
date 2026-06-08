@@ -10,10 +10,11 @@ import { evmChainId } from "../../chains";
 import { CMC_PRO_API_KEY, cmcKeyedRawFetch } from "../../coinmarketcap";
 import { IdentitySignal } from "../types";
 
-// Injectable for tests. { found: true } = CMC tracks this contract; { found:
-// false } = definitively untracked (CMC's 400); null = unknown (no key, transient
-// failure, bad key) — treated as "not confirmed", never a false positive.
-export type CmcReverseFetcher = (address: string) => Promise<{ found: boolean } | null>;
+// Injectable for tests. found = CMC tracks this contract; slug = its currency slug
+// (for the token-page link), null when unknown. found:false = definitively
+// untracked (CMC's 400); a null result = unknown (no key, transient failure, bad
+// key) — treated as "not confirmed", never a false positive.
+export type CmcReverseFetcher = (address: string) => Promise<{ found: boolean; slug: string | null } | null>;
 
 const defaultCmcReverseFetch: CmcReverseFetcher = async (address) => {
   if (!CMC_PRO_API_KEY) {
@@ -29,9 +30,17 @@ const defaultCmcReverseFetch: CmcReverseFetcher = async (address) => {
   if (res.status === 200) {
     try {
       const j = await res.json();
-      // CMC keys `data` by coin id (or the queried address); any entry ⇒ a tracked contract.
+      // CMC keys `data` by coin id (or the queried address); any entry ⇒ a tracked
+      // contract, and each entry carries a `slug` for the currency page link.
       const data = j?.data;
-      return { found: !!data && typeof data === "object" && Object.keys(data).length > 0 };
+      if (!data || typeof data !== "object") {
+        return { found: false, slug: null };
+      }
+      const entries = Object.values(data) as Array<{ slug?: unknown }>;
+      if (entries.length === 0) {
+        return { found: false, slug: null };
+      }
+      return { found: true, slug: typeof entries[0]?.slug === "string" ? (entries[0].slug as string) : null };
     } catch {
       return null;
     }
@@ -39,23 +48,24 @@ const defaultCmcReverseFetch: CmcReverseFetcher = async (address) => {
   // 400 = CMC's definitive "invalid/untracked address". Other statuses (401 bad
   // key, 5xx, a 429 that survived the back-off) are unknown, not a clean miss.
   if (res.status === 400) {
-    return { found: false };
+    return { found: false, slug: null };
   }
   return null;
 };
 
+export type CmcReverseResult = { slug: string | null; signal: IdentitySignal };
+
 // Look the contract up on CoinMarketCap. A hit confirms the self-sufficient
-// "coinmarketcap" category. Address-based, so EVM chains only (non-EVM skips).
+// "coinmarketcap" category AND yields the currency slug (for the token-page link;
+// the caller backfills it onto the token). Address-based, so EVM chains only.
 export async function coinmarketcapReverseIdentity(
   chain: string,
   address: string,
   fetcher: CmcReverseFetcher = defaultCmcReverseFetch,
-): Promise<IdentitySignal> {
-  const notFound: IdentitySignal = {
-    source: "coinmarketcap",
-    category: "coinmarketcap",
-    confirmed: false,
-    detail: "not found on CoinMarketCap by contract",
+): Promise<CmcReverseResult> {
+  const notFound: CmcReverseResult = {
+    slug: null,
+    signal: { source: "coinmarketcap", category: "coinmarketcap", confirmed: false, detail: "not found on CoinMarketCap by contract" },
   };
   if (evmChainId(chain) === null) {
     return notFound;
@@ -64,5 +74,13 @@ export async function coinmarketcapReverseIdentity(
   if (!r || !r.found) {
     return notFound;
   }
-  return { source: "coinmarketcap", category: "coinmarketcap", confirmed: true, detail: "listed on CoinMarketCap by contract" };
+  return {
+    slug: r.slug,
+    signal: {
+      source: "coinmarketcap",
+      category: "coinmarketcap",
+      confirmed: true,
+      detail: r.slug ? `CoinMarketCap: ${r.slug}` : "listed on CoinMarketCap by contract",
+    },
+  };
 }

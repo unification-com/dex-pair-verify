@@ -8,6 +8,7 @@ import ChainName from "../../components/ChainName";
 import CoinGeckoCoinLink from "../../components/CoinGeckoCoinLink";
 import ExplorerUrl from "../../components/ExplorerUrl";
 import Layout from "../../components/shell/Layout"
+import TokenExternalLinksCard from "../../components/TokenExternalLinks";
 import TokenOrganicityCard from "../../components/TokenOrganicity";
 import TokenWebPresenceCard from "../../components/TokenWebPresence";
 import ConfidenceMeter from "../../components/ui/ConfidenceMeter";
@@ -39,7 +40,7 @@ const pairSelect = {
 type PublicTokenDetail = {
     id: string; chain: string; contractAddress: string; symbol: string; name: string;
     status: TokenPairStatus; verificationMethod: string;
-    coingeckoCoinId: string | null; decimals: number; deploymentTimestamp: number | null;
+    coingeckoCoinId: string | null; coinmarketcapSlug: string | null; decimals: number; deploymentTimestamp: number | null;
 };
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
@@ -157,6 +158,8 @@ const PublicToken: React.FC<PublicProps> = ({ token: t, pools, web, organicity }
                 <TokenWebPresenceCard web={web} />
 
                 <TokenOrganicityCard s={organicity} />
+
+                <TokenExternalLinksCard chain={t.chain} address={t.contractAddress} coinmarketcapSlug={t.coinmarketcapSlug} />
 
                 <div className="card card-pad">
                     <span className="eyebrow" style={{ display: "block", marginBottom: "var(--sp-1)" }}>Across its verified pools</span>
@@ -339,6 +342,8 @@ const OperatorToken: React.FC<OperatorProps> = (props) => {
                     <TokenWebPresenceCard web={props.web} />
 
                     <TokenOrganicityCard s={props.organicity} />
+
+                    <TokenExternalLinksCard chain={t.chain} address={t.contractAddress} coinmarketcapSlug={t.coinmarketcapSlug} />
 
                     <div className="card card-pad">
                         <span className="eyebrow" style={{ display: "block", marginBottom: "var(--sp-1)" }}>Across its pools</span>

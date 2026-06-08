@@ -15,6 +15,7 @@
 import { Prisma } from "@prisma/client";
 
 import { evmChainId } from "./chains";
+import { BLOCKSCOUT_BASE, DEXSCREENER_CHAIN } from "./externalLinks";
 import prisma from "./prisma";
 
 export type TokenWebPresence = {
@@ -39,31 +40,10 @@ const GT_NET: Record<string, string> = {
   optimism: "optimism",
 };
 
-// Blockscout instance base per chain key (null = no free Blockscout instance, so
-// holders/concentration are unavailable there — GT + DexScreener still work).
-// optimism.blockscout.com 301-redirects to explorer.optimism.io; fetch follows it.
-const BLOCKSCOUT: Record<string, string | null> = {
-  eth: "https://eth.blockscout.com",
-  polygon_pos: "https://polygon.blockscout.com",
-  xdai: "https://gnosis.blockscout.com",
-  base: "https://base.blockscout.com",
-  arbitrum: "https://arbitrum.blockscout.com",
-  // optimism.blockscout.com 301-redirects here; undici fetch doesn't follow the
-  // cross-origin redirect, so point straight at the final Blockscout host.
-  optimism: "https://explorer.optimism.io",
-  bsc: null,
-};
-
-// DexScreener chain slug per chain key — for the socials fall-back only.
-const DEXSCREENER_CHAIN: Record<string, string> = {
-  eth: "ethereum",
-  bsc: "bsc",
-  polygon_pos: "polygon",
-  xdai: "gnosischain",
-  base: "base",
-  arbitrum: "arbitrum",
-  optimism: "optimism",
-};
+// Blockscout instance base + DexScreener slug per chain are shared with
+// lib/externalLinks.ts (which also builds the public token-page deep-links), so
+// the chain maps live in ONE place. `BLOCKSCOUT_BASE` null = no free Blockscout
+// instance there (holders/concentration unavailable; GT + DexScreener still work).
 
 // How long a stored copy is trusted before a re-fetch (web presence + holders
 // move slowly).
@@ -216,7 +196,7 @@ export async function fetchTokenWebPresence(chain: string, address: string): Pro
     return data; // only EVM chains we map have these explorers
   }
 
-  const bs = BLOCKSCOUT[chain];
+  const bs = BLOCKSCOUT_BASE[chain];
   const [gt, holderStats] = await Promise.all([
     fetchGtInfo(chain, address),
     bs ? fetchHolderStats(bs, address) : Promise.resolve({ holders: null, topHolderPercent: null }),

@@ -184,6 +184,10 @@ model Token {
   verificationMethod    VerificationMethod      @default(Import)
   txCount               Int
   coingeckoCoinId       String
+  // CoinMarketCap slug, backfilled when the CMC reverse contract lookup (B1d)
+  // confirms a token's identity — powers a CMC link/id on the token page,
+  // symmetric to coingeckoCoinId. "" = not (yet) resolved on CMC.
+  coinmarketcapSlug     String                  @default("")
   totalSupply           Float
   volume24hUsd          Float
   marketCapUsd          Float

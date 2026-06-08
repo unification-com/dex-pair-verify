@@ -125,6 +125,7 @@ export type TokenProps = {
     status: TokenPairStatus;
     txCount: number;
     coingeckoCoinId: string;
+    coinmarketcapSlug: string;
     totalSupply: number;
     volume24hUsd: number
     marketCapUsd: number

@@ -37,7 +37,7 @@ export async function resolveTokenIdentity(
   chain: string,
   address: string,
   opts: ResolveOpts,
-): Promise<{ result: TokenIdentityResult; security: TokenSecurity | null; coingeckoCoinId: string | null }> {
+): Promise<{ result: TokenIdentityResult; security: TokenSecurity | null; coingeckoCoinId: string | null; coinmarketcapSlug: string | null }> {
   const { now } = opts;
   const listMembership = opts.listMembership ?? ((cid, a) => tokenListMembership(cid, a, { now }));
   const fetchSecurity = opts.fetchSecurity ?? fetchTokenSecurity;
@@ -61,8 +61,10 @@ export async function resolveTokenIdentity(
   signals.push(await trustWalletIdentity(chain, address, opts.trustWallet));
 
   // CoinMarketCap reverse contract lookup — the second major aggregator, also
-  // self-sufficient (no key ⇒ no-ops; EVM chains only).
-  signals.push(await coinmarketcapReverseIdentity(chain, address, opts.cmcReverse));
+  // self-sufficient (no key ⇒ no-ops; EVM chains only). Yields the CMC slug for
+  // the caller to backfill (token-page link).
+  const cmc = await coinmarketcapReverseIdentity(chain, address, opts.cmcReverse);
+  signals.push(cmc.signal);
 
   // GoPlus source — reuse stored security data, else fetch once.
   let security = opts.existingSecurity ?? null;
@@ -72,5 +74,5 @@ export async function resolveTokenIdentity(
   }
   signals.push(deriveGoplusIdentity(security));
 
-  return { result: aggregateIdentity(signals, now), security, coingeckoCoinId: cg.coinId };
+  return { result: aggregateIdentity(signals, now), security, coingeckoCoinId: cg.coinId, coinmarketcapSlug: cmc.slug };
 }

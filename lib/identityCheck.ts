@@ -82,7 +82,7 @@ export async function runIdentityCheckForToken(
   }
 
   const existingSecurity = (token.goPlusData as TokenSecurity | null) ?? null;
-  const { result, coingeckoCoinId } = await resolveTokenIdentity(token.chain, token.contractAddress, {
+  const { result, coingeckoCoinId, coinmarketcapSlug } = await resolveTokenIdentity(token.chain, token.contractAddress, {
     now,
     existingSecurity,
     ...(opts.deps ?? {}),
@@ -97,6 +97,8 @@ export async function runIdentityCheckForToken(
       // Backfill the CoinGecko id when the reverse lookup found one — the token is
       // now properly CG-listed (identity via cgId + the canonical check can run).
       ...(coingeckoCoinId ? { coingeckoCoinId } : {}),
+      // Backfill the CoinMarketCap slug for the token-page link (B1d).
+      ...(coinmarketcapSlug ? { coinmarketcapSlug } : {}),
     },
   });
 

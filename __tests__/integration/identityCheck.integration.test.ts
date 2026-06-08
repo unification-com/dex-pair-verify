@@ -17,7 +17,7 @@ const NOW = 1_700_000_000;
 const confirmingDeps = {
   cgReverse: async () => ({ id: null }),
   trustWallet: async () => false,
-  cmcReverse: async () => ({ found: false }),
+  cmcReverse: async () => ({ found: false, slug: null }),
   listMembership: async () => ["uniswap-default"],
   fetchSecurity: async () => ({ trust_list: "1" }),
 };
@@ -26,7 +26,7 @@ const confirmingDeps = {
 const oneCategoryDeps = {
   cgReverse: async () => ({ id: null }),
   trustWallet: async () => false,
-  cmcReverse: async () => ({ found: false }),
+  cmcReverse: async () => ({ found: false, slug: null }),
   listMembership: async () => [],
   fetchSecurity: async () => ({ trust_list: "1" }),
 };
