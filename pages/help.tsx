@@ -136,6 +136,7 @@ const Help: React.FC<Props> = ({ config }) => {
             <li><strong>Canonical mismatch (e.g. MATIC→POL).</strong> A token with a valid cgId but an address that doesn&apos;t match CoinGecko&apos;s canonical contract. Often an impostor — but after a rebrand the canonical contract can legitimately move, so check whether the mismatch is the new official contract before rejecting.</li>
             <li><strong>Scam-flagged.</strong> A GoPlus hard signal (honeypot, extreme tax, self-destruct) demotes a pair to review — it&apos;s a strong reject signal, but you decide.</li>
             <li><strong>Verified cross-source sibling.</strong> The same canonical pair already verified on another DEX/chain is a strong &ldquo;this is real&rdquo; cue.</li>
+            <li><strong>&ldquo;n/a&rdquo; / &ldquo;skipped&rdquo; checks aren&apos;t failures.</strong> On a token page, <em>Canonical address: n/a — not on CoinGecko</em> means the check has nothing to resolve (no CoinGecko id), and <em>Scam scan: skipped — verify the pool to scan</em> means the GoPlus pass deliberately only scans tokens in a verified pair (a flag only acts by demoting a verified pair, so it conserves the GoPlus quota). Both are intentional skips, not a pipeline that didn&apos;t run — verify the pool and the scam scan will pick it up.</li>
           </ul>
         </section>
 

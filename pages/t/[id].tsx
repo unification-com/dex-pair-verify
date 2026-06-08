@@ -202,6 +202,18 @@ const OperatorToken: React.FC<OperatorProps> = (props) => {
     const idTone: Tone = t.identityConfirmed ? "pass" : cgId ? "skip" : "warn";
     const idValue = t.identityConfirmed ? "confirmed (≥2 sources)" : cgId ? "not needed — CoinGecko-listed" : "unconfirmed";
 
+    // The canonical + scam passes are conditionally skipped (not failed), so surface
+    // WHY — a borderline token under review shouldn't read as "pipeline didn't run".
+    // Canonical needs a CoinGecko id (it resolves CG's canonical contract); without
+    // one there's nothing to resolve. Scam only scans tokens in a verified pair (a
+    // flag only acts by demoting a verified pair) — so it's skipped, not pending,
+    // until the pool is verified.
+    const inVerifiedPair = verifiedPools > 0;
+    const canonicalChecked = t.canonicalCheckedAt > 0;
+    const canonicalValue = canonicalChecked ? "resolved" : cgId ? "pending" : "n/a — not on CoinGecko";
+    const scamChecked = t.scamCheckedAt > 0;
+    const scamValue = t.isScamFlagged ? "flagged" : scamChecked ? "clear" : inVerifiedPair ? "pending" : "skipped — verify the pool to scan";
+
     const tokenCols: Column<TokenProps>[] = [
         { key: "symbol", label: "Symbol", sortable: true, render: (tk) => <span style={{ fontWeight: 600 }}>{tk.symbol}</span> },
         { key: "name", label: "Name", sortable: true },
@@ -256,8 +268,8 @@ const OperatorToken: React.FC<OperatorProps> = (props) => {
                                     <span className="muted">{s.detail}</span>
                                 </div>
                             ))}
-                            <TrustRow label="Canonical address" tone={t.canonicalCheckedAt > 0 ? "pass" : "skip"} value={t.canonicalCheckedAt > 0 ? "resolved" : "not checked"} />
-                            <TrustRow label="Scam scan (GoPlus)" tone={t.isScamFlagged ? "fail" : t.scamCheckedAt > 0 ? "pass" : "skip"} value={t.isScamFlagged ? "flagged" : t.scamCheckedAt > 0 ? "clear" : "not run"} detail={t.isScamFlagged ? t.scamReason : undefined} />
+                            <TrustRow label="Canonical address" tone={canonicalChecked ? "pass" : "skip"} value={canonicalValue} detail={!canonicalChecked && !cgId ? "the canonical check resolves a CoinGecko-listed token's contract — n/a here" : undefined} />
+                            <TrustRow label="Scam scan (GoPlus)" tone={t.isScamFlagged ? "fail" : scamChecked ? "pass" : "skip"} value={scamValue} detail={t.isScamFlagged ? t.scamReason : !scamChecked && !inVerifiedPair ? "the scam pass only scans tokens in a verified pair (to save GoPlus quota)" : undefined} />
                             <TrustRow label="Decimals" tone={t.decimals >= 0 && t.decimals <= 36 ? "pass" : "fail"} value={String(t.decimals)} />
                             <TrustRow label="Age" tone="skip" value={ageStr(t.deploymentTimestamp)} />
                         </div>
