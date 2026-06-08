@@ -26,7 +26,7 @@ const PIPELINE: Step[] = [
   { href: "/identitycheck", step: "2", label: "Identity check", what: "Resolve identity for tokens with no CoinGecko id (token lists + GoPlus positive signals) and promote genuine pairs out of Needs Review. Run before Scam Check. GoPlus-paced." },
   { href: "/canonicalcheck", step: "3", label: "Canonical check", what: "Resolve each token's CoinGecko-canonical contract and route address-mismatch impostors to Needs Review. CoinGecko-paced." },
   { href: "/factorycheck", step: "4", label: "Factory check", what: "Read each pool's on-chain factory() and route pools not deployed by the canonical DEX factory to Needs Review. RPC — quick." },
-  { href: "/scancheck", step: "5", label: "Scam check", what: "GoPlus security checks (honeypot, extreme tax, hidden owner…); demote flagged pairs to Needs Review. Run last. GoPlus-paced." },
+  { href: "/scancheck", step: "5", label: "Scam check", what: "GoPlus + Honeypot.is security checks (honeypot, extreme tax, simulated sell failure…); demote flagged pairs to Needs Review. Run last. GoPlus-paced." },
 ];
 
 const MAINTENANCE: Step[] = [

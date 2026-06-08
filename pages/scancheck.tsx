@@ -82,13 +82,14 @@ const ScanCheck: React.FC = () => {
     <Layout crumb="Scam check">
       <PassRunnerLayout
         step={5}
-        title="Scam check (GoPlus)"
+        title="Scam check (GoPlus + Honeypot.is)"
         pace="GoPlus 30/min"
         description={<>
-          Runs GoPlus token-security checks over the tokens in your verified pairs. A flagged token
-          (honeypot, extreme tax, self-destruct, hidden owner…) demotes any Auto-Verified pair using it
-          to Needs Review — never auto-rejected; you decide. Manual verdicts are untouched. Re-runs only
-          check tokens not yet checked.
+          Runs GoPlus token-security checks plus a Honeypot.is buy/sell simulation over the tokens in your
+          verified pairs. A flagged token (honeypot, extreme tax, self-destruct — or a Honeypot.is simulated
+          sell failure, which catches tokens GoPlus never indexed) demotes any Auto-Verified pair using it to
+          Needs Review — never auto-rejected; you decide. Manual verdicts are untouched. Re-runs only check
+          tokens not yet checked.
         </>}
         running={running}
         done={done}

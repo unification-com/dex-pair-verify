@@ -9,7 +9,7 @@
 import { Prisma } from "@prisma/client";
 
 import { evmChainId } from "./chains";
-import { fetchHoneypot, HoneypotResult } from "./honeypot";
+import { HoneypotResult } from "./honeypot";
 import prisma from "./prisma";
 import { runScamCheckForToken, ScamCheckOutcome } from "./scamCheck";
 import { fetchSourceVerified, SourceVerifiedResult } from "./sourceVerified";
@@ -34,21 +34,20 @@ export async function runSecurityScanForToken(tokenId: string, opts: { now?: num
     return { ok: false, scam: null, signals: null, error: "token not found" };
   }
 
-  // 1. GoPlus scam — forced (the verified-pair gate is only in the batch selection).
+  // 1. GoPlus + Honeypot.is scam — forced (the verified-pair gate is only in the
+  //    batch selection). The scam check fetches Honeypot.is itself now (B2), so we
+  //    reuse its result rather than fetching it a second time.
   const scam = await runScamCheckForToken(tokenId, { now });
 
-  // 2. Honeypot.is + Etherscan source-verified, in parallel.
+  // 2. Etherscan source-verified (honeypot already done above).
   const chainId = evmChainId(token.chain);
-  let honeypot: HoneypotResult;
+  const honeypot: HoneypotResult =
+    scam.honeypot ?? { isHoneypot: null, buyTax: null, sellTax: null, risk: null, reason: null, error: "non-EVM chain" };
   let sourceVerified: SourceVerifiedResult;
   if (chainId == null) {
-    honeypot = { isHoneypot: null, buyTax: null, sellTax: null, risk: null, reason: null, error: "non-EVM chain" };
     sourceVerified = { verified: null, contractName: null, isProxy: null, error: "non-EVM chain" };
   } else {
-    [honeypot, sourceVerified] = await Promise.all([
-      fetchHoneypot(chainId, token.contractAddress),
-      fetchSourceVerified(chainId, token.contractAddress, process.env.ETHERSCAN_API ?? ""),
-    ]);
+    sourceVerified = await fetchSourceVerified(chainId, token.contractAddress, process.env.ETHERSCAN_API ?? "");
   }
 
   const signals: SecuritySignals = { honeypot, sourceVerified, checkedAt: now };

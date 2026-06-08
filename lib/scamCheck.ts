@@ -8,6 +8,7 @@
 import { Prisma } from "@prisma/client";
 
 import { evmChainId, EVM_SUPPORTED_CHAINS } from "./chains";
+import { fetchHoneypot, HoneypotResult } from "./honeypot";
 import { makePacedFetch } from "./httpBackoff";
 import prisma from "./prisma";
 import { VERIFIED_STATUSES } from "./status";
@@ -115,48 +116,86 @@ export function evaluateScamSignals(s: TokenSecurity | null): ScamEvaluation {
   return { flagged: reasons.length > 0, reasons };
 }
 
+// Injectable Honeypot.is fetch (defaults to the real one). Honeypot.is simulates
+// an actual buy/sell, so it catches honeypots GoPlus never indexed (the BGPT case
+// — GoPlus blank, honeypot.is = HONEYPOT).
+export type HoneypotFetcher = (chainId: number, address: string) => Promise<HoneypotResult>;
+
+// The combined scam evaluation (B2): GoPlus signals (above) PLUS a simulated
+// honeypot from Honeypot.is. A confirmed honeypot is the strongest single signal,
+// so isHoneypot === true flags on its own — covering tokens GoPlus doesn't index.
+// (honeypot.is buy/sell *tax* is left out of the flag — GoPlus tax already covers
+// it, and the sim's tax can be noisy.) The single source of the stored flag, used
+// by both the live check and the cache-rescore so they can never disagree.
+export function evaluateTokenScam(security: TokenSecurity | null, honeypot: HoneypotResult | null): ScamEvaluation {
+  const reasons = [...evaluateScamSignals(security).reasons];
+  if (honeypot?.isHoneypot === true) {
+    reasons.push("honeypot (simulated buy/sell)");
+  }
+  return { flagged: reasons.length > 0, reasons };
+}
+
+// honeypot.is gave a usable verdict (a real true/false, not an error / unsupported
+// chain where isHoneypot is null).
+const honeypotUsable = (h: HoneypotResult | null): boolean => h != null && h.isHoneypot !== null;
+
 export type ScamCheckOutcome = {
-  checked: boolean; // false when the chain isn't on GoPlus / token missing / fetch failed
+  checked: boolean; // false when the chain isn't EVM / token missing / both sources blank
   flagged: boolean;
   reasons: string[];
   demotedPairs: number;
+  honeypot: HoneypotResult | null; // the Honeypot.is result fetched here (reused on-demand)
 };
 
-// Check one token: store the GoPlus data on it, derive the flag, and demote any
-// AutoVerified pair using it. R6: Manual* pairs are never touched.
+// Check one token against BOTH GoPlus and Honeypot.is, store the data, derive the
+// combined flag, and demote any AutoVerified pair using it. Honeypot.is is checked
+// even when GoPlus is blank, so a honeypot GoPlus never indexed still flags (the
+// BGPT case). R6: Manual* pairs are never touched.
 export async function runScamCheckForToken(
   tokenId: string,
-  opts: { now?: number; fetcher?: SecurityFetcher } = {},
+  opts: { now?: number; fetcher?: SecurityFetcher; honeypotFetcher?: HoneypotFetcher } = {},
 ): Promise<ScamCheckOutcome> {
   const now = opts.now ?? Math.floor(Date.now() / 1000);
   const fetcher = opts.fetcher ?? fetchTokenSecurity;
+  const honeypotFetcher = opts.honeypotFetcher ?? fetchHoneypot;
 
   const token = await prisma.token.findUnique({ where: { id: tokenId } });
   if (!token) {
-    return { checked: false, flagged: false, reasons: [], demotedPairs: 0 };
+    return { checked: false, flagged: false, reasons: [], demotedPairs: 0, honeypot: null };
   }
 
+  // GoPlus and Honeypot.is share the EVM-chain gate (both key by EVM chain id).
   const chainId = goplusChainId(token.chain);
-  if (!chainId) {
-    return { checked: false, flagged: false, reasons: [], demotedPairs: 0 };
+  const evmId = evmChainId(token.chain);
+  if (chainId === null || evmId === null) {
+    return { checked: false, flagged: false, reasons: [], demotedPairs: 0, honeypot: null };
   }
 
-  const security = await fetcher(chainId, token.contractAddress);
-  if (security === null) {
-    // No GoPlus data (address not indexed) or a transient miss. Stamp the attempt
-    // so the batch loop terminates instead of re-fetching this token forever — a
-    // later job (newer jobStartedAt) re-checks. Don't clobber existing metadata.
+  // Fetch both concurrently — honeypot is naturally paced by the GoPlus gate that
+  // throttles the batch loop (one token per ~2.5s), so it needs no separate gate.
+  const [security, honeypot] = await Promise.all([
+    fetcher(chainId, token.contractAddress),
+    honeypotFetcher(evmId, token.contractAddress),
+  ]);
+
+  if (security === null && !honeypotUsable(honeypot)) {
+    // Neither source had anything (address not indexed by GoPlus + honeypot.is
+    // couldn't simulate) or a transient miss. Stamp the attempt so the batch loop
+    // terminates instead of re-fetching forever — a later job re-checks. Don't
+    // clobber existing metadata.
     await prisma.token.update({ where: { id: token.id }, data: { scamCheckedAt: now } });
-    return { checked: false, flagged: false, reasons: [], demotedPairs: 0 };
+    return { checked: false, flagged: false, reasons: [], demotedPairs: 0, honeypot };
   }
 
-  const { flagged, reasons } = evaluateScamSignals(security);
+  const { flagged, reasons } = evaluateTokenScam(security, honeypot);
   const scamReason = reasons.join(", ");
 
   await prisma.token.update({
     where: { id: token.id },
     data: {
-      goPlusData: security as Prisma.InputJsonValue,
+      // Only persist data we actually got, so a blank source can't wipe a prior cache.
+      ...(security !== null ? { goPlusData: security as Prisma.InputJsonValue } : {}),
+      ...(honeypotUsable(honeypot) ? { honeypotData: honeypot as unknown as Prisma.InputJsonValue } : {}),
       isScamFlagged: flagged,
       scamReason,
       scamCheckedAt: now,
@@ -183,13 +222,13 @@ export async function runScamCheckForToken(
     }
   }
 
-  return { checked: true, flagged, reasons, demotedPairs };
+  return { checked: true, flagged, reasons, demotedPairs, honeypot };
 }
 
 // --- Re-score from cache (apply a rule change without re-fetching GoPlus) ----
 
 // Tokens that have been scam-checked at least once — the candidates for a
-// cache re-score. (Some have no GoPlus data — null fetch result — and are
+// cache re-score. (Some have neither GoPlus nor honeypot data cached and are
 // skipped by rescoreScamForToken; gating on scamCheckedAt sidesteps Prisma's
 // fiddly JSON-null filtering.)
 export async function tokensToRescore(): Promise<string[]> {
@@ -206,24 +245,28 @@ export type RescoreOutcome = {
   affectedPairs: number; // pairs re-verified because the flag changed
 };
 
-// Re-evaluate one token's CACHED GoPlus data against the CURRENT
-// evaluateScamSignals rule — no GoPlus call. If the flag flips (a rule tweak
-// added or removed it), persist the new flag/reason and re-run the verdict for
-// the token's pairs so the change propagates (cleared flag → re-verify, new flag
-// → demote). This is how a scam-rule change is applied to already-checked
-// tokens: instant + quota-free, and it reaches tokens a fresh scancheck would
-// skip (e.g. one demoted out of every verified pair). R6-safe via runVerdictForPair.
+// Re-evaluate one token's CACHED GoPlus + honeypot data against the CURRENT
+// evaluateTokenScam rule — no network call. If the flag flips (a rule tweak added
+// or removed it), persist the new flag/reason and re-run the verdict for the
+// token's pairs so the change propagates (cleared flag → re-verify, new flag →
+// demote). This is how a scam-rule change is applied to already-checked tokens:
+// instant + quota-free, and it reaches tokens a fresh scancheck would skip (e.g.
+// one demoted out of every verified pair). Re-derives from BOTH cached sources so
+// a GoPlus rescore can't wrongly clear a honeypot-set flag. R6-safe via runVerdictForPair.
 export async function rescoreScamForToken(
   tokenId: string,
   opts: { now?: number } = {},
 ): Promise<RescoreOutcome> {
   const now = opts.now ?? Math.floor(Date.now() / 1000);
   const token = await prisma.token.findUnique({ where: { id: tokenId } });
-  if (!token || token.goPlusData == null) {
+  if (!token || (token.goPlusData == null && token.honeypotData == null)) {
     return { changed: false, flagged: false, affectedPairs: 0 };
   }
 
-  const { flagged, reasons } = evaluateScamSignals(token.goPlusData as TokenSecurity);
+  const { flagged, reasons } = evaluateTokenScam(
+    token.goPlusData as TokenSecurity | null,
+    token.honeypotData as unknown as HoneypotResult | null,
+  );
   if (flagged === token.isScamFlagged) {
     return { changed: false, flagged, affectedPairs: 0 };
   }

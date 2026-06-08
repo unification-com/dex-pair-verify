@@ -200,6 +200,11 @@ model Token {
   // fields drive the verdict-engine scam fence + UI. A flagged token demotes
   // AutoVerified pairs to NeedsReview (never auto-rejected).
   goPlusData            Json?
+  // Honeypot.is buy/sell simulation cached alongside goPlusData (B2): it covers
+  // tokens GoPlus doesn't index (the BGPT case), so a simulated honeypot ALSO sets
+  // isScamFlagged. Cached so the rescore pass re-derives the combined flag without
+  // re-fetching — and so a GoPlus-only rescore can't clear a honeypot-set flag.
+  honeypotData          Json?
   isScamFlagged         Boolean                 @default(false)
   scamReason            String                  @default("")
   scamCheckedAt         Int                     @default(0)

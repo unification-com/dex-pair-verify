@@ -2,7 +2,18 @@
 
 import { describe, expect, it } from "vitest";
 
-import { evaluateScamSignals, goplusChainId } from "../../lib/scamCheck";
+import { HoneypotResult } from "../../lib/honeypot";
+import { evaluateScamSignals, evaluateTokenScam, goplusChainId } from "../../lib/scamCheck";
+
+const hp = (over: Partial<HoneypotResult> = {}): HoneypotResult => ({
+  isHoneypot: null,
+  buyTax: null,
+  sellTax: null,
+  risk: null,
+  reason: null,
+  error: null,
+  ...over,
+});
 
 describe("goplusChainId", () => {
   it("maps supported chains to GoPlus numeric ids", () => {
@@ -55,5 +66,31 @@ describe("evaluateScamSignals", () => {
   it("treats null / empty security data as unflagged", () => {
     expect(evaluateScamSignals(null).flagged).toBe(false);
     expect(evaluateScamSignals({}).flagged).toBe(false);
+  });
+});
+
+describe("evaluateTokenScam (GoPlus + Honeypot.is, B2)", () => {
+  it("flags on a simulated honeypot even when GoPlus is blank (the BGPT case)", () => {
+    const r = evaluateTokenScam(null, hp({ isHoneypot: true }));
+    expect(r.flagged).toBe(true);
+    expect(r.reasons.join()).toMatch(/honeypot \(simulated/);
+  });
+
+  it("does not flag when both sources are clean", () => {
+    const r = evaluateTokenScam({ is_honeypot: "0" }, hp({ isHoneypot: false }));
+    expect(r.flagged).toBe(false);
+    expect(r.reasons).toHaveLength(0);
+  });
+
+  it("does not flag on a honeypot.is error / unsupported chain (isHoneypot null)", () => {
+    expect(evaluateTokenScam(null, hp({ isHoneypot: null, error: "unsupported" })).flagged).toBe(false);
+    expect(evaluateTokenScam(null, null).flagged).toBe(false);
+  });
+
+  it("combines both sources' reasons when both flag", () => {
+    const r = evaluateTokenScam({ is_honeypot: "1" }, hp({ isHoneypot: true }));
+    expect(r.flagged).toBe(true);
+    expect(r.reasons).toContain("honeypot"); // GoPlus
+    expect(r.reasons.join()).toMatch(/simulated/); // honeypot.is
   });
 });

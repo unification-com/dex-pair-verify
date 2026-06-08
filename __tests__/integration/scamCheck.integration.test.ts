@@ -9,8 +9,13 @@ import { rescoreScamForToken, runScamCheckForToken, tokensToRescore, tokensToSca
 import { TokenPairStatus } from "../../types/types";
 
 const NOW = 1_700_000_000;
-const honeypotFetcher = async () => ({ is_honeypot: "1", sell_tax: "0.99" });
-const cleanFetcher = async () => ({ is_honeypot: "0", buy_tax: "0", sell_tax: "0" });
+// GoPlus stubs (the `fetcher` arg).
+const goplusHoneypot = async () => ({ is_honeypot: "1", sell_tax: "0.99" });
+const goplusClean = async () => ({ is_honeypot: "0", buy_tax: "0", sell_tax: "0" });
+// Honeypot.is stubs (the `honeypotFetcher` arg) — default to blank so the suite
+// never reaches the live honeypot.is API.
+const hpBlank = async () => ({ isHoneypot: null, buyTax: null, sellTax: null, risk: null, reason: null, error: "stub" });
+const hpHoneypot = async () => ({ isHoneypot: true, buyTax: null, sellTax: null, risk: "high", reason: "sell failed", error: null });
 
 beforeEach(async () => {
   await resetDb();
@@ -27,7 +32,7 @@ describe("runScamCheckForToken", () => {
     const autoPair = await seedPair(t0.id, t1.id, { status: TokenPairStatus.AutoVerified });
     const manualPair = await seedPair(t0.id, t1.id, { status: TokenPairStatus.ManualVerified });
 
-    const out = await runScamCheckForToken(t0.id, { now: NOW, fetcher: honeypotFetcher });
+    const out = await runScamCheckForToken(t0.id, { now: NOW, fetcher: goplusHoneypot, honeypotFetcher: hpBlank });
 
     expect(out.flagged).toBe(true);
     expect(out.reasons).toContain("honeypot");
@@ -52,7 +57,7 @@ describe("runScamCheckForToken", () => {
     const t1 = await seedToken({ coingeckoCoinId: "weth" });
     const pair = await seedPair(t0.id, t1.id, { status: TokenPairStatus.AutoVerified });
 
-    const out = await runScamCheckForToken(t0.id, { now: NOW, fetcher: cleanFetcher });
+    const out = await runScamCheckForToken(t0.id, { now: NOW, fetcher: goplusClean, honeypotFetcher: hpBlank });
 
     expect(out.flagged).toBe(false);
     expect(out.demotedPairs).toBe(0);
@@ -63,19 +68,40 @@ describe("runScamCheckForToken", () => {
 
   it("skips a chain GoPlus doesn't index (no write)", async () => {
     const t0 = await seedToken({ chain: "qom", coingeckoCoinId: "qom-coin" });
-    const out = await runScamCheckForToken(t0.id, { now: NOW, fetcher: honeypotFetcher });
+    const out = await runScamCheckForToken(t0.id, { now: NOW, fetcher: goplusHoneypot, honeypotFetcher: hpBlank });
     expect(out.checked).toBe(false);
     const token = await testPrisma.token.findUnique({ where: { id: t0.id } });
     expect(token?.isScamFlagged).toBe(false);
   });
 
-  it("stamps the attempt when GoPlus returns no data, so the batch can't loop", async () => {
+  it("stamps the attempt when BOTH GoPlus and honeypot.is return nothing, so the batch can't loop", async () => {
     const t0 = await seedToken({ coingeckoCoinId: "weth" });
-    const out = await runScamCheckForToken(t0.id, { now: NOW, fetcher: async () => null });
+    const out = await runScamCheckForToken(t0.id, { now: NOW, fetcher: async () => null, honeypotFetcher: hpBlank });
     expect(out.checked).toBe(false);
     const token = await testPrisma.token.findUnique({ where: { id: t0.id } });
     expect(token?.scamCheckedAt).toBe(NOW); // stamped → drops out of the to-check set
     expect(token?.isScamFlagged).toBe(false); // metadata untouched
+  });
+
+  it("flags via Honeypot.is even when GoPlus is blank (the BGPT case) and demotes", async () => {
+    // GoPlus never indexed this token (blank), but honeypot.is simulated a failed
+    // sell — the flag must still set and demote the pair.
+    const t0 = await seedToken({ symbol: "BGPT", coingeckoCoinId: "bgpt" });
+    const t1 = await seedToken({ symbol: "WETH", coingeckoCoinId: "weth" });
+    const pair = await seedPair(t0.id, t1.id, { status: TokenPairStatus.AutoVerified });
+
+    const out = await runScamCheckForToken(t0.id, { now: NOW, fetcher: async () => null, honeypotFetcher: hpHoneypot });
+
+    expect(out.checked).toBe(true);
+    expect(out.flagged).toBe(true);
+    expect(out.reasons.join()).toMatch(/honeypot \(simulated/);
+    expect(out.demotedPairs).toBe(1);
+
+    const token = await testPrisma.token.findUnique({ where: { id: t0.id } });
+    expect(token?.isScamFlagged).toBe(true);
+    expect(token?.goPlusData).toBeNull(); // GoPlus blank → not written (no clobber)
+    expect(token?.honeypotData).toBeTruthy(); // honeypot result cached for rescore
+    expect((await testPrisma.pair.findUnique({ where: { id: pair.id } }))?.status).toBe(TokenPairStatus.NeedsReview);
   });
 });
 
@@ -136,11 +162,46 @@ describe("rescoreScamForToken (re-score cached GoPlus data, no re-fetch)", () =>
     expect((await testPrisma.pair.findUnique({ where: { id: pair.id } }))?.status).toBe(TokenPairStatus.NeedsReview);
   });
 
-  it("skips a token with no cached GoPlus data", async () => {
-    const t0 = await seedToken({ coingeckoCoinId: "weth", scamCheckedAt: NOW }); // goPlusData null
+  it("skips a token with neither cached GoPlus nor honeypot data", async () => {
+    const t0 = await seedToken({ coingeckoCoinId: "weth", scamCheckedAt: NOW }); // both null
     const out = await rescoreScamForToken(t0.id, { now: NOW });
     expect(out.changed).toBe(false);
     expect(out.affectedPairs).toBe(0);
+  });
+
+  it("re-derives the flag from cached honeypot data when GoPlus is absent (B2)", async () => {
+    const t0 = await seedToken({
+      coingeckoCoinId: "bgpt",
+      honeypotData: { isHoneypot: true, buyTax: null, sellTax: null, risk: "high", reason: "x", error: null },
+      isScamFlagged: false,
+      scamCheckedAt: NOW,
+    });
+    const t1 = await seedToken({ coingeckoCoinId: "weth" });
+    const pair = await seedPair(t0.id, t1.id, { status: TokenPairStatus.AutoVerified });
+
+    const out = await rescoreScamForToken(t0.id, { now: NOW });
+    expect(out.changed).toBe(true);
+    expect(out.flagged).toBe(true);
+    expect((await testPrisma.pair.findUnique({ where: { id: pair.id } }))?.status).toBe(TokenPairStatus.NeedsReview);
+  });
+
+  it("does NOT clear a honeypot-set flag when the cached GoPlus data is clean (no clobber, B2)", async () => {
+    // The regression this guards: a GoPlus-only rescore would derive "clean" and
+    // wrongly clear a flag honeypot.is set. The combined rule keeps it flagged.
+    const t0 = await seedToken({
+      coingeckoCoinId: "bgpt",
+      goPlusData: { is_honeypot: "0", buy_tax: "0", sell_tax: "0" },
+      honeypotData: { isHoneypot: true, buyTax: null, sellTax: null, risk: "high", reason: "x", error: null },
+      isScamFlagged: true,
+      scamReason: "honeypot (simulated buy/sell)",
+      scamCheckedAt: NOW,
+    });
+    const t1 = await seedToken({ coingeckoCoinId: "weth" });
+    await seedPair(t0.id, t1.id, { status: TokenPairStatus.NeedsReview });
+
+    const out = await rescoreScamForToken(t0.id, { now: NOW });
+    expect(out.changed).toBe(false);
+    expect(out.flagged).toBe(true);
   });
 });
 
