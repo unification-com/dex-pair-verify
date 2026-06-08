@@ -8,6 +8,7 @@ import ChainName from "../../components/ChainName";
 import CoinGeckoCoinLink from "../../components/CoinGeckoCoinLink";
 import ExplorerUrl from "../../components/ExplorerUrl";
 import Layout from "../../components/shell/Layout"
+import TokenOrganicityCard from "../../components/TokenOrganicity";
 import TokenWebPresenceCard from "../../components/TokenWebPresence";
 import ConfidenceMeter from "../../components/ui/ConfidenceMeter";
 import DataTable, { Column } from "../../components/ui/DataTable";
@@ -17,6 +18,7 @@ import PageHeader from "../../components/ui/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
 import { usd, num as fmtNum, ageStr } from "../../lib/format";
 import { isOperatorCtx } from "../../lib/operatorGate";
+import { OrganicitySummary, summariseOrganicity } from "../../lib/organicity";
 import prisma from '../../lib/prisma';
 import { isVerifiedStatus, VERIFIED_STATUSES } from "../../lib/status";
 import { getTokenWebPresence, TokenWebPresence } from "../../lib/tokenWebPresence";
@@ -30,6 +32,7 @@ const pairSelect = {
     pair: true, id: true, contractAddress: true, reserveUsd: true, reserve0: true,
     reserve1: true, reserveNativeCurrency: true, volumeUsd: true, volumeUsd24h: true,
     txCount: true, confidence: true, status: true, dex: true,
+    buys24h: true, sells24h: true, buyers24h: true, sellers24h: true,
 };
 
 // Trimmed token shape for the public read-only view (no trust/scam internals).
@@ -58,7 +61,8 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     const web = await getTokenWebPresence(token);
     const { pairsToken0, pairsToken1, ...scalar } = token;
     const pools = (pairsToken1 || []).concat(pairsToken0 || []).filter((p) => isVerifiedStatus(p.status as TokenPairStatus));
-    return { props: { isOperator: false, token: scalar, pools, web } };
+    const organicity = summariseOrganicity(pools);
+    return { props: { isOperator: false, token: scalar, pools, web, organicity } };
   }
 
     const token = await prisma.token.findUnique({
@@ -79,7 +83,8 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     // holders), write-through cached on the token row; degrades to blank on
     // failure, never blocks the page.
     const web = await getTokenWebPresence(token)
-    return { props: { isOperator: true, token, similarTokens, web } }
+    const organicity = summariseOrganicity((token.pairsToken0 || []).concat(token.pairsToken1 || []))
+    return { props: { isOperator: true, token, similarTokens, web, organicity } }
 }
 
 type OperatorProps = {
@@ -87,12 +92,14 @@ type OperatorProps = {
     token: TokenProps;
     similarTokens: TokenProps[];
     web: TokenWebPresence;
+    organicity: OrganicitySummary;
 }
 type PublicProps = {
     isOperator: false;
     token: PublicTokenDetail;
     pools: AssociatedPairProps[];
     web: TokenWebPresence;
+    organicity: OrganicitySummary;
 }
 type Props = OperatorProps | PublicProps;
 
@@ -119,7 +126,7 @@ const publicPairCols: Column<AssociatedPairProps>[] = [
 ];
 
 // Public read-only token detail: identity + market facts + verified pools + web presence.
-const PublicToken: React.FC<PublicProps> = ({ token: t, pools, web }) => {
+const PublicToken: React.FC<PublicProps> = ({ token: t, pools, web, organicity }) => {
     const router = useRouter()
     const totalLiquidity = pools.reduce((s, p) => s + (p.reserveUsd || 0), 0)
     const vol24h = pools.reduce((s, p) => s + (p.volumeUsd24h || 0), 0)
@@ -148,6 +155,8 @@ const PublicToken: React.FC<PublicProps> = ({ token: t, pools, web }) => {
                 </div>
 
                 <TokenWebPresenceCard web={web} />
+
+                <TokenOrganicityCard s={organicity} />
 
                 <div className="card card-pad">
                     <span className="eyebrow" style={{ display: "block", marginBottom: "var(--sp-1)" }}>Across its verified pools</span>
@@ -328,6 +337,8 @@ const OperatorToken: React.FC<OperatorProps> = (props) => {
                     </div>
 
                     <TokenWebPresenceCard web={props.web} />
+
+                    <TokenOrganicityCard s={props.organicity} />
 
                     <div className="card card-pad">
                         <span className="eyebrow" style={{ display: "block", marginBottom: "var(--sp-1)" }}>Across its pools</span>
