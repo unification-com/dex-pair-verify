@@ -17,6 +17,8 @@
 // rule changes there, change it here too (they intentionally duplicate so the
 // UI can explain a verdict without importing the prisma-backed engine).
 
+import { isPhantomLiquidity } from "./phantomLiquidity";
+
 export type FenceGroup = "Identity" | "Provenance" | "Liquidity & Activity" | "Price";
 
 export type UiFence = {
@@ -93,6 +95,11 @@ export function deriveFences(args: {
   const now = args.now ?? Date.now() / 1000;
   const F: UiFence[] = [];
 
+  // Phantom liquidity: a deep-looking pool with near-zero turnover reports a
+  // reserveUsd that isn't real — withhold the liquidity credit (mirrors verdict.ts).
+  const phantom = isPhantomLiquidity(args.reserveUsd, args.volumeUsd, c.minLiquidityUsd);
+  const effectiveReserve = phantom ? 0 : args.reserveUsd;
+
   // Identity
   const id0 = !!(t0.coingeckoCoinId || t0.identityConfirmed);
   const id1 = !!(t1.coingeckoCoinId || t1.identityConfirmed);
@@ -134,9 +141,10 @@ export function deriveFences(args: {
   // Liquidity & Activity
   F.push({
     key: "liquidity", group: "Liquidity & Activity", label: "Liquidity meets floor",
-    ok: args.reserveUsd >= c.minLiquidityUsd, observed: usd(args.reserveUsd), threshold: "floor " + usd(c.minLiquidityUsd),
+    ok: effectiveReserve >= c.minLiquidityUsd, observed: usd(args.reserveUsd), threshold: "floor " + usd(c.minLiquidityUsd),
     weight: FENCE_WEIGHTS.liquidity, hard: false, hardFail: args.reserveUsd < c.hardMinLiquidityUsd,
-    note: args.reserveUsd < c.hardMinLiquidityUsd ? `below hard floor (${usd(c.hardMinLiquidityUsd)}) → auto-reject`
+    note: phantom ? "reserve looks deep but 24h turnover ≈ 0 → likely phantom liquidity (credit withheld)"
+      : args.reserveUsd < c.hardMinLiquidityUsd ? `below hard floor (${usd(c.hardMinLiquidityUsd)}) → auto-reject`
       : args.reserveUsd >= c.minLiquidityUsd ? "reserve above operator floor" : "reserve below operator floor",
   });
   F.push({
@@ -149,9 +157,12 @@ export function deriveFences(args: {
     F.push({
       key: "turnover", group: "Liquidity & Activity", label: "24h turnover",
       ok: turnover == null ? null : turnover >= c.minTurnoverRatio,
-      observed: turnover == null ? "unavailable" : turnover.toFixed(4), threshold: "≥ " + c.minTurnoverRatio,
+      observed: turnover == null ? "unavailable" : turnover < 0.001 ? turnover.toExponential(1) : turnover.toFixed(4),
+      threshold: "≥ " + c.minTurnoverRatio,
       weight: turnover == null ? 0 : FENCE_WEIGHTS.turnover, hard: false,
-      note: turnover == null ? "volume/liquidity unavailable — skipped" : "volume ÷ liquidity (price freshness)",
+      note: turnover == null ? "volume/liquidity unavailable — skipped"
+        : phantom ? "near-zero turnover on a deep pool → phantom liquidity"
+        : "volume ÷ liquidity (price freshness)",
     });
   }
   [t0, t1].forEach((tok, i) => {

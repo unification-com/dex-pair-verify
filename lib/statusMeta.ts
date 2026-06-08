@@ -27,6 +27,7 @@ export const STATUS_META: Record<TokenPairStatus, StatusMeta> = {
 export const REASON_LABEL: Record<string, string> = {
   intraChainImpostorLoser: "Lost an intra-DEX impostor conflict",
   liquidityBelowHardFloor: "Liquidity below hard floor",
+  phantomLiquidity: "Phantom liquidity (deep reserve, ~zero turnover)",
   decimalsBogus: "Token decimals look bogus",
   notIdentified: "A token is not identified",
   scamFlagged: "A token is scam-flagged",

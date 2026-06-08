@@ -16,6 +16,7 @@
 // the DB context-builder lives at the call sites (the A.4.1 ingest, the
 // re-verify cron, the UI rescan).
 
+import { isPhantomLiquidity } from "./phantomLiquidity";
 import { TokenPairStatus } from "../types/types";
 
 export type Fence = {
@@ -367,6 +368,7 @@ export type VerdictContext = {
 export const VERDICT_REASON = {
   intraChainImpostorLoser: "intraChainImpostorLoser",
   liquidityBelowHardFloor: "liquidityBelowHardFloor",
+  phantomLiquidity: "phantomLiquidity",
   decimalsBogus: "decimalsBogus",
   notIdentified: "notIdentified",
   unidentifiedThinPool: "unidentifiedThinPool",
@@ -414,12 +416,20 @@ const computeConfidence = (fences: Fence[]): number => {
 export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): VerdictResult {
   const { config, now } = ctx;
 
+  // Phantom liquidity: a deep-looking pool (reserve ≥ floor) whose 24h turnover is
+  // near-zero reports a reserveUsd that isn't real (it's derived from a garbage
+  // token price). Withhold its liquidity for every liquidity-dependent decision —
+  // so an UNIDENTIFIED phantom pool falls to AV-2 auto-reject (sub-floor), and an
+  // identified one is routed to review at step 5b below.
+  const phantomLiquidity = isPhantomLiquidity(pair.reserveUsd, pair.volumeUsd, config.minLiquidityUsd);
+  const effectiveReserveUsd = phantomLiquidity ? 0 : pair.reserveUsd;
+
   const f = {
     identified: bothTokensIdentified(
       { cgId: pair.token0.coingeckoCoinId, identityConfirmed: pair.token0.identityConfirmed },
       { cgId: pair.token1.coingeckoCoinId, identityConfirmed: pair.token1.identityConfirmed },
     ),
-    liquidity: meetsLiquidity(pair.reserveUsd, config.minLiquidityUsd),
+    liquidity: meetsLiquidity(effectiveReserveUsd, config.minLiquidityUsd),
     txCount: meetsTxCount(pair.txCount, config.minTxCount),
     turnover: meetsTurnover(pair.volumeUsd, pair.reserveUsd, config.minTurnoverRatio),
     age0: meetsAge(pair.token0.deploymentTimestamp, now, config.minAgeHours),
@@ -440,6 +450,7 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
     canonicalKey: ctx.canonicalKey ?? "none",
     confidence,
     reserveUsd: pair.reserveUsd,
+    phantomLiquidity,
     txCount: pair.txCount,
     turnover: f.turnover.observed,
     hasVerifiedSibling: ctx.hasVerifiedSibling,
@@ -494,11 +505,13 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   //    token worth a look (AV-3), so it stays in review for the operator. This is
   //    reversible: a later cgId / identity-confirm + a re-validate re-evaluates it.
   if (!f.identified.ok) {
-    if (pair.reserveUsd < config.minLiquidityUsd) {
+    if (effectiveReserveUsd < config.minLiquidityUsd) {
       return result(
         TokenPairStatus.AutoRejected,
         VERDICT_REASON.unidentifiedThinPool,
-        "unidentified token in a sub-floor pool — not oracle-usable (AV-2)",
+        phantomLiquidity
+          ? "unidentified token in a phantom-liquidity pool (deep reserve, ~zero turnover) — not oracle-usable (AV-2)"
+          : "unidentified token in a sub-floor pool — not oracle-usable (AV-2)",
       );
     }
     return result(TokenPairStatus.NeedsReview, VERDICT_REASON.notIdentified, f.identified.reason);
@@ -549,6 +562,20 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   //    it's not necessarily a scam, but it needs operator eyes.
   if (!f.price0.ok || !f.price1.ok) {
     return result(TokenPairStatus.NeedsReview, VERDICT_REASON.priceDeviation, "CG/DEX price deviation exceeds tolerance");
+  }
+
+  // 5b. Phantom liquidity: a deep-looking pool with near-zero 24h turnover — the
+  //     reserveUsd is a phantom (garbage-price-derived), not real liquidity. Never
+  //     auto-verify a dead/fake pool; route to review so the operator decides. An
+  //     UNIDENTIFIED phantom pool was already AV-2 auto-rejected at step 3 (its
+  //     effective reserve is withheld), so this catches the IDENTIFIED ones — incl.
+  //     an otherwise-canonical-confirmed pair AV-1 would have waved through.
+  if (phantomLiquidity) {
+    return result(
+      TokenPairStatus.NeedsReview,
+      VERDICT_REASON.phantomLiquidity,
+      "reserve looks deep but 24h turnover is near-zero — the liquidity figure is likely a phantom (dead/fake pool)",
+    );
   }
 
   // 6. Auto-verify, once confidence clears the band, by either route:

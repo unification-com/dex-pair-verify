@@ -256,6 +256,33 @@ describe("evaluatePair", () => {
     expect(r.canonicalKey).toBe("usd-coin:weth");
   });
 
+  it("routes an IDENTIFIED phantom-liquidity pool (deep reserve, ~0 turnover) to review", () => {
+    // Otherwise-clean pair (would auto-verify) but $1M reserve with $7 volume —
+    // turnover ~7e-6 ⇒ the reserveUsd is a phantom. Withhold the credit + review.
+    const r = evaluatePair(makePair({ volumeUsd: 7 }), makeCtx());
+    expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
+    expect(r.reasonCode).toBe(VERDICT_REASON.phantomLiquidity);
+    expect(r.evidence.phantomLiquidity).toBe(true);
+  });
+
+  it("auto-rejects an UNIDENTIFIED phantom-liquidity pool via AV-2 (effective sub-floor)", () => {
+    const cfg = { ...DEFAULT_VERDICT_CONFIG, minLiquidityUsd: 25000 };
+    const pair = makePair({
+      reserveUsd: 1_000_000, volumeUsd: 7, // deep-looking but ~0 turnover ⇒ phantom
+      token0: makeToken({ coingeckoCoinId: null, identityConfirmed: false, canonicalAddress: null }),
+      token1: makeToken({ contractAddress: USDC, coingeckoCoinId: null, identityConfirmed: false, canonicalAddress: null, decimals: 6, priceCg: 1, priceDex: 1 }),
+    });
+    const r = evaluatePair(pair, makeCtx({ config: cfg, canonicalKey: null }));
+    expect(r.verdict).toBe(TokenPairStatus.AutoRejected);
+    expect(r.reasonCode).toBe(VERDICT_REASON.unidentifiedThinPool);
+  });
+
+  it("does NOT flag a quiet-but-active pool (turnover above the phantom floor)", () => {
+    // $1M reserve, $200 volume ⇒ turnover 2e-4 > 1e-4 floor — not phantom.
+    const r = evaluatePair(makePair({ volumeUsd: 200 }), makeCtx());
+    expect(r.verdict).toBe(TokenPairStatus.AutoVerified);
+  });
+
   it("AV-1: auto-verifies a canonical-confirmed pair that misses only a soft liquidity gate", () => {
     // Real tokens (identity + both canonical addresses matched) in a thin pool
     // below the soft floor — verifiably real, so auto-verify with a GRADUATED
