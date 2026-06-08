@@ -1,14 +1,14 @@
 import { GetServerSideProps } from "next"
 import Link from "next/link";
 import { useRouter } from "next/router";
-import React, { useState } from "react"
+import React from "react"
 
 import ChainName from "../components/ChainName";
 import Pagination from "../components/Pagination";
 import Layout from "../components/shell/Layout"
 import DataTable, { Column } from "../components/ui/DataTable";
-import Icon from "../components/ui/Icon";
 import PageHeader from "../components/ui/PageHeader";
+import SearchBox from "../components/ui/SearchBox";
 import StatusBadge from "../components/ui/StatusBadge";
 import { usd, num } from "../lib/format";
 import { isOperatorCtx } from "../lib/operatorGate";
@@ -78,13 +78,24 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const operator = await isOperatorCtx(ctx);
   const { query } = ctx;
   const chain = cleanParam(query?.chain)
+  const q = cleanParam(query?.q)
   const page = Math.max(1, Number(query?.page || 1))
   const { sortKey, sortDir } = normalizeTokenSort(cleanParam(query?.sort), cleanParam(query?.dir))
   const paginate = (all: ListToken[]) => all.slice((page - 1) * PAGE_SIZE, (page - 1) * PAGE_SIZE + PAGE_SIZE)
+  // Whole-dataset text search (server-side) on symbol / name / contract address.
+  const search = q
+    ? {
+        OR: [
+          { symbol: { contains: q, mode: "insensitive" as const } },
+          { name: { contains: q, mode: "insensitive" as const } },
+          { contractAddress: { contains: q, mode: "insensitive" as const } },
+        ],
+      }
+    : {}
 
   // Public visitors get a read-only listing of VERIFIED tokens only.
   if (!operator) {
-    const where = { status: { in: [...VERIFIED_STATUSES] }, ...(chain ? { chain } : {}) }
+    const where = { status: { in: [...VERIFIED_STATUSES] }, ...(chain ? { chain } : {}), ...search }
     const [rows, agg, chainGroups] = await Promise.all([
       prisma.token.findMany({ where, select: tokenSelect }),
       tokenAggregates(),
@@ -97,6 +108,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
         isOperator: false,
         tokens: paginate(all),
         chain: chain ?? "",
+        q: q ?? "",
         page,
         totalPages: Math.max(1, Math.ceil(all.length / PAGE_SIZE)),
         totalCount: all.length,
@@ -110,7 +122,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     const qStatus = String(query?.status || TokenPairStatus.Unverified) as TokenPairStatus
     const scope: Record<string, string> = {}
     if (chain) scope.chain = chain
-    const where = { ...scope, status: qStatus }
+    const where = { ...scope, status: qStatus, ...search }
 
     const [rows, agg, statusGroups, chainGroups] = await Promise.all([
         prisma.token.findMany({ where, select: tokenSelect }),
@@ -129,6 +141,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
             isOperator: true,
             tokens: paginate(all),
             chain: chain ?? "",
+            q: q ?? "",
             status: qStatus,
             page,
             totalPages: Math.max(1, Math.ceil(all.length / PAGE_SIZE)),
@@ -145,6 +158,7 @@ type OperatorProps = {
     isOperator: true,
     tokens: ListToken[],
     chain: string,
+    q: string,
     status: TokenPairStatus,
     page: number,
     totalPages: number,
@@ -158,6 +172,7 @@ type PublicProps = {
     isOperator: false,
     tokens: ListToken[],
     chain: string,
+    q: string,
     page: number,
     totalPages: number,
     totalCount: number,
@@ -191,34 +206,27 @@ const baseTokenCols = (): Column<ListToken>[] => [
 
 const PublicTokens: React.FC<PublicProps> = (props) => {
     const router = useRouter()
-    const [filter, setFilter] = useState("")
 
-    const hrefWith = (over: Partial<{ chain: string; page: number; sort: string; dir: string }>): string => {
+    const hrefWith = (over: Partial<{ chain: string; q: string; page: number; sort: string; dir: string }>): string => {
         const qs = new URLSearchParams()
         const chain = over.chain ?? props.chain
+        const q = over.q ?? props.q
         const sort = over.sort ?? props.sort
         const dir = over.dir ?? props.dir
         if (chain) qs.set("chain", chain)
+        if (q) qs.set("q", q)
         if (sort) { qs.set("sort", sort); if (dir) qs.set("dir", dir) }
         if (over.page && over.page > 1) qs.set("page", String(over.page))
         const s = qs.toString()
         return s ? `/tokens?${s}` : "/tokens"
     }
 
-    const f = filter.trim().toLowerCase()
-    const visible = f
-        ? props.tokens.filter((t) => `${t.symbol} ${t.name}`.toLowerCase().includes(f))
-        : props.tokens
-
     return (
         <Layout crumb="Verified tokens">
             <PageHeader title="Verified tokens" sub={`${props.totalCount} verified ${props.chain ? `on ${props.chain}` : "across all chains"}`} />
 
             <div className="filters card card-pad">
-                <span className="ico-input">
-                    <Icon name="search" size={14} />
-                    <input className="input" placeholder="Filter symbol / name (this page)" value={filter} onChange={(e) => setFilter(e.target.value)} />
-                </span>
+                <SearchBox value={props.q} placeholder="Search symbol / name / address…" onSearch={(q) => router.push(hrefWith({ q, page: 1 }))} />
                 <select className="input" value={props.chain} onChange={(e) => router.push(hrefWith({ chain: e.target.value, page: 1 }))}>
                     <option value="">All chains</option>
                     {props.chains.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -227,7 +235,7 @@ const PublicTokens: React.FC<PublicProps> = (props) => {
 
             <DataTable
                 columns={baseTokenCols()}
-                data={visible}
+                data={props.tokens}
                 rowKey={(t) => t.id}
                 onRowClick={(t) => router.push(`/t/${t.id}`)}
                 serverSort={props.sort ? { key: props.sort, dir: props.dir === "asc" ? "asc" : "desc" } : null}
@@ -249,24 +257,20 @@ const PublicTokens: React.FC<PublicProps> = (props) => {
 
 const OperatorTokens: React.FC<OperatorProps> = (props) => {
     const router = useRouter()
-    const [filter, setFilter] = useState("")
 
-    const hrefWith = (over: Partial<{ status: string; chain: string; page: number; sort: string; dir: string }>): string => {
+    const hrefWith = (over: Partial<{ status: string; chain: string; q: string; page: number; sort: string; dir: string }>): string => {
         const qs = new URLSearchParams()
         qs.set("status", over.status ?? props.status)
         const chain = over.chain ?? props.chain
+        const q = over.q ?? props.q
         const sort = over.sort ?? props.sort
         const dir = over.dir ?? props.dir
         if (chain) qs.set("chain", chain)
+        if (q) qs.set("q", q)
         if (sort) { qs.set("sort", sort); if (dir) qs.set("dir", dir) }
         if (over.page && over.page > 1) qs.set("page", String(over.page))
         return `/tokens?${qs.toString()}`
     }
-
-    const f = filter.trim().toLowerCase()
-    const visible = f
-        ? props.tokens.filter((t) => `${t.symbol} ${t.name}`.toLowerCase().includes(f))
-        : props.tokens
 
     // The operator view inserts a Scam column before the aggregate columns.
     const cols: Column<ListToken>[] = [...baseTokenCols()]
@@ -290,10 +294,7 @@ const OperatorTokens: React.FC<OperatorProps> = (props) => {
             </div>
 
             <div className="filters card card-pad">
-                <span className="ico-input">
-                    <Icon name="search" size={14} />
-                    <input className="input" placeholder="Filter symbol / name (this page)" value={filter} onChange={(e) => setFilter(e.target.value)} />
-                </span>
+                <SearchBox value={props.q} placeholder="Search symbol / name / address…" onSearch={(q) => router.push(hrefWith({ q, page: 1 }))} />
                 <select className="input" value={props.chain} onChange={(e) => router.push(hrefWith({ chain: e.target.value, page: 1 }))}>
                     <option value="">All chains</option>
                     {props.chains.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -302,7 +303,7 @@ const OperatorTokens: React.FC<OperatorProps> = (props) => {
 
             <DataTable
                 columns={cols}
-                data={visible}
+                data={props.tokens}
                 rowKey={(t) => t.id}
                 onRowClick={(t) => router.push(`/t/${t.id}`)}
                 serverSort={props.sort ? { key: props.sort, dir: props.dir === "asc" ? "asc" : "desc" } : null}

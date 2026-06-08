@@ -12,6 +12,7 @@ import ConfidenceMeter from "../components/ui/ConfidenceMeter";
 import DataTable, { Column } from "../components/ui/DataTable";
 import Icon from "../components/ui/Icon";
 import PageHeader from "../components/ui/PageHeader";
+import SearchBox from "../components/ui/SearchBox";
 import StatusBadge from "../components/ui/StatusBadge";
 import { usd, num } from "../lib/format";
 import { isOperatorCtx } from "../lib/operatorGate";
@@ -60,8 +61,12 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   // U-Q1: chain/dex are OPTIONAL filters. Absent → the whole queue.
   const chain = cleanParam(query?.chain)
   const dex = cleanParam(query?.dex)
+  const q = cleanParam(query?.q)
   const page = Math.max(1, Number(query?.page || 1))
   const { orderBy, sortKey, sortDir } = pairSort(cleanParam(query?.sort), cleanParam(query?.dir))
+  // Whole-dataset text search on the pair name (server-side, so it's not limited
+  // to the current page). Postgres case-insensitive contains.
+  const search = q ? { pair: { contains: q, mode: "insensitive" as const } } : {}
 
   // Public visitors get a read-only listing of VERIFIED pairs only — no review
   // queue, no triage, no confidence/driver internals, no actions.
@@ -70,6 +75,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
       status: { in: [...VERIFIED_STATUSES] },
       ...(chain ? { chain } : {}),
       ...(dex ? { dex } : {}),
+      ...search,
     }
     const [pairs, totalCount, sourceGroups] = await Promise.all([
       prisma.pair.findMany({
@@ -93,6 +99,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
         pairs,
         chain: chain ?? "",
         dex: dex ?? "",
+        q: q ?? "",
         page,
         totalPages: Math.max(1, Math.ceil(totalCount / PAGE_SIZE)),
         totalCount,
@@ -110,7 +117,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     const scope: Record<string, string> = {}
     if (chain) scope.chain = chain
     if (dex) scope.dex = dex
-    const where = { ...scope, status: qStatus, ...(tier ? { reviewTier: tier } : {}) }
+    const where = { ...scope, status: qStatus, ...(tier ? { reviewTier: tier } : {}), ...search }
 
     const [pairs, totalCount, statusGroups, tierGroups, thresholdRows, sourceGroups] = await Promise.all([
         prisma.pair.findMany({
@@ -149,6 +156,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
             pairs,
             chain: chain ?? "",
             dex: dex ?? "",
+            q: q ?? "",
             status: qStatus,
             tier: tier ?? "",
             page,
@@ -170,6 +178,7 @@ type OperatorProps = {
     pairs: PairProps[],
     chain: string,
     dex: string,
+    q: string,
     status: TokenPairStatus,
     tier: string,
     page: number,
@@ -188,6 +197,7 @@ type PublicProps = {
     pairs: PairProps[],
     chain: string,
     dex: string,
+    q: string,
     page: number,
     totalPages: number,
     totalCount: number,
@@ -206,27 +216,22 @@ const TriageBadge: React.FC<{ tier: string | null }> = ({ tier }) =>
 // Public read-only listing of verified pairs.
 const PublicPairs: React.FC<PublicProps> = (props) => {
     const router = useRouter()
-    const [filter, setFilter] = useState("")
-    useEffect(() => { setFilter("") }, [props.chain, props.dex, props.page])
 
-    const hrefWith = (over: Partial<{ chain: string; dex: string; page: number; sort: string; dir: string }>): string => {
+    const hrefWith = (over: Partial<{ chain: string; dex: string; q: string; page: number; sort: string; dir: string }>): string => {
         const qs = new URLSearchParams()
         const chain = over.chain ?? props.chain
         const dex = over.dex ?? props.dex
+        const q = over.q ?? props.q
         const sort = over.sort ?? props.sort
         const dir = over.dir ?? props.dir
         if (chain) qs.set("chain", chain)
         if (dex) qs.set("dex", dex)
+        if (q) qs.set("q", q)
         if (sort) { qs.set("sort", sort); if (dir) qs.set("dir", dir) }
         if (over.page && over.page > 1) qs.set("page", String(over.page))
         const s = qs.toString()
         return s ? `/pairs?${s}` : "/pairs"
     }
-
-    const f = filter.trim().toLowerCase()
-    const visible = f
-        ? props.pairs.filter((p) => `${p.pair} ${p.chain} ${p.dex}`.toLowerCase().includes(f))
-        : props.pairs
 
     const cols: Column<PairProps>[] = [
         {
@@ -250,10 +255,7 @@ const PublicPairs: React.FC<PublicProps> = (props) => {
             />
 
             <div className="filters card card-pad">
-                <span className="ico-input">
-                    <Icon name="search" size={14} />
-                    <input className="input" placeholder="Filter pair / chain / dex (this page)" value={filter} onChange={(e) => setFilter(e.target.value)} />
-                </span>
+                <SearchBox value={props.q} placeholder="Search pairs by name…" onSearch={(q) => router.push(hrefWith({ q, page: 1 }))} />
                 <select className="input" value={props.chain} onChange={(e) => router.push(hrefWith({ chain: e.target.value, dex: "", page: 1 }))}>
                     <option value="">All chains</option>
                     {props.chains.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -266,7 +268,7 @@ const PublicPairs: React.FC<PublicProps> = (props) => {
 
             <DataTable
                 columns={cols}
-                data={visible}
+                data={props.pairs}
                 rowKey={(p) => p.id}
                 onRowClick={(p) => router.push(`/p/${p.id}`)}
                 serverSort={props.sort ? { key: props.sort, dir: props.dir === "asc" ? "asc" : "desc" } : null}
@@ -289,23 +291,24 @@ const PublicPairs: React.FC<PublicProps> = (props) => {
 const OperatorPairs: React.FC<OperatorProps> = (props) => {
     const router = useRouter()
     const [selected, setSelected] = useState<Set<string>>(new Set())
-    const [filter, setFilter] = useState("")
 
-    // Clear selection whenever the route (filters / page) changes.
-    useEffect(() => { setSelected(new Set()); setFilter("") }, [props.chain, props.dex, props.status, props.tier, props.page])
+    // Clear selection whenever the route (filters / page / search) changes.
+    useEffect(() => { setSelected(new Set()) }, [props.chain, props.dex, props.status, props.tier, props.q, props.page])
 
     // Build a /pairs href, carrying the active filter and overriding parts.
-    const hrefWith = (over: Partial<{ status: string; chain: string; dex: string; tier: string; page: number; sort: string; dir: string }>): string => {
+    const hrefWith = (over: Partial<{ status: string; chain: string; dex: string; q: string; tier: string; page: number; sort: string; dir: string }>): string => {
         const qs = new URLSearchParams()
         const status = over.status ?? props.status
         const chain = over.chain ?? props.chain
         const dex = over.dex ?? props.dex
+        const q = over.q ?? props.q
         const tier = over.tier ?? (over.status && over.status !== props.status ? "" : props.tier)
         const sort = over.sort ?? props.sort
         const dir = over.dir ?? props.dir
         qs.set("status", status)
         if (chain) qs.set("chain", chain)
         if (dex) qs.set("dex", dex)
+        if (q) qs.set("q", q)
         if (tier) qs.set("tier", tier)
         if (sort) { qs.set("sort", sort); if (dir) qs.set("dir", dir) }
         if (over.page && over.page > 1) qs.set("page", String(over.page))
@@ -317,6 +320,7 @@ const OperatorPairs: React.FC<OperatorProps> = (props) => {
         qs.set("status", props.status)
         if (props.chain) qs.set("chain", props.chain)
         if (props.dex) qs.set("dex", props.dex)
+        if (props.q) qs.set("q", props.q)
         if (props.tier) qs.set("tier", props.tier)
         return qs.toString()
     })()
@@ -328,7 +332,7 @@ const OperatorPairs: React.FC<OperatorProps> = (props) => {
     })
     const toggleAll = (allSel: boolean) => setSelected((prev) => {
         const next = new Set(prev)
-        for (const p of visible) { if (allSel) next.delete(p.id); else next.add(p.id) }
+        for (const p of props.pairs) { if (allSel) next.delete(p.id); else next.add(p.id) }
         return next
     })
 
@@ -348,10 +352,6 @@ const OperatorPairs: React.FC<OperatorProps> = (props) => {
         }
     }
 
-    const f = filter.trim().toLowerCase()
-    const visible = f
-        ? props.pairs.filter((p) => `${p.pair} ${p.chain} ${p.dex}`.toLowerCase().includes(f))
-        : props.pairs
 
     const cols: Column<PairProps>[] = [
         {
@@ -400,10 +400,7 @@ const OperatorPairs: React.FC<OperatorProps> = (props) => {
 
             {/* Filters */}
             <div className="filters card card-pad">
-                <span className="ico-input">
-                    <Icon name="search" size={14} />
-                    <input className="input" placeholder="Filter pair / chain / dex (this page)" value={filter} onChange={(e) => setFilter(e.target.value)} />
-                </span>
+                <SearchBox value={props.q} placeholder="Search pairs by name…" onSearch={(q) => router.push(hrefWith({ q, page: 1 }))} />
                 <select className="input" value={props.chain} onChange={(e) => router.push(hrefWith({ chain: e.target.value, dex: "", page: 1 }))}>
                     <option value="">All chains</option>
                     {props.chains.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -437,7 +434,7 @@ const OperatorPairs: React.FC<OperatorProps> = (props) => {
 
             <DataTable
                 columns={cols}
-                data={visible}
+                data={props.pairs}
                 rowKey={(p) => p.id}
                 selectable
                 selected={selected}
