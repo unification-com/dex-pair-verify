@@ -105,6 +105,10 @@ const TrustRow: React.FC<{ label: string; tone: Tone; value: string; detail?: st
     </div>
 );
 
+// Honeypot.is buy/sell tax suffix for the trust row.
+const hpTax = (hp: { buyTax: number | null; sellTax: number | null }): string =>
+    hp.buyTax != null || hp.sellTax != null ? ` · tax ${hp.buyTax ?? "?"}/${hp.sellTax ?? "?"}%` : "";
+
 // The public associated-pairs table (no confidence column — that's internal).
 const publicPairCols: Column<AssociatedPairProps>[] = [
     { key: "pair", label: "Pair", sortable: true, render: (p) => <span style={{ fontWeight: 600 }}>{p.pair}</span> },
@@ -172,7 +176,31 @@ const OperatorToken: React.FC<OperatorProps> = (props) => {
     const router = useRouter()
     const t = props.token;
     const [currentStatus, setCurrentStatus] = useState(t.status)
+    const [scanning, setScanning] = useState(false)
     useEffect(() => { setCurrentStatus(t.status) }, [t.status])
+
+    // On-demand security scan: force GoPlus + Honeypot.is + source-verified for this
+    // one token (bypasses the batch gates), then reload to show the fresh signals.
+    async function onSecurityScan() {
+        setScanning(true)
+        try {
+            const r = await fetch('/api/admin/scantoken', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tokenid: t.id }),
+            }).then((x) => x.json())
+            if (r.success) {
+                NotificationManager.success("Scan complete", "Security signals updated", 4000)
+                router.reload()
+            } else {
+                NotificationManager.error("Scan failed", r.err || "", 6000)
+                setScanning(false)
+            }
+        } catch (e) {
+            NotificationManager.error("Scan failed", String(e), 6000)
+            setScanning(false)
+        }
+    }
 
     async function onSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault()
@@ -272,6 +300,30 @@ const OperatorToken: React.FC<OperatorProps> = (props) => {
                             <TrustRow label="Scam scan (GoPlus)" tone={t.isScamFlagged ? "fail" : scamChecked ? "pass" : "skip"} value={scamValue} detail={t.isScamFlagged ? t.scamReason : !scamChecked && !inVerifiedPair ? "the scam pass only scans tokens in a verified pair (to save GoPlus quota)" : undefined} />
                             <TrustRow label="Decimals" tone={t.decimals >= 0 && t.decimals <= 36 ? "pass" : "fail"} value={String(t.decimals)} />
                             <TrustRow label="Age" tone="skip" value={ageStr(t.deploymentTimestamp)} />
+                            {t.securitySignals && (
+                                <>
+                                    <TrustRow
+                                        label="Honeypot.is"
+                                        tone={t.securitySignals.honeypot.error ? "skip" : t.securitySignals.honeypot.isHoneypot ? "fail" : "pass"}
+                                        value={t.securitySignals.honeypot.error ? "n/a" : t.securitySignals.honeypot.isHoneypot ? "honeypot" : `clean${hpTax(t.securitySignals.honeypot)}`}
+                                        detail={t.securitySignals.honeypot.reason || t.securitySignals.honeypot.error || undefined}
+                                    />
+                                    <TrustRow
+                                        label="Source verified"
+                                        tone={t.securitySignals.sourceVerified.error ? "skip" : t.securitySignals.sourceVerified.verified ? "pass" : "warn"}
+                                        value={t.securitySignals.sourceVerified.error ? "n/a" : t.securitySignals.sourceVerified.verified ? `verified${t.securitySignals.sourceVerified.isProxy ? " · proxy" : ""}` : "unverified"}
+                                        detail={t.securitySignals.sourceVerified.contractName || t.securitySignals.sourceVerified.error || undefined}
+                                    />
+                                </>
+                            )}
+                        </div>
+                        <div className="row gap-3 items-center wrap" style={{ marginTop: "var(--sp-4)" }}>
+                            <button type="button" className="btn btn-ghost btn-sm" disabled={scanning} onClick={onSecurityScan}>
+                                <Icon name="refresh" size={13} />{scanning ? "Scanning…" : "Run security scan"}
+                            </button>
+                            <span className="muted" style={{ fontSize: "var(--fs-xs)" }}>
+                                {t.securityCheckedAt > 0 ? `GoPlus + Honeypot.is + source-verified · last run ${ageStr(t.securityCheckedAt)} ago` : "force GoPlus + Honeypot.is + source-verified for this token"}
+                            </span>
                         </div>
                     </div>
 

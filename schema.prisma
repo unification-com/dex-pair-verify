@@ -221,6 +221,11 @@ model Token {
   // signals are gameable, so they inform the operator's manual call, never auto-verify.
   webPresence           Json?
   webPresenceCheckedAt  Int                     @default(0)
+  // On-demand security signals (Honeypot.is buy/sell simulation + Etherscan
+  // source-verified), populated by the operator "Run security scan" button. Like
+  // webPresence: decision-support, never an auto-verify gate.
+  securitySignals       Json?
+  securityCheckedAt     Int                     @default(0)
   pairsToken0           Pair[]                  @relation("Token0")
   pairsToken1           Pair[]                  @relation("Token1")
   duplicateTokenSymbols DuplicateTokenSymbols[] @relation("OriginalToken")

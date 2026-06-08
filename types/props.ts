@@ -136,6 +136,14 @@ export type TokenProps = {
     scamReason: string;
     scamCheckedAt: number;
     goPlusData: Record<string, unknown> | null;
+    // On-demand security signals (Honeypot.is + Etherscan source-verified), set by
+    // the "Run security scan" button. Decision support, never an auto-verify gate.
+    securitySignals: {
+        honeypot: { isHoneypot: boolean | null; buyTax: number | null; sellTax: number | null; risk: string | null; reason: string | null; error: string | null };
+        sourceVerified: { verified: boolean | null; contractName: string | null; isProxy: boolean | null; error: string | null };
+        checkedAt: number;
+    } | null;
+    securityCheckedAt: number;
     identityConfirmed: boolean;
     identityData: IdentitySource[] | null;
     identityCheckedAt: number;
