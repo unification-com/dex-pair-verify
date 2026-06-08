@@ -45,4 +45,22 @@ describe("tokensToReviewEnrich", () => {
     expect(ids.sort()).toEqual([t0.id, t1.id, partner.id].sort());
     expect(await countTokensToReviewEnrich(NOW)).toBe(3);
   });
+
+  it("honours the re-check TTL cutoff — skips recently-checked, re-checks stale (pipeline TTL lever)", async () => {
+    const DAY = 86_400;
+    const cutoff = NOW - 7 * DAY; // a 7-day TTL window
+    const recent = await seedToken({ securityCheckedAt: NOW - 1 * DAY }); // within TTL → skip
+    const stale = await seedToken({ securityCheckedAt: NOW - 30 * DAY }); // older than TTL → re-check
+    const never = await seedToken({ securityCheckedAt: 0 }); // never scanned → check
+    const partner = await seedToken();
+    await seedPair(recent.id, partner.id, { status: TokenPairStatus.NeedsReview });
+    await seedPair(stale.id, partner.id, { status: TokenPairStatus.NeedsReview });
+    await seedPair(never.id, partner.id, { status: TokenPairStatus.NeedsReview });
+
+    const ids = await tokensToReviewEnrich(cutoff, 50);
+    expect(ids).toContain(stale.id);
+    expect(ids).toContain(never.id);
+    expect(ids).toContain(partner.id); // never scanned
+    expect(ids).not.toContain(recent.id); // within TTL → skipped, saving quota
+  });
 });

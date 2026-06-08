@@ -31,6 +31,18 @@ export const targetDb = (): string => {
 };
 const nowS = (): number => Math.floor(Date.now() / 1000);
 
+// Re-check TTL lever (env PIPELINE_RECHECK_DAYS, default 7). The slow-moving
+// batch passes (identity / canonical / factory / scam / review-enrich) skip
+// tokens already checked within this window, instead of re-checking the whole
+// fleet every run — so a FREQUENT pipeline doesn't keep re-spending CoinGecko /
+// GoPlus quota on data that rarely changes. Passing `now - TTL` as the selection
+// cutoff while still stamping with `now` preserves the drain-to-empty contract
+// (a token stamped this run is > cutoff, so it drops out). Ingest (fresh market
+// data) + revalidate (pure DB) always run in full. The on-demand UI pass-runners
+// still force a full check (they pass `now`, not the cutoff). 0 = re-check all.
+const RECHECK_TTL_S = Math.max(0, Number(process.env.PIPELINE_RECHECK_DAYS ?? 7)) * 86_400;
+const recheckCutoff = (now: number): number => now - RECHECK_TTL_S;
+
 // Drain a jobStartedAt-based batched pass: keep fetching ids and running
 // `processOne` until empty. The helpers stamp each id as it's processed, so the
 // batch shrinks to empty (no infinite loop — every pass stamps even on a miss).
@@ -126,11 +138,12 @@ export type IdentitySummary = { total: number; confirmed: number; promoted: numb
 export async function identityPass(opts: { log?: Logger } = {}): Promise<IdentitySummary> {
   const log = opts.log ?? noop;
   const now = nowS();
-  const total = await countTokensToIdentityCheck(now);
+  const cutoff = recheckCutoff(now);
+  const total = await countTokensToIdentityCheck(cutoff);
   let confirmed = 0;
   let promoted = 0;
   await drainBatches(
-    (b) => tokensToIdentityCheck(now, b),
+    (b) => tokensToIdentityCheck(cutoff, b),
     async (id) => {
       const out = await runIdentityCheckForToken(id, { now });
       if (out.confirmed) confirmed += 1;
@@ -146,11 +159,12 @@ export type CanonicalSummary = { total: number; resolved: number; impostorPairs:
 export async function canonicalPass(opts: { log?: Logger } = {}): Promise<CanonicalSummary> {
   const log = opts.log ?? noop;
   const now = nowS();
-  const total = await countTokensToCanonicalCheck(now);
+  const cutoff = recheckCutoff(now);
+  const total = await countTokensToCanonicalCheck(cutoff);
   let resolved = 0;
   let impostorPairs = 0;
   await drainBatches(
-    (b) => tokensToCanonicalCheck(now, b),
+    (b) => tokensToCanonicalCheck(cutoff, b),
     async (id) => {
       const out = await runCanonicalCheckForToken(id, { now });
       if (out.hasAddress) resolved += 1;
@@ -166,11 +180,12 @@ export type FactorySummary = { total: number; read: number; mismatches: number }
 export async function factoryPass(opts: { log?: Logger } = {}): Promise<FactorySummary> {
   const log = opts.log ?? noop;
   const now = nowS();
-  const total = await countPairsToFactoryCheck(now);
+  const cutoff = recheckCutoff(now);
+  const total = await countPairsToFactoryCheck(cutoff);
   let read = 0;
   let mismatches = 0;
   await drainBatches(
-    (b) => pairsToFactoryCheck(now, b),
+    (b) => pairsToFactoryCheck(cutoff, b),
     async (id) => {
       const out = await runFactoryCheckForPair(id, { now });
       if (out.factoryFound) read += 1;
@@ -186,11 +201,12 @@ export type ScamSummary = { total: number; flagged: number; demoted: number };
 export async function scamPass(opts: { log?: Logger } = {}): Promise<ScamSummary> {
   const log = opts.log ?? noop;
   const now = nowS();
-  const total = await countTokensToScamCheck(now);
+  const cutoff = recheckCutoff(now);
+  const total = await countTokensToScamCheck(cutoff);
   let flagged = 0;
   let demoted = 0;
   await drainBatches(
-    (b) => tokensToScamCheck(now, b),
+    (b) => tokensToScamCheck(cutoff, b),
     async (id) => {
       const out = await runScamCheckForToken(id, { now });
       if (out.flagged) flagged += 1;
@@ -240,11 +256,12 @@ export type ReviewEnrichSummary = { total: number; scanned: number; flagged: num
 export async function reviewEnrichPass(opts: { log?: Logger } = {}): Promise<ReviewEnrichSummary> {
   const log = opts.log ?? noop;
   const now = nowS();
-  const total = await countTokensToReviewEnrich(now);
+  const cutoff = recheckCutoff(now);
+  const total = await countTokensToReviewEnrich(cutoff);
   let scanned = 0;
   let flagged = 0;
   await drainBatches(
-    (b) => tokensToReviewEnrich(now, b),
+    (b) => tokensToReviewEnrich(cutoff, b),
     async (id) => {
       const out = await runSecurityScanForToken(id, { now });
       if (out.ok) scanned += 1;
