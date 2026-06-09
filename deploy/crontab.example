@@ -1,0 +1,5 @@
+# dex-pair-verify weekly data pipeline — every Monday at 03:00.
+# Add this line to the app user's crontab with `crontab -e` (do NOT pipe this
+# whole file into `crontab`, which would replace the user's existing entries).
+# Edit the path to point at your checkout. Logs: $LOG_ROOT/YYYY-MM/.
+0 3 * * 1 /home/youruser/dex-pair-verify/deploy/pipeline.sh
