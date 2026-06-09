@@ -10,7 +10,10 @@ Type=simple
 # EDIT: the user that owns the checkout and the nvm install.
 User=youruser
 # EDIT: absolute path to deploy/run.sh inside your checkout.
-ExecStart=/home/youruser/dex-pair-verify/deploy/run.sh
+# Launched via bash so a lost +x bit, CRLF shebang, or SELinux exec-label on a
+# script under /home can't break startup with status=203/EXEC. run.sh still
+# exec's Node, so systemd supervises the server process directly.
+ExecStart=/bin/bash /home/youruser/dex-pair-verify/deploy/run.sh
 Restart=on-failure
 RestartSec=5s
 KillSignal=SIGINT

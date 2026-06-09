@@ -66,7 +66,7 @@ stop` sends `SIGINT` straight to Next.js for a clean shutdown.
 As the app user (`crontab -e`), add the line from `crontab.example`, pointing at your
 checkout:
 
-    0 3 * * 1 /path/to/dex-pair-verify/deploy/pipeline.sh
+    0 3 * * 1 /bin/bash /path/to/dex-pair-verify/deploy/pipeline.sh
 
 Runs every Monday at 03:00. Logs: `$LOG_ROOT/YYYY-MM/dex-pair-verify-YYYY-MM-DD.log`.
 A `flock` guard skips a run if the previous one is still going.
@@ -87,3 +87,8 @@ A `flock` guard skips a run if the previous one is still going.
 - **Rootless alternative:** instead of a system unit, place the unit in
   `~/.config/systemd/user/`, run `systemctl --user enable --now dex-pair-verify`, and
   `loginctl enable-linger <user>` so it survives logout — no root required.
+- **`status=203/EXEC`:** systemd couldn't execute the script. The unit and cron line
+  launch the scripts via `/bin/bash …` precisely so this can't happen from a lost `+x`
+  bit, a CRLF shebang, or an SELinux exec-label on a script under `/home`. If you invoke
+  a script directly instead, ensure `chmod +x deploy/*.sh`, LF line-endings, and (under
+  SELinux `Enforcing`) check `ausearch -m avc -ts recent` for an exec denial.

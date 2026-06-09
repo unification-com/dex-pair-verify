@@ -2,4 +2,5 @@
 # Add this line to the app user's crontab with `crontab -e` (do NOT pipe this
 # whole file into `crontab`, which would replace the user's existing entries).
 # Edit the path to point at your checkout. Logs: $LOG_ROOT/YYYY-MM/.
-0 3 * * 1 /home/youruser/dex-pair-verify/deploy/pipeline.sh
+# Run via bash so a lost +x bit doesn't stop it firing.
+0 3 * * 1 /bin/bash /home/youruser/dex-pair-verify/deploy/pipeline.sh
