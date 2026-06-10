@@ -6,7 +6,7 @@ import { countTokensToCanonicalCheck, runCanonicalCheckForToken, tokensToCanonic
 import { countPairsToFactoryCheck, pairsToFactoryCheck, runFactoryCheckForPair } from "./factoryCheck";
 import { ingestableFirstParty } from "./firstParty";
 import { countTokensToIdentityCheck, runIdentityCheckForToken, tokensToIdentityCheck } from "./identityCheck";
-import { ingestFirstPartyToken, ingestPoolPage } from "./ingest";
+import { ingestPoolPage, ingestTokenPools } from "./ingest";
 import prisma from "./prisma";
 import { countTokensToReviewEnrich, tokensToReviewEnrich } from "./reviewEnrich";
 import {
@@ -120,7 +120,7 @@ export async function firstPartyIngestPass(opts: { log?: Logger } = {}): Promise
   const tallies: Record<string, number> = {};
   let pools = 0;
   for (const t of ingestableFirstParty()) {
-    const r = await ingestFirstPartyToken(t.chain, t.address);
+    const r = await ingestTokenPools(t.chain, t.address);
     for (const [k, v] of Object.entries(r.tallies)) {
       tallies[k] = (tallies[k] ?? 0) + v;
     }

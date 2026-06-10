@@ -1,8 +1,9 @@
 // Tests for lib/canonical.ts — the canonical-pair key (A.2).
 
 import { describe, expect, it } from "vitest";
+import { utils as web3Utils } from "web3";
 
-import { canonicalKey, cgPlatformForChain } from "../../lib/canonical";
+import { canonicalKey, cgPlatformForChain, tokenContractsByChain } from "../../lib/canonical";
 
 describe("canonicalKey", () => {
   it("builds min:max regardless of token order", () => {
@@ -92,5 +93,41 @@ describe("cgPlatformForChain", () => {
 
   it("returns null for an unknown chain", () => {
     expect(cgPlatformForChain("solana")).toBeNull();
+  });
+});
+
+describe("tokenContractsByChain", () => {
+  const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+  const POLY_USDC = "0x2791bca1f2de4661ed88a30c99a7a9449aa84174";
+
+  it("maps platform addresses to internal chains, checksummed", async () => {
+    const fetcher = async () => ({ ethereum: WETH, "polygon-pos": POLY_USDC, "some-other-platform": WETH });
+    const out = await tokenContractsByChain("weth", { fetcher });
+    expect(out.eth).toBe(web3Utils.toChecksumAddress(WETH));
+    expect(out.polygon_pos).toBe(web3Utils.toChecksumAddress(POLY_USDC));
+    // chains the coin has no contract on are absent
+    expect(out.bsc).toBeUndefined();
+  });
+
+  it("skips malformed addresses", async () => {
+    const out = await tokenContractsByChain("weth", { fetcher: async () => ({ ethereum: "not-an-address" }) });
+    expect(out.eth).toBeUndefined();
+  });
+
+  it("returns {} when the platforms fetch fails (null)", async () => {
+    const out = await tokenContractsByChain("weth", { fetcher: async () => null });
+    expect(out).toEqual({});
+  });
+
+  it("returns {} for an empty cgId without fetching", async () => {
+    let called = false;
+    const out = await tokenContractsByChain("", {
+      fetcher: async () => {
+        called = true;
+        return {};
+      },
+    });
+    expect(out).toEqual({});
+    expect(called).toBe(false);
   });
 });

@@ -71,6 +71,7 @@ const NavBar: React.FC<{ needsReviewCount?: number }> = ({ needsReviewCount }) =
           ))}
 
           <div className="sb-group-label">Tools</div>
+          <Item href="/add" icon="plus" label="Add pair/token" active={active("/add")} />
           <Item href="/thresholds" icon="filter" label="Thresholds" active={active("/thresholds")} />
           <Item href="/help" icon="help" label="Scoring guide" active={active("/help")} />
         </>}

@@ -10,7 +10,7 @@ import { utils as web3Utils } from "web3";
 
 import { cgKeyedFetch, GECKO_API_KEY } from "./coingecko";
 import prisma from "./prisma";
-import { getSources, gtDexFor, gtNetworkFor, thresholdSeedData } from "./sourceConfig";
+import { getSource, getSources, gtDexFor, gtNetworkFor, thresholdSeedData } from "./sourceConfig";
 import { runVerdictForPair } from "./verdictRunner";
 
 // With a (free Demo) CoinGecko API key, use CoinGecko's keyed on-chain
@@ -294,6 +294,16 @@ const buildTokenMap = (tokens: GtToken[]): Map<string, GtTokenData> => {
   return tokenMap;
 };
 
+// Ensure the per-(chain, dex) Threshold row exists so the verdict applies this
+// source's tuned floors (liquidity + minTxCount) inline at ingest. Idempotent;
+// creates once per source. Shared by page ingest, token-pools ingest and the
+// manual add-by-address path (DRY).
+async function ensureThreshold(chain: string, dex: string): Promise<void> {
+  if (!(await prisma.threshold.findFirst({ where: { chain, dex } }))) {
+    await prisma.threshold.create({ data: thresholdSeedData(chain, dex) });
+  }
+}
+
 export type IngestPageResult = {
   hadData: boolean;
   poolCount: number;
@@ -318,12 +328,7 @@ export async function ingestPoolPage(
   const gtNetwork = opts.gtNetwork ?? chain;
   const gtDex = opts.gtDex ?? dex;
 
-  // Ensure the per-(chain, dex) Threshold row exists so the verdict applies this
-  // source's tuned floors (liquidity + minTxCount) INLINE at ingest — not only
-  // after a /admin/thresholds visit. Idempotent; creates once per source.
-  if (!(await prisma.threshold.findFirst({ where: { chain, dex } }))) {
-    await prisma.threshold.create({ data: thresholdSeedData(chain, dex) });
-  }
+  await ensureThreshold(chain, dex);
 
   const { pools, tokens } = await poolFetcher(gtNetwork, gtDex, page);
   if (pools.length === 0) {
@@ -347,7 +352,7 @@ export async function ingestPoolPage(
   return { hadData: true, poolCount: pools.length, pairs, tallies };
 }
 
-// --- targeted first-party ingest -----------------------------------------
+// --- token-pools ingest (all of a token's pools across DEXs) --------------
 
 // Fetch EVERY pool for one token (across DEXs), tokens embedded via `include`.
 export type TokenPoolsFetcher = (gtNetwork: string, address: string) => Promise<PoolPage>;
@@ -360,17 +365,18 @@ const defaultTokenPoolsFetcher: TokenPoolsFetcher = async (gtNetwork, address) =
   return { pools, tokens };
 };
 
-export type FirstPartyIngestResult = { ingested: number; skipped: number; tallies: Record<string, number> };
+export type TokenPoolsIngestResult = { ingested: number; skipped: number; tallies: Record<string, number> };
 
-// Pull all pools for a first-party token and ingest those on a DEX we support.
-// The page ingest only takes the top-ranked pools per DEX, so our own tokens'
-// pools get missed; this guarantees they're in the DB. A pool on a DEX with no
-// SupportedSource is skipped (no subgraph → not exportable to go-ooo).
-export async function ingestFirstPartyToken(
+// Fetch every supported-DEX pool for a token on a chain and ingest each (verdict
+// inline). The page ingest only takes the top-ranked pools per DEX, so this is how
+// a specific token's pools land in the DB. Used by the first-party ingest pass (our
+// own tokens), by manual token-add and by the cross-chain spider. A pool on a DEX
+// with no SupportedSource is skipped (no subgraph → not exportable to go-ooo).
+export async function ingestTokenPools(
   chain: string,
   address: string,
   opts: { now?: number; fetcher?: TokenPoolsFetcher } = {},
-): Promise<FirstPartyIngestResult> {
+): Promise<TokenPoolsIngestResult> {
   const now = opts.now ?? Math.floor(Date.now() / 1000);
   const fetcher = opts.fetcher ?? defaultTokenPoolsFetcher;
 
@@ -384,9 +390,7 @@ export async function ingestFirstPartyToken(
   const dexByGtSlug = new Map<string, string>();
   for (const s of sources) {
     dexByGtSlug.set(gtDexFor(s), s.dex);
-    if (!(await prisma.threshold.findFirst({ where: { chain, dex: s.dex } }))) {
-      await prisma.threshold.create({ data: thresholdSeedData(chain, s.dex) });
-    }
+    await ensureThreshold(chain, s.dex);
   }
 
   const { pools, tokens } = await fetcher(gtNetwork, address);
@@ -411,4 +415,91 @@ export async function ingestFirstPartyToken(
     ingested += 1;
   }
   return { ingested, skipped, tallies };
+}
+
+// --- manual add by pool address ------------------------------------------
+
+// Fetch ONE pool by its contract address (tokens embedded via `include`). GT's
+// single-pool endpoint returns `data` as an object, not an array — so we read it
+// directly rather than through the array-shaped gtFetch helper.
+export type PoolByAddressFetcher = (gtNetwork: string, address: string) => Promise<{ pool: GtPool | null; tokens: GtToken[] }>;
+
+const defaultPoolByAddressFetcher: PoolByAddressFetcher = async (gtNetwork, address) => {
+  const url = `${GT_BASE}/networks/${gtNetwork}/pools/${address}?include=base_token,quote_token`;
+  const res = await cgKeyedFetch(url, `pool ${gtNetwork}/${address}`);
+  if (!res) {
+    return { pool: null, tokens: [] };
+  }
+  const json = (await res.json()) as { data?: GtPool | null; included?: ({ type?: string } & GtToken)[] } | null;
+  const pool = (json?.data as GtPool) ?? null;
+  const tokens = (json?.included ?? []).filter((r) => r.type === "token");
+  return { pool, tokens };
+};
+
+// Flat result (strictNullChecks is off in this project, so a discriminated union
+// wouldn't narrow on `ok` — callers read the optional fields directly).
+export type AddPairByAddressResult = {
+  ok: boolean;
+  reason?: string;
+  pairId?: string;
+  token0Id?: string;
+  token1Id?: string;
+  verdict?: string | null;
+  pairSymbol?: string;
+};
+
+// Manually add ONE pair by its contract address: fetch the pool from GeckoTerminal,
+// hydrate both tokens + the pair, run the verdict inline (the same path as page
+// ingest). The (chain, dex) must be a supported source. Returns ok:false with a
+// human-readable reason when GT doesn't know the pool, it's on a different DEX, or
+// the data is incomplete.
+export async function ingestPairByAddress(
+  chain: string,
+  dex: string,
+  address: string,
+  opts: { now?: number; fetcher?: PoolByAddressFetcher } = {},
+): Promise<AddPairByAddressResult> {
+  const now = opts.now ?? Math.floor(Date.now() / 1000);
+  const fetcher = opts.fetcher ?? defaultPoolByAddressFetcher;
+
+  const source = await getSource(chain, dex);
+  if (!source) {
+    return { ok: false, reason: `${chain}/${dex} is not a supported source` };
+  }
+
+  let poolAddr: string;
+  try {
+    poolAddr = web3Utils.toChecksumAddress(address);
+  } catch {
+    return { ok: false, reason: `invalid pool address: ${address}` };
+  }
+
+  await ensureThreshold(chain, dex);
+
+  const gtNetwork = gtNetworkFor(source);
+  const gtDex = gtDexFor(source);
+  const { pool, tokens } = await fetcher(gtNetwork, poolAddr);
+  if (!pool) {
+    return { ok: false, reason: `GeckoTerminal has no pool ${poolAddr} on ${gtNetwork}` };
+  }
+
+  // Guard: the pool must actually be on the selected DEX (GT tags each pool's dex).
+  const gtPoolDex = pool.relationships.dex?.data?.id;
+  if (gtPoolDex && gtPoolDex !== gtDex) {
+    return { ok: false, reason: `pool is on '${gtPoolDex}', not '${gtDex}' — pick the matching DEX` };
+  }
+
+  const verdict = await ingestOnePool(chain, dex, pool, buildTokenMap(tokens), now);
+  if (verdict === null) {
+    return { ok: false, reason: "GeckoTerminal returned incomplete pool/token data" };
+  }
+
+  const pair = await prisma.pair.findFirst({
+    where: { chain, dex, contractAddress: poolAddr },
+    select: { id: true, token0Id: true, token1Id: true, pair: true },
+  });
+  if (!pair) {
+    return { ok: false, reason: "pair not found after ingest" };
+  }
+  return { ok: true, pairId: pair.id, token0Id: pair.token0Id, token1Id: pair.token1Id, verdict, pairSymbol: pair.pair };
 }

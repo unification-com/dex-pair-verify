@@ -158,3 +158,31 @@ export async function fetchCanonicalContract(
 
   return address || null;
 }
+
+// Resolve a CoinGecko coin's contract address on every chain we map (via the
+// platforms map), checksummed to match stored token addresses. Used by the
+// manual-add spider to find the same token on other supported chains. Returns
+// { chain: address } only for chains where the coin has a contract; {} on a
+// failed/empty fetch.
+export async function tokenContractsByChain(
+  cgId: string,
+  opts: { fetcher?: PlatformsFetcher } = {},
+): Promise<Record<string, string>> {
+  if (!cgId) {
+    return {};
+  }
+  const fetcher = opts.fetcher ?? defaultPlatformsFetcher;
+  const platforms = await fetcher(cgId);
+  if (!platforms) {
+    return {};
+  }
+  const out: Record<string, string> = {};
+  for (const chain of CG_SUPPORTED_CHAINS) {
+    const platform = cgPlatformForChain(chain);
+    const raw = platform ? platforms[platform] : null;
+    if (raw && web3Utils.isAddress(raw)) {
+      out[chain] = web3Utils.toChecksumAddress(raw);
+    }
+  }
+  return out;
+}
