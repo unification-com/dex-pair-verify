@@ -84,6 +84,10 @@ describe("classifySchemaFamily", () => {
   it("messari from a liquidityPools query (its hallmark entity)", () => {
     expect(classifySchemaFamily(["liquidityPool", "liquidityPools", "dexAmmProtocol"])).toBe("messari");
   });
+  it("univ4 from a poolManager query (it also has pools, so the singleton tells it apart from v3)", () => {
+    expect(classifySchemaFamily(["pool", "pools", "poolManager", "token"])).toBe("univ4");
+    expect(classifySchemaFamily(["pools", "poolManagers", "modifyLiquidity"])).toBe("univ4");
+  });
   it("custom when ambiguous or neither", () => {
     expect(classifySchemaFamily(["pairs", "pools"])).toBe("custom");
     expect(classifySchemaFamily(["swaps", "tokens"])).toBe("custom");
@@ -132,6 +136,12 @@ describe("dataProbeSubgraph", () => {
     const r = await dataProbeSubgraph("http://x", "univ3", { fetcher: dataResp("pools", [{ id: "0xq", token0Price: "0.0005", totalValueLockedUSD: "1234" }]) });
     expect(r.ok).toBe(true);
     expect(r.sampleReserveUsd).toBe(1234);
+  });
+  it("ok when a univ4 pool prices a token (pools collection, token0Price > 0)", async () => {
+    const r = await dataProbeSubgraph("http://x", "univ4", { fetcher: dataResp("pools", [{ id: "0xp4", hooks: "0x0000000000000000000000000000000000000000", token0Price: "1667.9", totalValueLockedUSD: "28000000" }]) });
+    expect(r.applicable).toBe(true);
+    expect(r.ok).toBe(true);
+    expect(r.sampleReserveUsd).toBe(28000000);
   });
   it("not ok when the query returns no rows (empty subgraph)", async () => {
     const r = await dataProbeSubgraph("http://x", "univ2", { fetcher: dataResp("pairs", []) });

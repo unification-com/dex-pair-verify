@@ -60,7 +60,7 @@ type PublicSource = {
   pairCount: number;
 };
 
-const SCHEMA_FAMILIES = ["univ2", "univ3", "custom"];
+const SCHEMA_FAMILIES = ["univ2", "univ3", "univ4", "messari", "custom"];
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const operator = await isOperatorCtx(ctx);
@@ -484,7 +484,7 @@ const OperatorSources: React.FC<OperatorProps> = (initial) => {
 
                         {form.dataApplicable && form.samples.length > 0 ? (
                           <div className="vo-section">
-                            <span className="muted vo-h">Sample data — first {Math.min(5, form.rowCount)} of the {form.schemaFamily === "univ3" ? "pools" : "pairs"} go-ooo would query</span>
+                            <span className="muted vo-h">Sample data — first {Math.min(5, form.rowCount)} of the {form.schemaFamily === "univ2" ? "pairs" : form.schemaFamily === "messari" ? "liquidityPools" : "pools"} go-ooo would query</span>
                             <div className="vo-tbl">
                               <div className="vo-tr vo-th"><span>id</span><span>token0Price</span><span>reserve / TVL</span></div>
                               {form.samples.slice(0, 5).map((s) => (

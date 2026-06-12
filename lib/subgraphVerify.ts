@@ -14,7 +14,7 @@
 // result the candidate-review UI surfaces for operator confirmation.
 
 export type SubgraphProvider = "graph-decentralized" | "graph-studio" | "graph-hosted" | "self-hosted";
-export type SchemaFamily = "univ2" | "univ3" | "messari" | "custom";
+export type SchemaFamily = "univ2" | "univ3" | "univ4" | "messari" | "custom";
 
 // Provider taxonomy: URL pattern + the env var that holds its API key. Order
 // matters — most specific first. `self-hosted` is the catch-all (operator-defined
@@ -110,14 +110,18 @@ export function assertSafeSubgraphUrl(rawUrl: string): void {
   }
 }
 
-// Classify the schema family from the subgraph's top-level query fields. UniV2-like
-// exposes a `pairs` query; UniV3-like exposes `pools`; the Messari standardised dex-amm
-// schema exposes `liquidityPools` (its hallmark). A subgraph exposing only one is
-// unambiguous; one exposing both pairs+pools (rare) → custom, so the operator confirms.
+// Classify the schema family from the subgraph's top-level query fields. UniV2-like exposes a
+// `pairs` query; UniV3-like exposes `pools`; the Messari standardised dex-amm schema exposes
+// `liquidityPools` (its hallmark). Uniswap v4 also exposes `pools`, so it is told apart by its
+// singleton `poolManager` entity (v4 has no factory) - checked before the pools→univ3 rule. A
+// subgraph exposing both pairs+pools (rare) → custom, so the operator confirms.
 export function classifySchemaFamily(queryFieldNames: string[]): SchemaFamily {
   const names = new Set(queryFieldNames.map((n) => n.toLowerCase()));
   if (names.has("liquiditypools")) {
     return "messari";
+  }
+  if (names.has("poolmanager") || names.has("poolmanagers")) {
+    return "univ4";
   }
   const hasPairs = names.has("pairs");
   const hasPools = names.has("pools");
@@ -200,7 +204,7 @@ type DataQuerySpec = {
   query: string;
   collection: string;
   reserveField: string;
-  // extractPrice pulls the "is this priced" liveness signal from one row. univ2/univ3 read
+  // extractPrice pulls the "is this priced" liveness signal from one row. univ2/univ3/univ4 read
   // token0Price directly; messari reads the first inputToken's lastPriceUSD.
   extractPrice: (row: Record<string, unknown>) => number;
 };
@@ -214,6 +218,14 @@ const DATA_QUERY: Partial<Record<SchemaFamily, DataQuerySpec>> = {
   },
   univ3: {
     query: `{ pools(first: 5) { id token0Price totalValueLockedUSD } }`,
+    collection: "pools",
+    reserveField: "totalValueLockedUSD",
+    extractPrice: (r) => numField(r.token0Price),
+  },
+  univ4: {
+    // Same pool shape as v3 plus hooks (only no-hook pools are priceable - surfaced here so the
+    // operator can eyeball it; the live filter lives in the price path + go-ooo family).
+    query: `{ pools(first: 5) { id hooks token0Price totalValueLockedUSD } }`,
     collection: "pools",
     reserveField: "totalValueLockedUSD",
     extractPrice: (r) => numField(r.token0Price),
