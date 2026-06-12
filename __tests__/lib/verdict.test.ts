@@ -243,6 +243,7 @@ const makeCtx = (over: Partial<VerdictContext> = {}): VerdictContext => ({
   hasVerifiedSibling: false,
   intraChainImpostorLoser: false,
   tokenScamFlagged: false,
+  hookedPool: false,
   pairFactoryAddress: null,
   canonicalFactoryAddress: UNI_V3_FACTORY,
   firstParty: false,
@@ -255,6 +256,12 @@ describe("evaluatePair", () => {
     expect(r.verdict).toBe(TokenPairStatus.AutoVerified);
     expect(r.confidence).toBe(1);
     expect(r.canonicalKey).toBe("usd-coin:weth");
+  });
+
+  it("routes a Uniswap v4 hooked pool to review (never auto-verifies, even when otherwise clean)", () => {
+    const r = evaluatePair(makePair(), makeCtx({ hookedPool: true }));
+    expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
+    expect(r.reasonCode).toBe(VERDICT_REASON.hookedPool);
   });
 
   it("routes an IDENTIFIED phantom-liquidity pool (deep reserve, ~0 turnover) to review", () => {

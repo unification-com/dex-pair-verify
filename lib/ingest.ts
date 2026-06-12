@@ -10,7 +10,7 @@ import { utils as web3Utils } from "web3";
 
 import { cgKeyedFetch, GECKO_API_KEY } from "./coingecko";
 import prisma from "./prisma";
-import { getSource, getSources, gtDexFor, gtNetworkFor, thresholdSeedData } from "./sourceConfig";
+import { getSource, getSources, gtDexFor, gtNetworkFor, resolveSubgraphUrl, thresholdSeedData } from "./sourceConfig";
 import { isNativeCurrency, poolAddressFromGt, wrappedNativeToken } from "./univ4";
 import { runVerdictForPair } from "./verdictRunner";
 
@@ -121,6 +121,48 @@ const resolveNativeToken = (chain: string, address: string, gt: GtTokenData): { 
   };
 };
 
+// Fetch the hooks contract for a batch of v4 pools from the source's subgraph, keyed by lower-cased
+// poolId. GeckoTerminal does not expose hooks, so this is the one targeted subgraph read in the
+// otherwise GT-only ingest - run only for univ4 sources. A non-v4 source, an unconfigured subgraph,
+// or any fetch failure returns an empty map: pools then store hooks=null (unflagged), and go-ooo's
+// price path still refuses to price a hooked pool, so this never opens a safety gap.
+async function hooksForUniv4Pools(chain: string, dex: string, pools: GtPool[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const source = await getSource(chain, dex);
+  if (source?.subgraphSchemaFamily !== "univ4") {
+    return out;
+  }
+  const url = resolveSubgraphUrl(source);
+  if (!url) {
+    return out;
+  }
+  const poolIds = pools.map((p) => poolAddressFromGt(p.attributes.address)).filter((id): id is string => !!id);
+  if (poolIds.length === 0) {
+    return out;
+  }
+  const idList = poolIds.map((id) => `"${id.toLowerCase()}"`).join(",");
+  const query = `{ pools(where: { id_in: [${idList}] }) { id hooks } }`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+    });
+    if (!res.ok) {
+      return out;
+    }
+    const json = (await res.json()) as { data?: { pools?: { id?: string; hooks?: string }[] } } | null;
+    for (const p of json?.data?.pools ?? []) {
+      if (p?.id && typeof p.hooks === "string") {
+        out.set(p.id.toLowerCase(), p.hooks);
+      }
+    }
+  } catch {
+    // Subgraph/network failure — leave hooks unresolved (go-ooo's no-hook price filter is the backstop).
+  }
+  return out;
+}
+
 const isoToUnix = (iso: string | null): number | null => {
   if (!iso) {
     return null;
@@ -207,6 +249,7 @@ async function upsertPair(
   token1Id: string,
   pool: GtPool,
   now: number,
+  hooks: string | null,
 ): Promise<string> {
   const a = pool.attributes;
   const buys = a.transactions?.h24?.buys ?? 0;
@@ -215,6 +258,7 @@ async function upsertPair(
 
   const common = {
     pair: pairSym,
+    hooks,
     reserveUsd: num(a.reserve_in_usd),
     reserve0: 0,
     reserve1: 0,
@@ -265,6 +309,7 @@ async function ingestOnePool(
   p: GtPool,
   tokenMap: Map<string, GtTokenData>,
   now: number,
+  hooksByPoolId?: Map<string, string>,
 ): Promise<string | null> {
   const pairAddr = poolAddressFromGt(p.attributes.address);
   const t0Addr = addressFromGtId(p.relationships.base_token?.data?.id);
@@ -272,6 +317,9 @@ async function ingestOnePool(
   if (!pairAddr || !t0Addr || !t1Addr) {
     return null;
   }
+  // v4 hooks for this pool (null for non-v4 sources or an unresolved hooks fetch). Stored on the
+  // pair so the verdict routes a hooked pool to NeedsReview (and re-verdicts stay correct).
+  const hooks = hooksByPoolId?.get(pairAddr.toLowerCase()) ?? null;
   const gt0 = tokenMap.get(t0Addr);
   const gt1 = tokenMap.get(t1Addr);
   if (!gt0 || !gt1) {
@@ -285,7 +333,7 @@ async function ingestOnePool(
   const poolCreatedAt = isoToUnix(p.attributes.pool_created_at);
   const token0Id = await upsertToken(chain, r0.address, r0.gt, poolCreatedAt, now);
   const token1Id = await upsertToken(chain, r1.address, r1.gt, poolCreatedAt, now);
-  const pairId = await upsertPair(chain, dex, pairAddr, `${r0.gt.symbol}-${r1.gt.symbol}`, token0Id, token1Id, p, now);
+  const pairId = await upsertPair(chain, dex, pairAddr, `${r0.gt.symbol}-${r1.gt.symbol}`, token0Id, token1Id, p, now, hooks);
 
   // The pair's CG (aggregated) prices come from the token-level price_usd.
   await prisma.pair.update({
@@ -350,11 +398,13 @@ export async function ingestPoolPage(
 
   // Tokens arrive embedded in the pools response (via GT `include`).
   const tokenMap = buildTokenMap(tokens);
+  // One batched subgraph read for the page's v4 hooks (empty for non-v4 sources).
+  const hooksByPoolId = await hooksForUniv4Pools(chain, dex, pools);
 
   const tallies: Record<string, number> = {};
   let pairs = 0;
   for (const p of pools) {
-    const key = await ingestOnePool(chain, dex, p, tokenMap, now);
+    const key = await ingestOnePool(chain, dex, p, tokenMap, now, hooksByPoolId);
     if (key === null) {
       continue;
     }
@@ -419,7 +469,9 @@ export async function ingestTokenPools(
       skipped += 1; // pool on a DEX we don't support — can't export it
       continue;
     }
-    const key = await ingestOnePool(chain, dex, p, tokenMap, now);
+    // Pools here can span several DEXs, so resolve hooks per pool (a no-op except for univ4).
+    const hooksByPoolId = await hooksForUniv4Pools(chain, dex, [p]);
+    const key = await ingestOnePool(chain, dex, p, tokenMap, now, hooksByPoolId);
     if (key === null) {
       skipped += 1;
       continue;
@@ -500,7 +552,8 @@ export async function ingestPairByAddress(
     return { ok: false, reason: `pool is on '${gtPoolDex}', not '${gtDex}' — pick the matching DEX` };
   }
 
-  const verdict = await ingestOnePool(chain, dex, pool, buildTokenMap(tokens), now);
+  const hooksByPoolId = await hooksForUniv4Pools(chain, dex, [pool]);
+  const verdict = await ingestOnePool(chain, dex, pool, buildTokenMap(tokens), now, hooksByPoolId);
   if (verdict === null) {
     return { ok: false, reason: "GeckoTerminal returned incomplete pool/token data" };
   }

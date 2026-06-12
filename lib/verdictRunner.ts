@@ -13,6 +13,7 @@ import { computeReviewTier } from "./reviewTier";
 import { getCanonicalFactoryAddress } from "./sourceConfig";
 import { isVerifiedStatus, VERIFIED_STATUSES } from "./status";
 import { promoteTokensToVerified } from "./tokenStatus";
+import { isHookedPool } from "./univ4";
 import {
   DEFAULT_VERDICT_CONFIG,
   evaluatePair,
@@ -41,6 +42,7 @@ export type PairWithTokens = {
   volumeUsd: number;
   txCount: number;
   factoryAddress: string | null;
+  hooks: string | null;
   status: TokenPairStatus;
   token0PriceCg: number;
   token0PriceDex: number;
@@ -159,6 +161,7 @@ export async function buildVerdictContext(
     hasVerifiedSibling,
     intraChainImpostorLoser,
     tokenScamFlagged: pair.token0.isScamFlagged || pair.token1.isScamFlagged,
+    hookedPool: isHookedPool(pair.hooks),
     pairFactoryAddress: pair.factoryAddress, // read on-chain by the factory-check pass (T2)
     canonicalFactoryAddress: await getCanonicalFactoryAddress(pair.chain, pair.dex),
     firstParty:

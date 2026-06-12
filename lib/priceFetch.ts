@@ -8,8 +8,7 @@
 import { ApolloClient, gql, InMemoryCache } from "@apollo/client";
 
 import { chainInfo } from "./chains";
-import { getSource } from "./sourceConfig";
-import { applyUrlTemplate, keyEnvVarFor, SubgraphProvider } from "./subgraphVerify";
+import { getSource, resolveSubgraphUrl } from "./sourceConfig";
 import { isHookedPool, normaliseV4Symbol } from "./univ4";
 
 export type PoolPriceRow = {
@@ -88,9 +87,10 @@ export async function fetchPoolPrices(
   if (!FAMILY_COLLECTION[family]) {
     return { success: false, prices: [], error: `price-test does not support the "${family}" schema family` };
   }
-  const keyEnvVar = source.apiKeyEnvVar || keyEnvVarFor(source.subgraphProvider as SubgraphProvider);
-  const key = keyEnvVar ? process.env[keyEnvVar] ?? "" : "";
-  const url = applyUrlTemplate(source.subgraphUrlTemplate, key);
+  const url = resolveSubgraphUrl(source);
+  if (!url) {
+    return { success: false, prices: [], error: "could not resolve subgraph URL" };
+  }
 
   const client = new ApolloClient({ uri: url, cache: new InMemoryCache() });
 

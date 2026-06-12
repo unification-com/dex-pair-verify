@@ -11,6 +11,7 @@
 
 import { BASELINE_SOURCES } from "./baselineSources";
 import prisma from "./prisma";
+import { applyUrlTemplate, keyEnvVarFor, SubgraphProvider } from "./subgraphVerify";
 
 export type ThresholdDefaults = {
   minLiquidityUsd: number;
@@ -93,6 +94,19 @@ export function invalidateSourceCache(): void {
 
 export const getSource = async (chain: string, dex: string): Promise<SourceEntry | undefined> =>
   (await getSources()).find((s) => s.chain === chain && s.dex === dex);
+
+// Resolve a source's literal subgraph URL: substitute the operator's provider API key (from env)
+// into the stored {API_KEY} template. The key is never persisted/returned — only used at call
+// time. Returns null when the source has no subgraph configured. Shared by the price-test fetch
+// and the v4 hooks capture (DRY).
+export const resolveSubgraphUrl = (source: SourceEntry): string | null => {
+  if (!source.subgraphUrlTemplate) {
+    return null;
+  }
+  const keyEnvVar = source.apiKeyEnvVar || keyEnvVarFor(source.subgraphProvider as SubgraphProvider);
+  const key = keyEnvVar ? process.env[keyEnvVar] ?? "" : "";
+  return applyUrlTemplate(source.subgraphUrlTemplate, key);
+};
 
 // The canonical DEX factory for a (chain, dex), or null when unknown / not curated
 // (empty string, e.g. qomswap) — the factory fence skips in that case.

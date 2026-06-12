@@ -158,6 +158,11 @@ model Pair {
   // until the factory-check pass reads it. factoryCheckedAt records the attempt.
   factoryAddress           String?
   factoryCheckedAt         Int                @default(0)
+  // Uniswap-v4 hooks contract (subgraph Pool.hooks), captured at ingest for univ4
+  // sources. The zero address = a plain no-hook pool; any other value is a hooked
+  // pool, which the verdict routes to NeedsReview (its price can be non-canonical /
+  // manipulable). null = not a v4 pool / not yet resolved.
+  hooks                    String?
   // Review-queue triage (T9): for a NeedsReview pair, "spam" (clear-bad —
   // impostor / scam-flagged / exact-symbol spoof → bulk-rejectable) or "review"
   // (genuine-but-uncertain → manual look). null when not in NeedsReview.

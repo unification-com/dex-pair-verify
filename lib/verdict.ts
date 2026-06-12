@@ -355,6 +355,9 @@ export type VerdictContext = {
   intraChainImpostorLoser: boolean;
   // Either token is flagged by the scam-list (GoPlus, A.7) — route to review.
   tokenScamFlagged: boolean;
+  // A Uniswap-v4 pool with a non-zero hooks contract — its price can be non-canonical /
+  // manipulable, so it never auto-verifies; route to review until hooks are allow-listed.
+  hookedPool: boolean;
   pairFactoryAddress: string | null; // unknown until A.4.1 RPC read
   canonicalFactoryAddress: string | null; // from lib/sources.js
   // Either token is one of OUR own tokens (FUND/xFUND/FUNDx — lib/firstParty.ts).
@@ -378,6 +381,7 @@ export const VERDICT_REASON = {
   notIdentified: "notIdentified",
   unidentifiedThinPool: "unidentifiedThinPool",
   scamFlagged: "scamFlagged",
+  hookedPool: "hookedPool",
   factoryMismatch: "factoryMismatch",
   canonicalImpostor: "canonicalImpostor",
   siblingVouched: "siblingVouched",
@@ -531,6 +535,13 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   //     sibling can't vouch past it; the operator decides.
   if (ctx.tokenScamFlagged) {
     return result(TokenPairStatus.NeedsReview, VERDICT_REASON.scamFlagged, "a token is flagged by the scam-list");
+  }
+
+  // 3b-ii. A Uniswap-v4 hooked pool (non-zero hooks contract) never auto-verifies — its hooks can
+  //        make the reported price non-canonical or manipulable, and anyone can spin one up. Route
+  //        to review until the hooks address is allow-listed (the oracle hooks-safety policy).
+  if (ctx.hookedPool) {
+    return result(TokenPairStatus.NeedsReview, VERDICT_REASON.hookedPool, "a Uniswap v4 hooked pool — price not yet trusted (hooks not allow-listed)");
   }
 
   // 3c. Factory mismatch (T2): the pool's on-chain factory() does not match the
