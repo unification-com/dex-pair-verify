@@ -48,6 +48,7 @@ const WRAPPED_NATIVE: Record<string, string> = {
   base: "WETH",
   arbitrum: "WETH",
   optimism: "WETH",
+  polygon_pos: "WPOL",
 };
 
 // The chain's wrapped-native symbol, or null when the chain is not yet mapped.
@@ -75,15 +76,47 @@ export type WrappedNativeToken = {
   decimals: number;
 };
 
-// Only chains where v4 has been brought online + the wrapped token verified live are mapped. eth
-// is verified (GeckoTerminal: WETH 0xC02a… → coingecko_coin_id "weth"; native ETH → none). Other
-// chains are added when their v4 source is validated - the "verify before seeding" discipline.
+// Only chains where v4 has been brought online + the wrapped token verified live are mapped. Each
+// chain's CoinGecko id is its OWN bridged-WETH id (NOT "weth") - verified live on GeckoTerminal -
+// so a v4 native pair shares the canonical key with that chain's existing v3 WETH pairs. Native ETH
+// itself has no coingecko_coin_id on GeckoTerminal, hence the remap. New chains follow the
+// "verify before seeding" discipline (confirm the address + coingecko id before adding here).
 const WRAPPED_NATIVE_TOKEN: Record<string, WrappedNativeToken> = {
   eth: {
     address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
     symbol: "WETH",
     name: "Wrapped Ether",
     coingeckoCoinId: "weth",
+    decimals: 18,
+  },
+  base: {
+    address: "0x4200000000000000000000000000000000000006",
+    symbol: "WETH",
+    name: "Wrapped Ether",
+    coingeckoCoinId: "l2-standard-bridged-weth-base",
+    decimals: 18,
+  },
+  arbitrum: {
+    address: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+    symbol: "WETH",
+    name: "Wrapped Ether",
+    coingeckoCoinId: "arbitrum-bridged-weth-arbitrum-one",
+    decimals: 18,
+  },
+  optimism: {
+    address: "0x4200000000000000000000000000000000000006",
+    symbol: "WETH",
+    name: "Wrapped Ether",
+    coingeckoCoinId: "l2-standard-bridged-weth-optimism",
+    decimals: 18,
+  },
+  // Polygon's native currency is POL (renamed from MATIC); it wraps to WPOL, whose GeckoTerminal
+  // coingecko_coin_id is still "wmatic" (verified live) - matching that chain's v3 WPOL pairs.
+  polygon_pos: {
+    address: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
+    symbol: "WPOL",
+    name: "Wrapped POL",
+    coingeckoCoinId: "wmatic",
     decimals: 18,
   },
 };

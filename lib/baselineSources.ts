@@ -61,6 +61,10 @@ const ADOPTED_GT_KEYS = new Set([
   "optimism/uniswap_v3_optimism",
   "optimism/velodrome-finance-v2",
   "eth/uniswap-v4-ethereum",
+  "base/uniswap-v4-base",
+  "arbitrum/uniswap-v4-arbitrum",
+  "polygon_pos/uniswap-v4-polygon",
+  "optimism/uniswap-v4-optimism",
 ]);
 
 // Conservative cold-start floors for a newly-adopted source (no data yet) —

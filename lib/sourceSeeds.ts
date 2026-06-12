@@ -55,6 +55,10 @@ export const SOURCE_SEEDS: SourceSeed[] = [
   // PoolManager address (v4 has no per-pool factory); pools are 32-byte poolIds; native ETH (0x0)
   // is normalised to WETH at ingest; only no-hook pools are priced (go-ooo univ4 family + dpv univ4).
   { chain: "eth", dex: "uniswap_v4", gtNetwork: "eth", gtDex: "uniswap-v4-ethereum", schemaFamily: "univ4", subgraphId: "DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G", factoryAddress: "0x000000000004444c5dc75cB358380D2e3dE08A90", priceable: true, note: "Uniswap v4 singleton PoolManager; 32-byte poolIds; native ETH→WETH; no-hook pools only" },
+  { chain: "base", dex: "uniswap_v4", gtNetwork: "base", gtDex: "uniswap-v4-base", schemaFamily: "univ4", subgraphId: "HNCFA9TyBqpo5qpe6QreQABAA1kV8g46mhkCcicu6v2R", factoryAddress: "0x498581fF718922c3f8e6A244956aF099B2652b2b", priceable: true, note: "Uniswap v4 on Base; native ETH→WETH (l2-standard-bridged-weth-base)" },
+  { chain: "arbitrum", dex: "uniswap_v4", gtNetwork: "arbitrum", gtDex: "uniswap-v4-arbitrum", schemaFamily: "univ4", subgraphId: "G5TsTKNi8yhPSV7kycaE23oWbqv9zzNqR49FoEQjzq1r", factoryAddress: "0x360E68faCcca8cA495c1B759Fd9EEe466db9FB32", priceable: true, note: "Uniswap v4 on Arbitrum; native ETH→WETH (arbitrum-bridged-weth-arbitrum-one)" },
+  { chain: "polygon_pos", dex: "uniswap_v4", gtNetwork: "polygon_pos", gtDex: "uniswap-v4-polygon", schemaFamily: "univ4", subgraphId: "CwpebM66AH5uqS5sreKij8yEkkPcHvmyEs7EwFtdM5ND", factoryAddress: "0x67366782805870060151383F4BbFF9daB53e5cD6", priceable: true, note: "Uniswap v4 on Polygon; native POL→WPOL (cg wmatic) - the one non-ETH-native v4 chain" },
+  { chain: "optimism", dex: "uniswap_v4", gtNetwork: "optimism", gtDex: "uniswap-v4-optimism", schemaFamily: "univ4", subgraphId: "3Tn7Y1NJAr4ySKm7KFu1dwvH2WM3mHJnXzXAxQsdBDvW", factoryAddress: "0x9a13F98Cb987694C9F086b1F5eB990EeA8264Ec3", priceable: true, note: "Uniswap v4 on Optimism; native ETH→WETH (l2-standard-bridged-weth-optimism)" },
 
   // ── New 4.D targets (researched; validated live via `yarn validate-seeds`).
   //    GT slugs map to discovered candidates for /admin/sources pre-fill. IDs the
