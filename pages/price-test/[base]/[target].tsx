@@ -1,8 +1,10 @@
 import { GetServerSideProps } from "next";
+import Link from "next/link";
 import React from "react";
 
 import ThresholdPriceTest from "../../../components/PriceTest/ThresholdPriceTest";
 import Layout from "../../../components/shell/Layout";
+import PageHeader from "../../../components/ui/PageHeader";
 import { isOperatorCtx } from "../../../lib/operatorGate";
 import prisma from "../../../lib/prisma";
 import { priceTestPairSelect } from "../../../lib/publicSelect";
@@ -43,16 +45,44 @@ type Props = {
   isPublic: boolean;
 };
 
+// PairNotSupported is the empty state when a symbol pair has no verified pools backing
+// it - the oracle has nothing to price, so we say so plainly rather than rendering a
+// misleading "= 0" headline from an empty sample set.
+const PairNotSupported: React.FC<{ base: string; target: string }> = ({ base, target }) => (
+  <>
+    <PageHeader
+      title={<>OoO price-test <span className="mono">{base}→{target}</span></>}
+      sub="Simulate the oracle price for a verified pair across every backing pool."
+    />
+    <div className="card card-pad" style={{ maxWidth: 640 }}>
+      <h3 style={{ marginTop: 0 }}>Pair not supported yet</h3>
+      <p className="muted">
+        <span className="mono">{base}→{target}</span> has no verified pools in dex-pair-verify,
+        so the oracle can&apos;t price it yet. A pair becomes priceable once at least one of its
+        pools passes verification.
+      </p>
+      <div style={{ display: "flex", gap: "var(--sp-3)", marginTop: "var(--sp-4)", flexWrap: "wrap" }}>
+        <Link href="/price-test"><a className="btn btn-ghost btn-sm">← Try another pair</a></Link>
+        <Link href="/pairs"><a className="btn btn-ghost btn-sm">Browse verified pairs</a></Link>
+      </div>
+    </div>
+  </>
+);
+
 const BaseTargetTestPage: React.FC<Props> = (props) => {
   return (
     <Layout>
-      <ThresholdPriceTest
-        base={props.base}
-        target={props.target}
-        pairs={props.pairs}
-        thresholds={props.thresholds}
-        isPublic={props.isPublic}
-      />
+      {props.pairs.length > 0 ? (
+        <ThresholdPriceTest
+          base={props.base}
+          target={props.target}
+          pairs={props.pairs}
+          thresholds={props.thresholds}
+          isPublic={props.isPublic}
+        />
+      ) : (
+        <PairNotSupported base={props.base} target={props.target} />
+      )}
     </Layout>
   );
 };
