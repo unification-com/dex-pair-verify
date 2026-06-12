@@ -60,6 +60,7 @@ const ADOPTED_GT_KEYS = new Set([
   "base/aerodrome-slipstream",
   "optimism/uniswap_v3_optimism",
   "optimism/velodrome-finance-v2",
+  "eth/uniswap-v4-ethereum",
 ]);
 
 // Conservative cold-start floors for a newly-adopted source (no data yet) —

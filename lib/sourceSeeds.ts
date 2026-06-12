@@ -22,7 +22,7 @@ export type SourceSeed = {
   dex: string; // internal dex id
   gtNetwork: string; // GeckoTerminal network slug (matches a discovered candidate's chain)
   gtDex: string; // GeckoTerminal dex slug (matches a candidate's dex)
-  schemaFamily: SchemaFamily; // "univ2" | "univ3" | "custom"  (Algebra → univ3 for price)
+  schemaFamily: SchemaFamily; // "univ2" | "univ3" | "univ4" | "messari" | "custom"  (Algebra → univ3 for price)
   subgraphId: string; // The Graph decentralised-network deployment ID
   factoryAddress: string;
   priceable: boolean; // false = needs a go-ooo template that doesn't exist yet (e.g. Solidly)
@@ -50,6 +50,11 @@ export const SOURCE_SEEDS: SourceSeed[] = [
   { chain: "polygon_pos", dex: "quickswap_v3", gtNetwork: "polygon_pos", gtDex: "quickswap_v3", schemaFamily: "univ3", subgraphId: "FqsRcH1XqSjqVx9GRTvEJe959aCbKrcyGgDWBrUkG24g", factoryAddress: "0x411b0fAcC3489691f28ad58c47006AF5E3Ab3A28", priceable: true },
   { chain: "xdai", dex: "honeyswap", gtNetwork: "xdai", gtDex: "honeyswap", schemaFamily: "univ2", subgraphId: "HTxWvPGcZ5oqWLYEVtWnVJDfnai2Ud1WaABiAR72JaSJ", factoryAddress: "0xA818b4F111Ccac7AA31D0BCc0806d64F2E0737D7", priceable: true },
   { chain: "bsc", dex: "bsc_pancakeswap_v3", gtNetwork: "bsc", gtDex: "pancakeswap-v3-bsc", schemaFamily: "univ3", subgraphId: "A1fvJWQLBeUAggX2WQTMm3FKjXTekNXo77ZySun4YN2m", factoryAddress: "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865", priceable: true },
+
+  // Uniswap v4 (eth) — the first singleton/hooks family. The "factory" slot carries the singleton
+  // PoolManager address (v4 has no per-pool factory); pools are 32-byte poolIds; native ETH (0x0)
+  // is normalised to WETH at ingest; only no-hook pools are priced (go-ooo univ4 family + dpv univ4).
+  { chain: "eth", dex: "uniswap_v4", gtNetwork: "eth", gtDex: "uniswap-v4-ethereum", schemaFamily: "univ4", subgraphId: "DiYPVdygkfjDWhbxGSqAQxwBKmfKnkWQojqeM2rkLb3G", factoryAddress: "0x000000000004444c5dc75cB358380D2e3dE08A90", priceable: true, note: "Uniswap v4 singleton PoolManager; 32-byte poolIds; native ETH→WETH; no-hook pools only" },
 
   // ── New 4.D targets (researched; validated live via `yarn validate-seeds`).
   //    GT slugs map to discovered candidates for /admin/sources pre-fill. IDs the
