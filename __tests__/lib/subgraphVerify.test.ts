@@ -81,6 +81,9 @@ describe("classifySchemaFamily", () => {
     expect(classifySchemaFamily(["pair", "pairs", "token"])).toBe("univ2");
     expect(classifySchemaFamily(["pool", "pools", "token"])).toBe("univ3");
   });
+  it("messari from a liquidityPools query (its hallmark entity)", () => {
+    expect(classifySchemaFamily(["liquidityPool", "liquidityPools", "dexAmmProtocol"])).toBe("messari");
+  });
   it("custom when ambiguous or neither", () => {
     expect(classifySchemaFamily(["pairs", "pools"])).toBe("custom");
     expect(classifySchemaFamily(["swaps", "tokens"])).toBe("custom");
@@ -119,6 +122,12 @@ describe("dataProbeSubgraph", () => {
     expect(r.ok).toBe(true);
     expect(r.sampleReserveUsd).toBe(0);
   });
+  it("ok when a messari pool prices a token (inputTokens[0].lastPriceUSD > 0)", async () => {
+    const r = await dataProbeSubgraph("http://x", "messari", { fetcher: dataResp("liquidityPools", [{ id: "0xm", inputTokens: [{ lastPriceUSD: "1638" }], totalValueLockedUSD: "5000" }]) });
+    expect(r.applicable).toBe(true);
+    expect(r.ok).toBe(true);
+  });
+
   it("ok when a univ3 pool prices a token", async () => {
     const r = await dataProbeSubgraph("http://x", "univ3", { fetcher: dataResp("pools", [{ id: "0xq", token0Price: "0.0005", totalValueLockedUSD: "1234" }]) });
     expect(r.ok).toBe(true);

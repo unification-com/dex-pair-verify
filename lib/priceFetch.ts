@@ -32,18 +32,22 @@ const getCurrentBlockNumber = async (rpc: string): Promise<number> => {
   return parseInt(json.result, 16);
 };
 
-const genQuery = (poolsName: string, addrStr: string, blockNum: number | null): string => {
+// The subgraph collection name + per-pool fields per schema family. univ2/univ3 expose
+// token0Price/token1Price directly; the Messari dex-amm schema exposes per-token lastPriceUSD on
+// inputTokens, from which the pair price is derived (see the result mapping below).
+const FAMILY_COLLECTION: Record<string, string> = { univ2: "pairs", univ3: "pools", messari: "liquidityPools" };
+
+const genQuery = (family: string, addrStr: string, blockNum: number | null): string => {
   const blockArg = blockNum === null ? "" : `block: {number: ${blockNum}},`;
+  const fields = family === "messari"
+    ? `id inputTokens { id symbol lastPriceUSD }`
+    : `id token0 { id symbol } token1 { id symbol } token0Price token1Price`;
   return `
-    ${poolsName}(
+    ${FAMILY_COLLECTION[family]}(
       ${blockArg}
       where: { id_in: [${addrStr.toLowerCase()}] }
     ) {
-      id
-      token0 { id symbol }
-      token1 { id symbol }
-      token0Price
-      token1Price
+      ${fields}
     }
   `;
 };
@@ -76,10 +80,9 @@ export async function fetchPoolPrices(
   if (!source?.subgraphUrlTemplate) {
     return { success: false, prices: [], error: "could not find subgraph info" };
   }
-  const poolsName = source.subgraphSchemaFamily === "univ2" ? "pairs"
-    : source.subgraphSchemaFamily === "univ3" ? "pools" : null;
-  if (!poolsName) {
-    return { success: false, prices: [], error: `price-test does not support the "${source.subgraphSchemaFamily}" schema family` };
+  const family = source.subgraphSchemaFamily;
+  if (!FAMILY_COLLECTION[family]) {
+    return { success: false, prices: [], error: `price-test does not support the "${family}" schema family` };
   }
   const keyEnvVar = source.apiKeyEnvVar || keyEnvVarFor(source.subgraphProvider as SubgraphProvider);
   const key = keyEnvVar ? process.env[keyEnvVar] ?? "" : "";
@@ -87,14 +90,14 @@ export async function fetchPoolPrices(
 
   const client = new ApolloClient({ uri: url, cache: new InMemoryCache() });
 
-  const qArray: string[] = [`p0: ${genQuery(poolsName, addrStr, null)}`];
+  const qArray: string[] = [`p0: ${genQuery(family, addrStr, null)}`];
   let subBlocks = 0;
   if (mins > 0 && rpc && blocksPerMin) {
     const currentBlock = await getCurrentBlockNumber(rpc);
     const lastBlock = currentBlock - 1;
     subBlocks = mins * blocksPerMin;
     for (let p = 0; p < subBlocks; p += 1) {
-      qArray.push(`p${p + 1}: ${genQuery(poolsName, addrStr, lastBlock - p)}`);
+      qArray.push(`p${p + 1}: ${genQuery(family, addrStr, lastBlock - p)}`);
     }
   }
   const query = gql`{ ${qArray.join(",")} }`;
@@ -113,6 +116,28 @@ export async function fetchPoolPrices(
   for (let p = 0; p <= subBlocks; p += 1) {
     const rows = result.data?.[`p${p}`] ?? [];
     for (const d of rows) {
+      if (family === "messari") {
+        // Messari prices via per-token lastPriceUSD; derive token0Price (token1 per token0) =
+        // lastPriceUSD(token0) / lastPriceUSD(token1), and token1Price as its inverse.
+        const toks = d.inputTokens ?? [];
+        if (toks.length < 2) continue;
+        const [t0, t1] = toks;
+        const p0 = Number(t0.lastPriceUSD);
+        const p1 = Number(t1.lastPriceUSD);
+        if (!(p0 > 0) || !(p1 > 0)) continue;
+        prices.push({
+          chain,
+          dex,
+          token0ContractAddress: t0.id,
+          token0Symbol: t0.symbol,
+          token0Price: String(p0 / p1),
+          token1ContractAddress: t1.id,
+          token1Symbol: t1.symbol,
+          token1Price: String(p1 / p0),
+          pairContractAddress: d.id,
+        });
+        continue;
+      }
       prices.push({
         chain,
         dex,

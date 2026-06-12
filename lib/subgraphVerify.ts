@@ -14,7 +14,7 @@
 // result the candidate-review UI surfaces for operator confirmation.
 
 export type SubgraphProvider = "graph-decentralized" | "graph-studio" | "graph-hosted" | "self-hosted";
-export type SchemaFamily = "univ2" | "univ3" | "custom";
+export type SchemaFamily = "univ2" | "univ3" | "messari" | "custom";
 
 // Provider taxonomy: URL pattern + the env var that holds its API key. Order
 // matters — most specific first. `self-hosted` is the catch-all (operator-defined
@@ -111,10 +111,14 @@ export function assertSafeSubgraphUrl(rawUrl: string): void {
 }
 
 // Classify the schema family from the subgraph's top-level query fields. UniV2-like
-// exposes a `pairs` query; UniV3-like exposes `pools`. A subgraph exposing only one
-// is unambiguous; one exposing both (rare) → custom, so the operator confirms.
+// exposes a `pairs` query; UniV3-like exposes `pools`; the Messari standardised dex-amm
+// schema exposes `liquidityPools` (its hallmark). A subgraph exposing only one is
+// unambiguous; one exposing both pairs+pools (rare) → custom, so the operator confirms.
 export function classifySchemaFamily(queryFieldNames: string[]): SchemaFamily {
   const names = new Set(queryFieldNames.map((n) => n.toLowerCase()));
+  if (names.has("liquiditypools")) {
+    return "messari";
+  }
   const hasPairs = names.has("pairs");
   const hasPools = names.has("pools");
   if (hasPairs && !hasPools) {
@@ -188,20 +192,37 @@ export async function probeSubgraph(url: string, opts: { fetcher?: GraphqlFetche
 // track reserveBNB instead, so a reserveUSD check false-negatives them.) reserveUSD
 // / TVL is read too, purely as a liquidity sample for display (0 on those BSC
 // subgraphs). No orderBy — a global sort is slow on big subgraphs and unnecessary
-// for a liveness check. custom/solidly have no generic query (they await a
-// dedicated template), so the data probe is not applicable.
-const DATA_QUERY: Partial<Record<SchemaFamily, { query: string; collection: string; priceField: string; reserveField: string }>> = {
+// for a liveness check. The Messari schema has no token0Price - it prices via per-token
+// lastPriceUSD on liquidityPools.inputTokens - so the price is pulled by an extractor
+// rather than a flat field name. `custom` still has no generic query (awaits a dedicated
+// template), so its data probe is not applicable.
+type DataQuerySpec = {
+  query: string;
+  collection: string;
+  reserveField: string;
+  // extractPrice pulls the "is this priced" liveness signal from one row. univ2/univ3 read
+  // token0Price directly; messari reads the first inputToken's lastPriceUSD.
+  extractPrice: (row: Record<string, unknown>) => number;
+};
+const numField = (v: unknown): number => parseFloat(String(v ?? ""));
+const DATA_QUERY: Partial<Record<SchemaFamily, DataQuerySpec>> = {
   univ2: {
     query: `{ pairs(first: 5) { id token0Price reserveUSD } }`,
     collection: "pairs",
-    priceField: "token0Price",
     reserveField: "reserveUSD",
+    extractPrice: (r) => numField(r.token0Price),
   },
   univ3: {
     query: `{ pools(first: 5) { id token0Price totalValueLockedUSD } }`,
     collection: "pools",
-    priceField: "token0Price",
     reserveField: "totalValueLockedUSD",
+    extractPrice: (r) => numField(r.token0Price),
+  },
+  messari: {
+    query: `{ liquidityPools(first: 5) { id inputTokens { lastPriceUSD } totalValueLockedUSD } }`,
+    collection: "liquidityPools",
+    reserveField: "totalValueLockedUSD",
+    extractPrice: (r) => numField((r.inputTokens as { lastPriceUSD?: unknown }[] | undefined)?.[0]?.lastPriceUSD),
   },
 };
 
@@ -259,7 +280,7 @@ export async function dataProbeSubgraph(
   }
   // Per-row sample (id + priced token0Price + reserve/TVL), surfaced for display.
   const samples: DataSample[] = rows.map((r) => {
-    const p = parseFloat(String(r[spec.priceField] ?? ""));
+    const p = spec.extractPrice(r);
     const rv = parseFloat(String(r[spec.reserveField] ?? ""));
     return { id: r.id, price: Number.isFinite(p) ? p : null, reserve: Number.isFinite(rv) ? rv : null };
   });

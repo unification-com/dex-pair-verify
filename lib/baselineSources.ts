@@ -54,10 +54,12 @@ const ADOPTED_GT_KEYS = new Set([
   "arbitrum/uniswap_v3_arbitrum",
   "arbitrum/camelot",
   "arbitrum/camelot-v3",
+  "arbitrum/sushiswap_arbitrum",
   "base/uniswap-v3-base",
   "base/sushiswap-v2-base",
   "base/aerodrome-slipstream",
   "optimism/uniswap_v3_optimism",
+  "optimism/velodrome-finance-v2",
 ]);
 
 // Conservative cold-start floors for a newly-adopted source (no data yet) —
