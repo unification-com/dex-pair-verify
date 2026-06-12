@@ -11,6 +11,7 @@ import { utils as web3Utils } from "web3";
 import { cgKeyedFetch, GECKO_API_KEY } from "./coingecko";
 import prisma from "./prisma";
 import { getSource, getSources, gtDexFor, gtNetworkFor, thresholdSeedData } from "./sourceConfig";
+import { isNativeCurrency, poolAddressFromGt, wrappedNativeToken } from "./univ4";
 import { runVerdictForPair } from "./verdictRunner";
 
 // With a (free Demo) CoinGecko API key, use CoinGecko's keyed on-chain
@@ -102,6 +103,22 @@ const addressFromGtId = (id: string | undefined): string | null => {
   } catch {
     return null;
   }
+};
+
+// Resolve a pool token to the (address, GeckoTerminal data) dpv should store, mapping a v4
+// native-currency token (address 0x0) to the chain's wrapped token. Native ETH has no
+// coingecko_coin_id on GeckoTerminal, so without this a v4 ETH pool could never be canonically
+// keyed or aggregate with the wrapped-ETH pairs on other DEXs (see lib/univ4.ts). Non-native
+// tokens, and chains with no wrapped mapping, pass through unchanged.
+const resolveNativeToken = (chain: string, address: string, gt: GtTokenData): { address: string; gt: GtTokenData } => {
+  const wrapped = isNativeCurrency(address) ? wrappedNativeToken(chain) : null;
+  if (!wrapped) {
+    return { address, gt };
+  }
+  return {
+    address: wrapped.address,
+    gt: { ...gt, symbol: wrapped.symbol, name: wrapped.name, coingeckoCoinId: wrapped.coingeckoCoinId, decimals: wrapped.decimals },
+  };
 };
 
 const isoToUnix = (iso: string | null): number | null => {
@@ -249,15 +266,7 @@ async function ingestOnePool(
   tokenMap: Map<string, GtTokenData>,
   now: number,
 ): Promise<string | null> {
-  const pairAddr =
-    addressFromGtId(p.attributes.address) ??
-    (() => {
-      try {
-        return web3Utils.toChecksumAddress(p.attributes.address);
-      } catch {
-        return null;
-      }
-    })();
+  const pairAddr = poolAddressFromGt(p.attributes.address);
   const t0Addr = addressFromGtId(p.relationships.base_token?.data?.id);
   const t1Addr = addressFromGtId(p.relationships.quote_token?.data?.id);
   if (!pairAddr || !t0Addr || !t1Addr) {
@@ -268,16 +277,20 @@ async function ingestOnePool(
   if (!gt0 || !gt1) {
     return null; // GT returned no token data — skip rather than write blanks
   }
+  // Map a v4 native-currency token (address 0x0) to the chain's wrapped token, so it carries a
+  // CoinGecko-keyable identity and the pair aggregates with the wrapped-ETH pairs on other DEXs.
+  const r0 = resolveNativeToken(chain, t0Addr, gt0);
+  const r1 = resolveNativeToken(chain, t1Addr, gt1);
 
   const poolCreatedAt = isoToUnix(p.attributes.pool_created_at);
-  const token0Id = await upsertToken(chain, t0Addr, gt0, poolCreatedAt, now);
-  const token1Id = await upsertToken(chain, t1Addr, gt1, poolCreatedAt, now);
-  const pairId = await upsertPair(chain, dex, pairAddr, `${gt0.symbol}-${gt1.symbol}`, token0Id, token1Id, p, now);
+  const token0Id = await upsertToken(chain, r0.address, r0.gt, poolCreatedAt, now);
+  const token1Id = await upsertToken(chain, r1.address, r1.gt, poolCreatedAt, now);
+  const pairId = await upsertPair(chain, dex, pairAddr, `${r0.gt.symbol}-${r1.gt.symbol}`, token0Id, token1Id, p, now);
 
   // The pair's CG (aggregated) prices come from the token-level price_usd.
   await prisma.pair.update({
     where: { id: pairId },
-    data: { token0PriceCg: gt0.priceUsd, token1PriceCg: gt1.priceUsd },
+    data: { token0PriceCg: r0.gt.priceUsd, token1PriceCg: r1.gt.priceUsd },
   });
 
   const out = await runVerdictForPair(pairId);
@@ -467,10 +480,8 @@ export async function ingestPairByAddress(
     return { ok: false, reason: `${chain}/${dex} is not a supported source` };
   }
 
-  let poolAddr: string;
-  try {
-    poolAddr = web3Utils.toChecksumAddress(address);
-  } catch {
+  const poolAddr = poolAddressFromGt(address);
+  if (!poolAddr) {
     return { ok: false, reason: `invalid pool address: ${address}` };
   }
 
