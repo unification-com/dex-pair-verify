@@ -1,247 +1,50 @@
-// GeckoTerminal-only ingest (A.4.1). One pass per (chain, dex) page: discover
-// pools + hydrate reserves/volume/prices + token cgId/decimals, then run the
-// verdict inline. Replaces the old 3-script flow (GeckoTerminal discover → DEX
-// subgraph reserves → GeckoTerminal token data) — GT supplies everything the
-// verdict needs, so the Apollo/subgraph path (and its per-DEX GraphQL config)
-// drops off the verification critical path. Precise on-chain reserves remain
-// go-ooo's concern, not the verdict's.
+// Source-agnostic ingest orchestrator (A.4.1, generalised in #128 Phase 2a). One pass per
+// (chain, source) page: an IngestAdapter discovers + normalises pools/tokens, then the verdict runs
+// inline. The adapter hides the transport + source shape (GeckoTerminal/EVM today — lib/gtAdapter.ts;
+// a Cosmos SQS/Numia adapter slots in beside it), so this file owns only the source-neutral parts:
+// upserting the normalised pool/token, running the verdict, and the per-(chain,dex) threshold floor.
+// Precise on-chain reserves remain go-ooo's concern, not the verdict's.
+//
+// Two of the entry points below — the first-party token-pools spider and manual add-by-address — are
+// GeckoTerminal features (they discover a token's pools / a pool by EVM address), so they speak to the
+// GeckoTerminal adapter directly; the page ingest is fully adapter-driven and is the path a Cosmos
+// source implements.
 
-import { utils as web3Utils } from "web3";
-
-import { cgKeyedFetch, GECKO_API_KEY } from "./coingecko";
-import { FAMILY_COLLECTION } from "./priceFetch";
+import { gtAdapter, normaliseGtPage, defaultPoolByAddressFetcher, defaultTokenPoolsFetcher, PoolByAddressFetcher, PoolPageFetcher, TokenPoolsFetcher } from "./gtAdapter";
+import { IngestAdapter, NormalisedPool, NormalisedToken, PoolFacts } from "./ingestAdapter";
 import prisma from "./prisma";
-import { getSource, getSources, gtDexFor, gtNetworkFor, resolveSubgraphUrl, thresholdSeedData } from "./sourceConfig";
-import { isNativeCurrency, poolAddressFromGt, wrappedNativeToken } from "./univ4";
+import { getSource, getSources, gtDexFor, gtNetworkFor, thresholdSeedData } from "./sourceConfig";
+import { poolAddressFromGt } from "./univ4";
 import { runVerdictForPair } from "./verdictRunner";
 
-// With a (free Demo) CoinGecko API key, use CoinGecko's keyed on-chain
-// endpoints — same data as GeckoTerminal, but a dedicated rate limit instead of
-// the shared-IP public one. Without a key, fall back to the public GT API.
-const GT_BASE = GECKO_API_KEY
-  ? "https://api.coingecko.com/api/v3/onchain"
-  : "https://api.geckoterminal.com/api/v2";
+const nowS = (): number => Math.floor(Date.now() / 1000);
 
-// --- GeckoTerminal response shapes (only the fields we consume) ----------
+// Pick the ingest adapter for a chain. Today every chain is EVM/GeckoTerminal; the Cosmos adapter
+// (#128 Phase 2c) is selected here by chain kind once it lands — the only place the orchestrator
+// needs to know more than one source type exists.
+const adapterForChain = (_chain: string): IngestAdapter => gtAdapter;
 
-type GtPool = {
-  attributes: {
-    address: string;
-    reserve_in_usd: string | null;
-    market_cap_usd: string | null;
-    pool_created_at: string | null;
-    base_token_price_usd: string | null;
-    quote_token_price_usd: string | null;
-    price_change_percentage: { h24: string | null } | null;
-    transactions: { h24: { buys: number | null; sells: number | null; buyers: number | null; sellers: number | null } | null } | null;
-    volume_usd: { h24: string | null } | null;
-  };
-  relationships: {
-    base_token: { data: { id: string } | null } | null;
-    quote_token: { data: { id: string } | null } | null;
-    // Present on the /tokens/{addr}/pools endpoint (pools span DEXs) — used by the
-    // targeted first-party ingest to map a pool to one of our supported sources.
-    dex?: { data: { id: string } | null } | null;
-  };
-};
+// --- source-neutral persistence ------------------------------------------
 
-type GtToken = {
-  attributes: {
-    address: string;
-    name: string | null;
-    symbol: string | null;
-    decimals: number | null;
-    coingecko_coin_id: string | null;
-    // Only present on the standalone /tokens endpoint, not the embedded
-    // include= tokens — optional so both shapes type-check.
-    price_usd?: string | null;
-    market_cap_usd?: string | null;
-    total_supply?: string | null;
-    volume_usd?: { h24: string | null } | null;
-  };
-};
-
-// One GeckoTerminal call per page returns the pools AND (via `include`) their
-// base/quote tokens embedded — so we don't make a second tokens call. Halves
-// the request rate against GT's free-tier limit.
-export type PoolPage = { pools: GtPool[]; tokens: GtToken[] };
-export type PoolPageFetcher = (chain: string, dex: string, page: number) => Promise<PoolPage>;
-
-async function gtFetch(url: string, label: string): Promise<{ data?: unknown[]; included?: unknown[] } | null> {
-  // Rate-paced through the shared CoinGecko gate so ingest can't overrun the
-  // keyed per-minute window (the canonical pass shares the same budget).
-  const res = await cgKeyedFetch(url, `ingest ${label}`);
-  if (!res) {
-    return null;
-  }
-  return (await res.json()) as { data?: unknown[]; included?: unknown[] };
-}
-
-const defaultPoolPageFetcher: PoolPageFetcher = async (chain, dex, page) => {
-  const url = `${GT_BASE}/networks/${chain}/dexes/${dex}/pools?page=${page}&sort=h24_tx_count_desc&include=base_token,quote_token`;
-  const json = await gtFetch(url, `pools ${chain}/${dex} p${page}`);
-  const pools = (json?.data as GtPool[]) ?? [];
-  const tokens = ((json?.included as ({ type?: string } & GtToken)[]) ?? []).filter((r) => r.type === "token");
-  return { pools, tokens };
-};
-
-// --- helpers -------------------------------------------------------------
-
-const num = (v: string | number | null | undefined): number => {
-  const n = typeof v === "number" ? v : parseFloat(v ?? "");
-  return Number.isFinite(n) ? n : 0;
-};
-
-// GeckoTerminal token relationship ids are `{network}_{address}`.
-const addressFromGtId = (id: string | undefined): string | null => {
-  if (!id) {
-    return null;
-  }
-  const parts = id.split("_");
-  const raw = parts[parts.length - 1];
-  try {
-    return web3Utils.toChecksumAddress(raw);
-  } catch {
-    return null;
-  }
-};
-
-// Resolve a pool token to the (address, GeckoTerminal data) dpv should store, mapping a v4
-// native-currency token (address 0x0) to the chain's wrapped token. Native ETH has no
-// coingecko_coin_id on GeckoTerminal, so without this a v4 ETH pool could never be canonically
-// keyed or aggregate with the wrapped-ETH pairs on other DEXs (see lib/univ4.ts). Non-native
-// tokens, and chains with no wrapped mapping, pass through unchanged.
-const resolveNativeToken = (chain: string, address: string, gt: GtTokenData): { address: string; gt: GtTokenData } => {
-  const wrapped = isNativeCurrency(address) ? wrappedNativeToken(chain) : null;
-  if (!wrapped) {
-    return { address, gt };
-  }
-  return {
-    address: wrapped.address,
-    gt: { ...gt, symbol: wrapped.symbol, name: wrapped.name, coingeckoCoinId: wrapped.coingeckoCoinId, decimals: wrapped.decimals },
-  };
-};
-
-// One batched read of a page's pools from the source's PRICING subgraph — the same subgraph and
-// id_in lookup go-ooo prices through, so "present" here means "go-ooo can actually price it".
-type SubgraphPoolFacts = {
-  // ≥1 of the queried pools was found, proving the source's pool-id format lines up with the
-  // subgraph. Only then is a pool's ABSENCE trustworthy (it's a GeckoTerminal-only phantom go-ooo
-  // can't price). If nothing was found we can't tell "all phantom" from "id format we don't line
-  // up" (e.g. a GT slug whose pool addresses diverge from the subgraph), so we claim nothing.
-  idsAlign: boolean;
-  present: Set<string>; // lower-cased pool ids the subgraph indexes
-  hooks: Map<string, string>; // lower-cased poolId → hooks contract (univ4 only; GT doesn't expose it)
-};
-
-// Corroborate a page of GeckoTerminal pools against the source's pricing subgraph: which pool ids it
-// actually indexes (presence — drops GT-phantom pools the oracle can never price) and, for univ4,
-// the hooks contract. One batched query per page, mirroring go-ooo's own id_in price lookup. A
-// non-subgraph family, an unconfigured subgraph, or any fetch/GraphQL error returns idsAlign=false
-// with empty maps: corroboration then makes NO claim (fail-open) and the pool stores
-// subgraphPresent=null / hooks=null — go-ooo's no-hook and num_pools price filters remain the
-// backstop, so this never wrongly demotes a working source or opens a safety gap.
-async function subgraphPoolFacts(chain: string, dex: string, pools: GtPool[]): Promise<SubgraphPoolFacts> {
-  const empty: SubgraphPoolFacts = { idsAlign: false, present: new Set(), hooks: new Map() };
-  const source = await getSource(chain, dex);
-  const family = source?.subgraphSchemaFamily;
-  const collection = family ? FAMILY_COLLECTION[family] : undefined;
-  const url = source ? resolveSubgraphUrl(source) : null;
-  if (!collection || !url) {
-    return empty; // custom / no-subgraph family — nothing to corroborate against
-  }
-  const poolIds = pools
-    .map((p) => poolAddressFromGt(p.attributes.address))
-    .filter((id): id is string => !!id)
-    .map((id) => id.toLowerCase());
-  if (poolIds.length === 0) {
-    return empty;
-  }
-  const idList = poolIds.map((id) => `"${id}"`).join(",");
-  const fields = family === "univ4" ? "id hooks" : "id";
-  const query = `{ ${collection}(where: { id_in: [${idList}] }) { ${fields} } }`;
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query }),
-    });
-    if (!res.ok) {
-      return empty;
-    }
-    const json = (await res.json()) as { data?: Record<string, { id?: string; hooks?: string }[]> } | null;
-    const rows = json?.data?.[collection];
-    if (!Array.isArray(rows)) {
-      return empty; // GraphQL error / unexpected shape → make no claim
-    }
-    const present = new Set<string>();
-    const hooks = new Map<string, string>();
-    for (const r of rows) {
-      if (!r?.id) {
-        continue;
-      }
-      const id = r.id.toLowerCase();
-      present.add(id);
-      if (family === "univ4" && typeof r.hooks === "string") {
-        hooks.set(id, r.hooks);
-      }
-    }
-    return { idsAlign: present.size > 0, present, hooks };
-  } catch {
-    // Subgraph/network failure — corroboration makes no claim (go-ooo's price filters are the backstop).
-    return empty;
-  }
-}
-
-const isoToUnix = (iso: string | null): number | null => {
-  if (!iso) {
-    return null;
-  }
-  const ms = Date.parse(iso);
-  return Number.isNaN(ms) ? null : Math.floor(ms / 1000);
-};
-
-type GtTokenData = {
-  name: string;
-  symbol: string;
-  decimals: number;
-  coingeckoCoinId: string;
-  priceUsd: number;
-  marketCapUsd: number;
-  totalSupply: number;
-  volume24hUsd: number;
-};
-
-const mapGtToken = (t: GtToken): GtTokenData => ({
-  name: t.attributes.name ?? "",
-  symbol: t.attributes.symbol ?? "",
-  decimals: t.attributes.decimals ?? 0,
-  coingeckoCoinId: t.attributes.coingecko_coin_id ?? "",
-  priceUsd: num(t.attributes.price_usd),
-  marketCapUsd: num(t.attributes.market_cap_usd),
-  totalSupply: num(t.attributes.total_supply),
-  volume24hUsd: num(t.attributes.volume_usd?.h24),
-});
-
-// Find-or-update a token from GeckoTerminal data. Never touches status /
+// Find-or-update a token from normalised source data. Never touches status /
 // verificationMethod (those belong to the verdict/operator). deploymentTimestamp
 // keeps the earliest pool_created_at seen.
 async function upsertToken(
   chain: string,
   address: string,
-  gt: GtTokenData,
+  t: NormalisedToken,
   poolCreatedAt: number | null,
   now: number,
 ): Promise<string> {
   const existing = await prisma.token.findFirst({ where: { chain, contractAddress: address } });
   const common = {
-    name: gt.name,
-    symbol: gt.symbol,
-    decimals: gt.decimals,
-    coingeckoCoinId: gt.coingeckoCoinId,
-    totalSupply: gt.totalSupply,
-    volume24hUsd: gt.volume24hUsd,
-    marketCapUsd: gt.marketCapUsd,
+    name: t.name,
+    symbol: t.symbol,
+    decimals: t.decimals,
+    coingeckoCoinId: t.coingeckoCoinId,
+    totalSupply: t.totalSupply,
+    volume24hUsd: t.volume24hUsd,
+    marketCapUsd: t.marketCapUsd,
     lastChecked: now,
   };
 
@@ -267,7 +70,7 @@ async function upsertToken(
   return created.id;
 }
 
-// Find-or-update a pair from GeckoTerminal pool data. Never touches the verdict
+// Find-or-update a pair from a normalised pool. Never touches the verdict
 // columns (status / verificationMethod / canonicalKey / confidence / verdictAt)
 // — runVerdictForPair owns those and runs right after.
 async function upsertPair(
@@ -277,37 +80,32 @@ async function upsertPair(
   pairSym: string,
   token0Id: string,
   token1Id: string,
-  pool: GtPool,
+  pool: NormalisedPool,
   now: number,
   hooks: string | null,
   subgraphPresent: boolean | null,
 ): Promise<string> {
-  const a = pool.attributes;
-  const buys = a.transactions?.h24?.buys ?? 0;
-  const sells = a.transactions?.h24?.sells ?? 0;
-  const volume24h = num(a.volume_usd?.h24);
-
   const common = {
     pair: pairSym,
     hooks,
     subgraphPresent,
-    reserveUsd: num(a.reserve_in_usd),
+    reserveUsd: pool.reserveUsd,
     reserve0: 0,
     reserve1: 0,
     reserveNativeCurrency: 0,
-    volumeUsd: volume24h,
-    volumeUsd24h: volume24h,
-    marketCapUsd: num(a.market_cap_usd),
-    priceChangePercentage24h: num(a.price_change_percentage?.h24),
-    buys24h: buys,
-    sells24h: sells,
-    buyers24h: a.transactions?.h24?.buyers ?? 0,
-    sellers24h: a.transactions?.h24?.sellers ?? 0,
-    txCount: buys + sells, // 24h activity proxy (GT gives no lifetime count)
+    volumeUsd: pool.volume24hUsd,
+    volumeUsd24h: pool.volume24hUsd,
+    marketCapUsd: pool.marketCapUsd,
+    priceChangePercentage24h: pool.priceChange24h,
+    buys24h: pool.buys24h,
+    sells24h: pool.sells24h,
+    buyers24h: pool.buyers24h,
+    sellers24h: pool.sellers24h,
+    txCount: pool.buys24h + pool.sells24h, // 24h activity proxy (GT gives no lifetime count)
     // token0 = base, token1 = quote. DEX price = this pool's USD price;
-    // CG price = the token's GT-aggregated price_usd (set on the token side).
-    token0PriceDex: num(a.base_token_price_usd),
-    token1PriceDex: num(a.quote_token_price_usd),
+    // CG price = the token's aggregated price_usd (set on the token side).
+    token0PriceDex: pool.baseTokenPriceUsd,
+    token1PriceDex: pool.quoteTokenPriceUsd,
     lastChecked: now,
   };
 
@@ -331,67 +129,47 @@ async function upsertPair(
   return created.id;
 }
 
-// Ingest ONE GeckoTerminal pool into a (chain, dex): hydrate both tokens + the
-// pair, set the pair's CG prices, run the verdict inline. Returns the verdict tally
-// key, or null when the pool can't be ingested (missing addresses / token data).
-// Shared by the page ingest and the targeted first-party ingest (DRY).
+// Ingest ONE normalised pool into a (chain, dex): hydrate both tokens + the pair, set the pair's CG
+// prices, run the verdict inline. Returns the verdict tally key, or null when the pool can't be
+// ingested (a token whose data the source didn't supply). Source-agnostic — shared by every adapter's
+// page ingest and the GeckoTerminal token-pools / manual-add paths (DRY).
 async function ingestOnePool(
   chain: string,
   dex: string,
-  p: GtPool,
-  tokenMap: Map<string, GtTokenData>,
+  pool: NormalisedPool,
+  tokenMap: Map<string, NormalisedToken>,
   now: number,
-  facts?: SubgraphPoolFacts,
+  facts?: PoolFacts,
 ): Promise<string | null> {
-  const pairAddr = poolAddressFromGt(p.attributes.address);
-  const t0Addr = addressFromGtId(p.relationships.base_token?.data?.id);
-  const t1Addr = addressFromGtId(p.relationships.quote_token?.data?.id);
-  if (!pairAddr || !t0Addr || !t1Addr) {
-    return null;
-  }
-  const idLower = pairAddr.toLowerCase();
+  const idLower = pool.poolId.toLowerCase();
   // v4 hooks for this pool (null for non-v4 sources or an unresolved hooks fetch). Stored on the
   // pair so the verdict routes a hooked pool to NeedsReview (and re-verdicts stay correct).
   const hooks = facts?.hooks.get(idLower) ?? null;
   // Subgraph corroboration: only trust an ABSENCE when the page proved its id format aligns (≥1 of
-  // its pools was found) — otherwise leave it unknown (null, fail-open) so a source whose GT ids we
-  // can't line up is never demoted. true = the pricing subgraph indexes this pool; false = it's a
-  // GeckoTerminal-only phantom go-ooo can never price → the verdict keeps it out of the export.
+  // its pools was found) — otherwise leave it unknown (null, fail-open) so a source whose ids we
+  // can't line up is never demoted. true = the pricing surface indexes this pool; false = it's a
+  // phantom go-ooo can never price → the verdict keeps it out of the export.
   const subgraphPresent = facts?.idsAlign ? facts.present.has(idLower) : null;
-  const gt0 = tokenMap.get(t0Addr);
-  const gt1 = tokenMap.get(t1Addr);
-  if (!gt0 || !gt1) {
-    return null; // GT returned no token data — skip rather than write blanks
-  }
-  // Map a v4 native-currency token (address 0x0) to the chain's wrapped token, so it carries a
-  // CoinGecko-keyable identity and the pair aggregates with the wrapped-ETH pairs on other DEXs.
-  const r0 = resolveNativeToken(chain, t0Addr, gt0);
-  const r1 = resolveNativeToken(chain, t1Addr, gt1);
 
-  const poolCreatedAt = isoToUnix(p.attributes.pool_created_at);
-  const token0Id = await upsertToken(chain, r0.address, r0.gt, poolCreatedAt, now);
-  const token1Id = await upsertToken(chain, r1.address, r1.gt, poolCreatedAt, now);
-  const pairId = await upsertPair(chain, dex, pairAddr, `${r0.gt.symbol}-${r1.gt.symbol}`, token0Id, token1Id, p, now, hooks, subgraphPresent);
+  const t0 = tokenMap.get(pool.baseAddress);
+  const t1 = tokenMap.get(pool.quoteAddress);
+  if (!t0 || !t1) {
+    return null; // the source returned no token data — skip rather than write blanks
+  }
+
+  const token0Id = await upsertToken(chain, t0.address, t0, pool.poolCreatedAt, now);
+  const token1Id = await upsertToken(chain, t1.address, t1, pool.poolCreatedAt, now);
+  const pairId = await upsertPair(chain, dex, pool.poolId, `${t0.symbol}-${t1.symbol}`, token0Id, token1Id, pool, now, hooks, subgraphPresent);
 
   // The pair's CG (aggregated) prices come from the token-level price_usd.
   await prisma.pair.update({
     where: { id: pairId },
-    data: { token0PriceCg: r0.gt.priceUsd, token1PriceCg: r1.gt.priceUsd },
+    data: { token0PriceCg: t0.priceUsd, token1PriceCg: t1.priceUsd },
   });
 
   const out = await runVerdictForPair(pairId);
   return out.skippedManual ? "skippedManual" : out.result?.verdict ?? "error";
 }
-
-// Build the address → GtTokenData map from the embedded `include` tokens.
-const buildTokenMap = (tokens: GtToken[]): Map<string, GtTokenData> => {
-  const tokenMap = new Map<string, GtTokenData>();
-  for (const t of tokens) {
-    const addr = addressFromGtId(t.attributes.address) ?? web3Utils.toChecksumAddress(t.attributes.address);
-    tokenMap.set(addr, mapGtToken(t));
-  }
-  return tokenMap;
-};
 
 // Ensure the per-(chain, dex) Threshold row exists so the verdict applies this
 // source's tuned floors (liquidity + minTxCount) inline at ingest. Idempotent;
@@ -403,6 +181,8 @@ async function ensureThreshold(chain: string, dex: string): Promise<void> {
   }
 }
 
+// --- page ingest (adapter-driven) ----------------------------------------
+
 export type IngestPageResult = {
   hadData: boolean;
   poolCount: number;
@@ -410,39 +190,36 @@ export type IngestPageResult = {
   tallies: Record<string, number>;
 };
 
-// Ingest one GeckoTerminal pool page for a (chain, dex): hydrate every pool's
-// tokens + pair, then run the verdict inline. Returns whether the page had data
-// (so the caller can stop paginating) and the verdict tally.
+// Ingest one source page for a (chain, dex): the adapter discovers + normalises + corroborates the
+// page, then the verdict runs inline per pool. Returns whether the page had data (so the caller can
+// stop paginating) and the verdict tally. `gtNetwork`/`gtDex`/`poolFetcher` are GeckoTerminal
+// transport hints the EVM adapter reads (our internal chain/dex ids can differ from GeckoTerminal's
+// slugs, e.g. bsc_pancakeswap_v3 vs pancakeswap-v3-bsc); a non-EVM adapter ignores them.
 export async function ingestPoolPage(
   chain: string,
   dex: string,
   page: number,
   opts: { now?: number; poolFetcher?: PoolPageFetcher; gtNetwork?: string; gtDex?: string } = {},
 ): Promise<IngestPageResult> {
-  const now = opts.now ?? Math.floor(Date.now() / 1000);
-  const poolFetcher = opts.poolFetcher ?? defaultPoolPageFetcher;
-  // Our internal chain/dex ids (stored on the row) can differ from
-  // GeckoTerminal's slugs (e.g. bsc_pancakeswap_v3 vs pancakeswap-v3-bsc) —
-  // query GT by the slug, store by the internal id.
-  const gtNetwork = opts.gtNetwork ?? chain;
-  const gtDex = opts.gtDex ?? dex;
+  const now = opts.now ?? nowS();
 
   await ensureThreshold(chain, dex);
 
-  const { pools, tokens } = await poolFetcher(gtNetwork, gtDex, page);
-  if (pools.length === 0) {
+  const adapter = adapterForChain(chain);
+  const { poolCount, pools, tokens, facts } = await adapter.poolPage(chain, dex, page, {
+    now,
+    gtNetwork: opts.gtNetwork ?? chain,
+    gtDex: opts.gtDex ?? dex,
+    poolFetcher: opts.poolFetcher,
+  });
+  if (poolCount === 0) {
     return { hadData: false, poolCount: 0, pairs: 0, tallies: {} };
   }
-
-  // Tokens arrive embedded in the pools response (via GT `include`).
-  const tokenMap = buildTokenMap(tokens);
-  // One batched subgraph read for the page: pool presence (drops GT-phantom pools) + v4 hooks.
-  const facts = await subgraphPoolFacts(chain, dex, pools);
 
   const tallies: Record<string, number> = {};
   let pairs = 0;
   for (const p of pools) {
-    const key = await ingestOnePool(chain, dex, p, tokenMap, now, facts);
+    const key = await ingestOnePool(chain, dex, p, tokens, now, facts);
     if (key === null) {
       continue;
     }
@@ -450,21 +227,10 @@ export async function ingestPoolPage(
     pairs += 1;
   }
 
-  return { hadData: true, poolCount: pools.length, pairs, tallies };
+  return { hadData: true, poolCount, pairs, tallies };
 }
 
 // --- token-pools ingest (all of a token's pools across DEXs) --------------
-
-// Fetch EVERY pool for one token (across DEXs), tokens embedded via `include`.
-export type TokenPoolsFetcher = (gtNetwork: string, address: string) => Promise<PoolPage>;
-
-const defaultTokenPoolsFetcher: TokenPoolsFetcher = async (gtNetwork, address) => {
-  const url = `${GT_BASE}/networks/${gtNetwork}/tokens/${address}/pools?include=base_token,quote_token`;
-  const json = await gtFetch(url, `token-pools ${gtNetwork}/${address}`);
-  const pools = (json?.data as GtPool[]) ?? [];
-  const tokens = ((json?.included as ({ type?: string } & GtToken)[]) ?? []).filter((r) => r.type === "token");
-  return { pools, tokens };
-};
 
 export type TokenPoolsIngestResult = { ingested: number; skipped: number; tallies: Record<string, number> };
 
@@ -472,13 +238,15 @@ export type TokenPoolsIngestResult = { ingested: number; skipped: number; tallie
 // inline). The page ingest only takes the top-ranked pools per DEX, so this is how
 // a specific token's pools land in the DB. Used by the first-party ingest pass (our
 // own tokens), by manual token-add and by the cross-chain spider. A pool on a DEX
-// with no SupportedSource is skipped (no subgraph → not exportable to go-ooo).
+// with no SupportedSource is skipped (no subgraph → not exportable to go-ooo). This
+// is a GeckoTerminal feature (it discovers a token's pools across DEXs), so it drives
+// the GeckoTerminal adapter directly.
 export async function ingestTokenPools(
   chain: string,
   address: string,
   opts: { now?: number; fetcher?: TokenPoolsFetcher } = {},
 ): Promise<TokenPoolsIngestResult> {
-  const now = opts.now ?? Math.floor(Date.now() / 1000);
+  const now = opts.now ?? nowS();
   const fetcher = opts.fetcher ?? defaultTokenPoolsFetcher;
 
   // Map each supported source's GT dex slug → our internal dex id (and the GT
@@ -494,50 +262,31 @@ export async function ingestTokenPools(
     await ensureThreshold(chain, s.dex);
   }
 
-  const { pools, tokens } = await fetcher(gtNetwork, address);
-  const tokenMap = buildTokenMap(tokens);
+  const { pools: gtPools, tokens: gtTokens } = await fetcher(gtNetwork, address);
+  const { pools, tokens } = normaliseGtPage(chain, gtPools, gtTokens);
 
   const tallies: Record<string, number> = {};
   let ingested = 0;
-  let skipped = 0;
-  for (const p of pools) {
-    const gtDexSlug = p.relationships.dex?.data?.id;
-    const dex = gtDexSlug ? dexByGtSlug.get(gtDexSlug) : undefined;
+  for (const pool of pools) {
+    const dex = pool.dexId ? dexByGtSlug.get(pool.dexId) : undefined;
     if (!dex) {
-      skipped += 1; // pool on a DEX we don't support — can't export it
-      continue;
+      continue; // pool on a DEX we don't support — can't export it
     }
     // Pools here can span several DEXs, so corroborate per pool (presence + univ4 hooks).
-    const facts = await subgraphPoolFacts(chain, dex, [p]);
-    const key = await ingestOnePool(chain, dex, p, tokenMap, now, facts);
+    const facts = await gtAdapter.corroborate(chain, dex, [pool]);
+    const key = await ingestOnePool(chain, dex, pool, tokens, now, facts);
     if (key === null) {
-      skipped += 1;
       continue;
     }
     tallies[key] = (tallies[key] ?? 0) + 1;
     ingested += 1;
   }
-  return { ingested, skipped, tallies };
+  // Every fetched pool is either ingested or skipped (unsupported DEX, missing token data, or an
+  // unresolvable id dropped in normalisation), so skipped is the remainder of the raw page.
+  return { ingested, skipped: gtPools.length - ingested, tallies };
 }
 
 // --- manual add by pool address ------------------------------------------
-
-// Fetch ONE pool by its contract address (tokens embedded via `include`). GT's
-// single-pool endpoint returns `data` as an object, not an array — so we read it
-// directly rather than through the array-shaped gtFetch helper.
-export type PoolByAddressFetcher = (gtNetwork: string, address: string) => Promise<{ pool: GtPool | null; tokens: GtToken[] }>;
-
-const defaultPoolByAddressFetcher: PoolByAddressFetcher = async (gtNetwork, address) => {
-  const url = `${GT_BASE}/networks/${gtNetwork}/pools/${address}?include=base_token,quote_token`;
-  const res = await cgKeyedFetch(url, `pool ${gtNetwork}/${address}`);
-  if (!res) {
-    return { pool: null, tokens: [] };
-  }
-  const json = (await res.json()) as { data?: GtPool | null; included?: ({ type?: string } & GtToken)[] } | null;
-  const pool = (json?.data as GtPool) ?? null;
-  const tokens = (json?.included ?? []).filter((r) => r.type === "token");
-  return { pool, tokens };
-};
 
 // Flat result (strictNullChecks is off in this project, so a discriminated union
 // wouldn't narrow on `ok` — callers read the optional fields directly).
@@ -555,14 +304,14 @@ export type AddPairByAddressResult = {
 // hydrate both tokens + the pair, run the verdict inline (the same path as page
 // ingest). The (chain, dex) must be a supported source. Returns ok:false with a
 // human-readable reason when GT doesn't know the pool, it's on a different DEX, or
-// the data is incomplete.
+// the data is incomplete. A GeckoTerminal feature (lookup by EVM pool address).
 export async function ingestPairByAddress(
   chain: string,
   dex: string,
   address: string,
   opts: { now?: number; fetcher?: PoolByAddressFetcher } = {},
 ): Promise<AddPairByAddressResult> {
-  const now = opts.now ?? Math.floor(Date.now() / 1000);
+  const now = opts.now ?? nowS();
   const fetcher = opts.fetcher ?? defaultPoolByAddressFetcher;
 
   const source = await getSource(chain, dex);
@@ -579,19 +328,25 @@ export async function ingestPairByAddress(
 
   const gtNetwork = gtNetworkFor(source);
   const gtDex = gtDexFor(source);
-  const { pool, tokens } = await fetcher(gtNetwork, poolAddr);
+  const { pool, tokens: gtTokens } = await fetcher(gtNetwork, poolAddr);
   if (!pool) {
     return { ok: false, reason: `GeckoTerminal has no pool ${poolAddr} on ${gtNetwork}` };
   }
 
+  const { pools, tokens } = normaliseGtPage(chain, [pool], gtTokens);
+  const norm = pools[0];
+
   // Guard: the pool must actually be on the selected DEX (GT tags each pool's dex).
-  const gtPoolDex = pool.relationships.dex?.data?.id;
-  if (gtPoolDex && gtPoolDex !== gtDex) {
-    return { ok: false, reason: `pool is on '${gtPoolDex}', not '${gtDex}' — pick the matching DEX` };
+  if (norm?.dexId && norm.dexId !== gtDex) {
+    return { ok: false, reason: `pool is on '${norm.dexId}', not '${gtDex}' — pick the matching DEX` };
   }
 
-  const facts = await subgraphPoolFacts(chain, dex, [pool]);
-  const verdict = await ingestOnePool(chain, dex, pool, buildTokenMap(tokens), now, facts);
+  if (!norm) {
+    return { ok: false, reason: "GeckoTerminal returned incomplete pool/token data" };
+  }
+
+  const facts = await gtAdapter.corroborate(chain, dex, [norm]);
+  const verdict = await ingestOnePool(chain, dex, norm, tokens, now, facts);
   if (verdict === null) {
     return { ok: false, reason: "GeckoTerminal returned incomplete pool/token data" };
   }
