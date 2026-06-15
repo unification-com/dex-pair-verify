@@ -13,6 +13,8 @@ import { sqsAdapter } from "../../lib/sqsAdapter";
 const OSMO = "uosmo";
 const ATOM = "ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2";
 const USDC = "ibc/498A0751C798A0D9A389AA3691123DADA57DAA4FE165D5C75894505B876BA6E4";
+const AXLUSDC = "ibc/D189335C6E4A68B513C10AB227BF1C1D38C746766278BA3EEB4FB14124F1D858"; // a second "USDC" bridge
+const DOGE = "ibc/DOGE0000000000000000000000000000000000000000000000000000000000";
 const JUNK = "ibc/UNLISTED0000000000000000000000000000000000000000000000000000";
 
 const REGISTRY = {
@@ -20,6 +22,8 @@ const REGISTRY = {
     { base: OSMO, symbol: "OSMO", name: "Osmosis", display: "osmo", coingecko_id: "osmosis", denom_units: [{ denom: OSMO, exponent: 0 }, { denom: "osmo", exponent: 6 }] },
     { base: ATOM, symbol: "ATOM", name: "Cosmos Hub Atom", display: "atom", coingecko_id: "cosmos", denom_units: [{ denom: ATOM, exponent: 0 }, { denom: "atom", exponent: 6 }] },
     { base: USDC, symbol: "USDC", name: "USDC", display: "usdc", coingecko_id: "usd-coin", denom_units: [{ denom: USDC, exponent: 0 }, { denom: "usdc", exponent: 6 }] },
+    { base: AXLUSDC, symbol: "USDC", name: "Axelar USDC", display: "usdc", coingecko_id: "axlusdc", denom_units: [{ denom: AXLUSDC, exponent: 0 }, { denom: "usdc", exponent: 6 }] },
+    { base: DOGE, symbol: "DOGE", name: "Dogecoin", display: "doge", coingecko_id: "dogecoin", denom_units: [{ denom: DOGE, exponent: 0 }, { denom: "doge", exponent: 8 }] },
   ],
 };
 
@@ -92,6 +96,20 @@ describe("sqsAdapter.poolPage", () => {
     const page = await sqsAdapter.poolPage("osmosis", "osmosis_sqs", 1, req());
     expect(page.tokens.get(OSMO)).toMatchObject({ address: OSMO, symbol: "OSMO", decimals: 6, coingeckoCoinId: "osmosis", priceUsd: 0.047 });
     expect(page.tokens.get(USDC)).toMatchObject({ symbol: "USDC", coingeckoCoinId: "usd-coin" });
+  });
+
+  it("skips same-symbol bridge pools and pools SQS cannot price", async () => {
+    await seedRegistry();
+    const junk: SqsPool[] = [
+      { type: 1, liquidity_cap: "900000", balances: [bal(USDC), bal(AXLUSDC)], chain_model: { pool_id: 10 } }, // USDC/USDC — same symbol
+      { type: 1, liquidity_cap: "400000", balances: [bal(DOGE), bal(USDC)], chain_model: { pool_id: 11 } }, // DOGE has no SQS price
+    ];
+    const page = await sqsAdapter.poolPage("osmosis", "osmosis_sqs", 1, req({
+      poolsFetcher: async () => junk,
+      pricesFetcher: async (_url, denoms) => new Map(denoms.filter((d) => d === USDC || d === AXLUSDC).map((d) => [d, 1])),
+    }));
+    expect(page.poolCount).toBe(2); // both are candidates...
+    expect(page.pools).toHaveLength(0); // ...but both are filtered out
   });
 
   it("returns an empty page beyond page 1 (SQS returns the whole set at once)", async () => {

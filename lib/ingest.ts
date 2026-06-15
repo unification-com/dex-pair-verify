@@ -216,6 +216,14 @@ export async function ingestPoolPage(
 
   await ensureThreshold(chain, dex);
 
+  // A Cosmos source discovers pools from SQS bounded by its curation floor (the unfiltered pool set is
+  // too large to fetch reliably); read the floor so discovery fetches exactly the eligible set.
+  let minLiquidityCap = 0;
+  if (isCosmosRegistryChain(chain)) {
+    const threshold = await prisma.threshold.findFirst({ where: { chain, dex }, select: { minLiquidityUsd: true } });
+    minLiquidityCap = threshold?.minLiquidityUsd ?? 0;
+  }
+
   const adapter = adapterForChain(chain);
   const { poolCount, pools, tokens, facts } = await adapter.poolPage(chain, dex, page, {
     now,
@@ -225,6 +233,7 @@ export async function ingestPoolPage(
     sqsUrl: opts.sqsUrl,
     poolsFetcher: opts.poolsFetcher,
     pricesFetcher: opts.pricesFetcher,
+    minLiquidityCap,
   });
   if (poolCount === 0) {
     return { hadData: false, poolCount: 0, pairs: 0, tallies: {} };

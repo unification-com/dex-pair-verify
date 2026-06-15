@@ -87,6 +87,8 @@ export type PoolPageRequest = {
   sqsUrl?: string;
   poolsFetcher?: unknown;
   pricesFetcher?: unknown;
+  // The source's curation floor (USD) — bounds the SQS pool-discovery fetch to the eligible set.
+  minLiquidityCap?: number;
 };
 
 // A source behind the ingest pipeline. `kind` selects the identity path downstream (EVM:

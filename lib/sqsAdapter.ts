@@ -35,6 +35,10 @@ const num = (s: string | undefined | null): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+// The on-chain pool id, reading whichever field the pool type uses (`id` for GAMM/stableswap/CL,
+// `pool_id` for CosmWasm). undefined when neither is present (the pool is then skipped).
+const poolIdOf = (p: SqsPool): number | undefined => p.chain_model?.id ?? p.chain_model?.pool_id;
+
 const toToken = (a: CosmosAsset, priceUsd: number): NormalisedToken => ({
   address: a.denom,
   name: a.name,
@@ -74,13 +78,13 @@ export const sqsAdapter: IngestAdapter = {
     const poolsFetcher = (req.poolsFetcher as SqsPoolsFetcher | undefined) ?? fetchSqsPools;
     const pricesFetcher = (req.pricesFetcher as SqsPricesFetcher | undefined) ?? fetchSqsPrices;
 
-    const rawPools = await poolsFetcher(sqsUrl);
+    const rawPools = await poolsFetcher(sqsUrl, req.minLiquidityCap ?? 0);
 
     // Discovery filter: exactly two assets, both chain-registry-identified, and a real pool id.
     const candidates = rawPools.filter(
       (p) =>
         p.balances?.length === 2 &&
-        !!p.chain_model?.pool_id &&
+        !!poolIdOf(p) &&
         assets.has(p.balances[0].denom) &&
         assets.has(p.balances[1].denom),
     );
@@ -115,10 +119,17 @@ export const sqsAdapter: IngestAdapter = {
       const basePrice = prices.get(baseDenom) ?? 0;
       const quotePrice = prices.get(quoteSide) ?? 0;
 
+      // Skip a same-symbol pool (two bridge variants of one asset, e.g. USDC/USDC) — degenerate as a
+      // price feed — and an unpriceable pool (SQS returns no USD price for a side) the oracle could
+      // never price. Both would otherwise auto-verify as junk.
+      if (baseAsset.symbol === quoteAsset.symbol || basePrice <= 0 || quotePrice <= 0) {
+        continue;
+      }
+
       tokens.set(baseDenom, toToken(baseAsset, basePrice));
       tokens.set(quoteSide, toToken(quoteAsset, quotePrice));
       pools.push({
-        poolId: String(p.chain_model?.pool_id),
+        poolId: String(poolIdOf(p)),
         baseAddress: baseDenom,
         quoteAddress: quoteSide,
         dexId: dex,
