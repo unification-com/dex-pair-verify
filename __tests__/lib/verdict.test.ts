@@ -248,6 +248,7 @@ const makeCtx = (over: Partial<VerdictContext> = {}): VerdictContext => ({
   pairFactoryAddress: null,
   canonicalFactoryAddress: UNI_V3_FACTORY,
   firstParty: false,
+  reserveTrusted: false,
   ...over,
 });
 
@@ -306,6 +307,15 @@ describe("evaluatePair", () => {
     expect(r.verdict).toBe(TokenPairStatus.AutoVerified);
     expect(r.evidence.phantomLiquidity).toBe(false);
     expect(r.evidence.firstParty).toBe(true);
+  });
+
+  it("reserveTrusted: a deep but quiet (0-volume) pool is NOT phantom when the reserve is on-chain-authoritative (Cosmos SQS)", () => {
+    // SQS reports ~0 volume on deep pools, so without reserveTrusted every Osmosis pair is phantom →
+    // review; with it (its reserveUsd is the on-chain liquidity_cap) the deep pair auto-verifies.
+    expect(evaluatePair(makePair({ volumeUsd: 0 }), makeCtx()).reasonCode).toBe(VERDICT_REASON.phantomLiquidity);
+    const r = evaluatePair(makePair({ volumeUsd: 0 }), makeCtx({ reserveTrusted: true }));
+    expect(r.verdict).toBe(TokenPairStatus.AutoVerified);
+    expect(r.evidence.phantomLiquidity).toBe(false);
   });
 
   it("first-party: never hard-rejected below the hard liquidity floor", () => {

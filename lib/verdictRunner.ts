@@ -7,6 +7,7 @@
 // engine, three call sites).
 
 import { canonicalKey, fetchCanonicalContract, getCachedCanonicalAddress } from "./canonical";
+import { isCosmosRegistryChain } from "./cosmosRegistry";
 import { isFirstParty } from "./firstParty";
 import prisma from "./prisma";
 import { computeReviewTier } from "./reviewTier";
@@ -170,6 +171,10 @@ export async function buildVerdictContext(
     canonicalFactoryAddress: await getCanonicalFactoryAddress(pair.chain, pair.dex),
     firstParty:
       isFirstParty(pair.chain, pair.token0.contractAddress) || isFirstParty(pair.chain, pair.token1.contractAddress),
+    // A Cosmos source's reserveUsd is the on-chain SQS liquidity_cap (authoritative), not a
+    // token-price-derived estimate, and its volume feed is unreliable — so the phantom-liquidity guard
+    // must not apply (it would misfire on every deep pool). See VerdictContext.reserveTrusted.
+    reserveTrusted: isCosmosRegistryChain(pair.chain),
   };
 
   const input: VerdictPairInput = {

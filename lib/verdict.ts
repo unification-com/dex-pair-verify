@@ -370,6 +370,13 @@ export type VerdictContext = {
   // phantom guard) — we always want a feed for our token; the deep ones
   // auto-verify, the thin ones route to review for manual inclusion.
   firstParty: boolean;
+  // The reserveUsd is an authoritative on-chain figure (e.g. an Osmosis SQS liquidity_cap), NOT a
+  // token-price-derived estimate a garbage price could inflate — so the phantom-liquidity guard (deep
+  // reserve + ~zero turnover ⇒ fake) does not apply. Cosmos sources set this (their volume feed is
+  // also unreliable, so the guard would misfire on every deep pool); EVM/GeckoTerminal sources leave
+  // it false (their reserveUsd IS price-derived, so the guard stays active). Narrower than firstParty,
+  // which ALSO exempts the hard-floor + auto-reject branches.
+  reserveTrusted: boolean;
 };
 
 // Stable machine-readable code for each adjudication outcome — one per branch of
@@ -438,7 +445,12 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   // identified one is routed to review at step 5b below.
   // First-party (OUR) tokens: trust the reserve absolutely (a quiet 24h on FUND
   // doesn't make its real pool a phantom), so the phantom guard is skipped.
-  const phantomLiquidity = !ctx.firstParty && isPhantomLiquidity(pair.reserveUsd, pair.volumeUsd, config.minLiquidityUsd);
+  // reserveTrusted does the same for a source whose reserveUsd is an authoritative on-chain figure
+  // (Osmosis SQS liquidity_cap) rather than a token-price-derived estimate — there the guard's premise
+  // (a garbage price inflated the reserve) cannot hold, and the source's volume feed is unreliable
+  // (~0 on deep pools), so the guard would misfire on every pair.
+  const phantomLiquidity =
+    !ctx.firstParty && !ctx.reserveTrusted && isPhantomLiquidity(pair.reserveUsd, pair.volumeUsd, config.minLiquidityUsd);
   const effectiveReserveUsd = phantomLiquidity ? 0 : pair.reserveUsd;
 
   const f = {
