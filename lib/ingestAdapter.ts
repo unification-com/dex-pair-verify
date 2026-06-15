@@ -82,6 +82,11 @@ export type PoolPageRequest = {
   gtNetwork?: string;
   gtDex?: string;
   poolFetcher?: unknown;
+  // Cosmos (SQS) transport hints — read only by the Cosmos adapter, ignored by the EVM one. Typed
+  // loosely (the fetchers are `unknown`) to keep this seam free of any SQS shape; the adapter casts.
+  sqsUrl?: string;
+  poolsFetcher?: unknown;
+  pricesFetcher?: unknown;
 };
 
 // A source behind the ingest pipeline. `kind` selects the identity path downstream (EVM:
