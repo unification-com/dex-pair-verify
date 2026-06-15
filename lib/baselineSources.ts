@@ -67,6 +67,8 @@ const ADOPTED_GT_KEYS = new Set([
   "optimism/uniswap-v4-optimism",
   "bsc/pancakeswap-infinity-clmm",
   "base/pancakeswap-infinity-clmm-base",
+  "bsc/uniswap-v4-bsc",
+  "base/pancakeswap-v3-base",
 ]);
 
 // Conservative cold-start floors for a newly-adopted source (no data yet) —

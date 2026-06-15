@@ -68,6 +68,13 @@ export const SOURCE_SEEDS: SourceSeed[] = [
   { chain: "bsc", dex: "pancakeswap_infinity_cl", gtNetwork: "bsc", gtDex: "pancakeswap-infinity-clmm", schemaFamily: "univ4", subgraphId: "DBhFM9MxjBr7ekNez6iCWQvNkVpwsb46PxWbr98kxAC7", factoryAddress: "0xa0FfB9c1CE1Fe56963B0321B32E7A0302114058b", priceable: true, note: "PancakeSwap Infinity CL on BSC; native BNB→WBNB (cg wbnb); no-hook pools only" },
   { chain: "base", dex: "pancakeswap_infinity_cl", gtNetwork: "base", gtDex: "pancakeswap-infinity-clmm-base", schemaFamily: "univ4", subgraphId: "HCNnRkh8Uf4yrEZXqaHUZEo3RPAG7xx1REoudVWwZRS", factoryAddress: "0xa0FfB9c1CE1Fe56963B0321B32E7A0302114058b", priceable: true, note: "PancakeSwap Infinity CL on Base; native ETH→WETH (l2-standard-bridged-weth-base); no-hook pools only" },
 
+  // Existing-family seed expansion (2026-06-15, #114) — GT-discovery-driven, each verified live before
+  // inclusion. bsc Uniswap v4: GeckoTerminal now indexes it (~$437M/24h); prices on the existing univ4
+  // family + the bsc→WBNB native mapping; the factory slot holds the singleton PoolManager. base
+  // PancakeSwap v3: standard univ3 (PancakeSwap's "Exchange V3 Base" subgraph), same factory as the bsc one.
+  { chain: "bsc", dex: "uniswap_v4", gtNetwork: "bsc", gtDex: "uniswap-v4-bsc", schemaFamily: "univ4", subgraphId: "7JTFXJdejseGj6cnTo3V3SNu2AkWyXpGieZm5NL2eYAA", factoryAddress: "0x28e2eA090877bF75740558f6BFB36a5ffeE9e9df", priceable: true, note: "Uniswap v4 on BSC; native BNB→WBNB (cg wbnb); no-hook pools only" },
+  { chain: "base", dex: "pancakeswap_v3", gtNetwork: "base", gtDex: "pancakeswap-v3-base", schemaFamily: "univ3", subgraphId: "77C2B1pHSDu1zAvvaiExrD5MYXqZJ5zQvxpP7TD58Lwc", factoryAddress: "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865", priceable: true, note: "PancakeSwap v3 on Base (PancakeSwap 'Exchange V3 Base' subgraph)" },
+
   // ── New 4.D targets (researched; validated live via `yarn validate-seeds`).
   //    GT slugs map to discovered candidates for /admin/sources pre-fill. IDs the
   //    research flagged UNKNOWN (Sushi-V2 on polygon/bsc/gnosis/avax, QuickSwap V2,
