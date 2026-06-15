@@ -25,9 +25,10 @@ export type BaselineSource = {
   dex: string;
   gtNetwork?: string; // GeckoTerminal slugs — only when they differ from chain/dex
   gtDex?: string;
-  subgraphUrlTemplate: string; // {API_KEY} placeholder
+  subgraphUrlTemplate: string; // {API_KEY} placeholder (or the SQS base URL for a rest-sqs source)
   subgraphProvider: SubgraphProvider;
   schemaFamily: SchemaFamily;
+  sourceType?: string; // "subgraph" (default) | "rest-sqs" (#128 Cosmos) — the transport
   factoryAddress: string; // "" = not curated (factory fence skips)
   onCoinGeckoTerminal: boolean; // false = skip GT ingest (self-hosted only)
   lastPage: number; // GT ingest pagination cap
@@ -91,4 +92,25 @@ const adoptedSources: BaselineSource[] = SOURCE_SEEDS.filter((s) =>
   defaultThresholds: ADOPTED_DEFAULT_THRESHOLDS,
 }));
 
-export const BASELINE_SOURCES: BaselineSource[] = [...ORIGINAL_SOURCES, ...adoptedSources];
+// Cosmos sources (#128) — non-EVM, non-GeckoTerminal. Discovered + valued off the Osmosis SQS REST
+// API (subgraphUrlTemplate holds the SQS base URL, not a subgraph), with token identity from the
+// Cosmos chain-registry (lib/cosmosRegistry.ts). onCoinGeckoTerminal is false (GT does not index
+// Cosmos) but the source IS ingested — via the SQS adapter, selected by chain — see isIngestableSource.
+// minTxCount is 0 because SQS exposes no per-pool buy/sell counts; the liquidity floor + chain-registry
+// identity do the curating. lastPage is 1 (SQS returns the whole pool set in one response).
+const COSMOS_SOURCES: BaselineSource[] = [
+  {
+    chain: "osmosis",
+    dex: "osmosis_sqs",
+    subgraphUrlTemplate: "https://sqs.osmosis.zone",
+    subgraphProvider: "self-hosted",
+    schemaFamily: "custom",
+    sourceType: "rest-sqs",
+    factoryAddress: "",
+    onCoinGeckoTerminal: false,
+    lastPage: 1,
+    defaultThresholds: { minLiquidityUsd: 25000, hardMinLiquidityUsd: 5000, minTxCount: 0 },
+  },
+];
+
+export const BASELINE_SOURCES: BaselineSource[] = [...ORIGINAL_SOURCES, ...adoptedSources, ...COSMOS_SOURCES];

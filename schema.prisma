@@ -386,6 +386,10 @@ model SupportedSource {
   // Drives the field-map + go-ooo template family (Option β): "univ2" | "univ3"
   // | "custom" (+ future families). Free-text — see CandidateDexNetwork.
   subgraphSchemaFamily String
+  // The source's transport (#128): "subgraph" (the EVM/GraphQL default) or "rest-sqs"
+  // (a Cosmos Osmosis SQS source — subgraphUrlTemplate then holds the SQS base URL).
+  // Emitted in the export manifest so go-ooo builds the right kind of price source.
+  sourceType           String  @default("subgraph")
   // "graph-decentralized" | "graph-studio" | "graph-hosted" | "self-hosted"
   // (lib/subgraphVerify.ts SubgraphProvider). Picks the API-key env var at
   // substitution time; emitted in the manifest for go-ooo.

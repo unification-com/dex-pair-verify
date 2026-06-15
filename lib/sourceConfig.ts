@@ -10,6 +10,7 @@
 // back to the schema defaults. thresholdSeedData stays synchronous (code-only).
 
 import { BASELINE_SOURCES } from "./baselineSources";
+import { isCosmosRegistryChain } from "./cosmosRegistry";
 import prisma from "./prisma";
 import { applyUrlTemplate, keyEnvVarFor, SubgraphProvider } from "./subgraphVerify";
 
@@ -34,6 +35,9 @@ export type SourceEntry = {
   subgraphSchemaFamily?: string;
   subgraphProvider?: string;
   apiKeyEnvVar?: string;
+  // Transport (#128): "subgraph" (default) or "rest-sqs" (Cosmos SQS — subgraphUrlTemplate is the
+  // SQS base URL).
+  sourceType?: string;
 };
 
 // The GeckoTerminal network/dex slug for a source (defaults to our chain/dex id).
@@ -52,6 +56,7 @@ const toEntry = (r: {
   subgraphSchemaFamily: string;
   subgraphProvider: string;
   apiKeyEnvVar: string | null;
+  sourceType: string;
 }): SourceEntry => ({
   chain: r.chain,
   dex: r.dex,
@@ -64,6 +69,7 @@ const toEntry = (r: {
   subgraphSchemaFamily: r.subgraphSchemaFamily,
   subgraphProvider: r.subgraphProvider,
   apiKeyEnvVar: r.apiKeyEnvVar ?? undefined,
+  sourceType: r.sourceType,
 });
 
 // Process-memoised load of the SupportedSource registry. The registry is small and
@@ -78,7 +84,7 @@ export function getSources(force = false): Promise<SourceEntry[]> {
         orderBy: [{ chain: "asc" }, { dex: "asc" }],
         select: {
           chain: true, dex: true, factoryAddress: true, onCoinGeckoTerminal: true, lastPage: true, gtNetwork: true, gtDex: true,
-          subgraphUrlTemplate: true, subgraphSchemaFamily: true, subgraphProvider: true, apiKeyEnvVar: true,
+          subgraphUrlTemplate: true, subgraphSchemaFamily: true, subgraphProvider: true, apiKeyEnvVar: true, sourceType: true,
         },
       })
       .then((rows) => rows.map(toEntry));
@@ -94,6 +100,12 @@ export function invalidateSourceCache(): void {
 
 export const getSource = async (chain: string, dex: string): Promise<SourceEntry | undefined> =>
   (await getSources()).find((s) => s.chain === chain && s.dex === dex);
+
+// Whether a source has an ingest path. An EVM source ingests only when GeckoTerminal indexes it; a
+// Cosmos source ingests via the SQS adapter regardless (GeckoTerminal does not index Cosmos). The
+// single gate shared by the pipeline ingest loop and the admin ingest handler (#128).
+export const isIngestableSource = (s: SourceEntry): boolean =>
+  s.onCoinGeckoTerminal !== false || isCosmosRegistryChain(s.chain);
 
 // Resolve a source's literal subgraph URL: substitute the operator's provider API key (from env)
 // into the stored {API_KEY} template. The key is never persisted/returned — only used at call

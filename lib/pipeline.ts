@@ -3,6 +3,7 @@
 // full-pipeline orchestrator (import/pipeline.ts) — one loop per pass (DRY).
 
 import { countTokensToCanonicalCheck, runCanonicalCheckForToken, tokensToCanonicalCheck } from "./canonicalCheck";
+import { isCosmosRegistryChain } from "./cosmosRegistry";
 import { countPairsToFactoryCheck, pairsToFactoryCheck, runFactoryCheckForPair } from "./factoryCheck";
 import { ingestableFirstParty } from "./firstParty";
 import { countTokensToIdentityCheck, runIdentityCheckForToken, tokensToIdentityCheck } from "./identityCheck";
@@ -17,7 +18,7 @@ import {
   tokensToScamCheck,
 } from "./scamCheck";
 import { runSecurityScanForToken } from "./securitySignals";
-import { getSources, gtDexFor, gtNetworkFor } from "./sourceConfig";
+import { getSources, gtDexFor, gtNetworkFor, isIngestableSource } from "./sourceConfig";
 import { runVerdictForPair } from "./verdictRunner";
 
 export type Logger = (msg: string) => void;
@@ -82,12 +83,17 @@ export async function ingestAll(opts: { log?: Logger } = {}): Promise<IngestSumm
 
   const sources = await getSources();
   for (const s of sources) {
-    if (s.onCoinGeckoTerminal === false) {
+    if (!isIngestableSource(s)) {
       continue;
     }
     const lastPage = s.last_page ?? 10;
+    // A Cosmos source ingests via SQS (subgraphUrlTemplate holds the SQS base URL); an EVM source via
+    // GeckoTerminal (its network/dex slugs). The adapter is selected by chain inside ingestPoolPage.
+    const ingestOpts = isCosmosRegistryChain(s.chain)
+      ? { sqsUrl: s.subgraphUrlTemplate }
+      : { gtNetwork: gtNetworkFor(s), gtDex: gtDexFor(s) };
     for (let page = 1; page <= lastPage; page += 1) {
-      const res = await ingestPoolPage(s.chain, s.dex, page, { gtNetwork: gtNetworkFor(s), gtDex: gtDexFor(s) });
+      const res = await ingestPoolPage(s.chain, s.dex, page, ingestOpts);
       for (const [k, v] of Object.entries(res.tallies)) {
         tallies[k] = (tallies[k] ?? 0) + v;
       }

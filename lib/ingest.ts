@@ -10,19 +10,21 @@
 // GeckoTerminal adapter directly; the page ingest is fully adapter-driven and is the path a Cosmos
 // source implements.
 
+import { isCosmosRegistryChain } from "./cosmosRegistry";
 import { gtAdapter, normaliseGtPage, defaultPoolByAddressFetcher, defaultTokenPoolsFetcher, PoolByAddressFetcher, PoolPageFetcher, TokenPoolsFetcher } from "./gtAdapter";
 import { IngestAdapter, NormalisedPool, NormalisedToken, PoolFacts } from "./ingestAdapter";
 import prisma from "./prisma";
 import { getSource, getSources, gtDexFor, gtNetworkFor, thresholdSeedData } from "./sourceConfig";
+import { sqsAdapter } from "./sqsAdapter";
 import { poolAddressFromGt } from "./univ4";
 import { runVerdictForPair } from "./verdictRunner";
 
 const nowS = (): number => Math.floor(Date.now() / 1000);
 
-// Pick the ingest adapter for a chain. Today every chain is EVM/GeckoTerminal; the Cosmos adapter
-// (#128 Phase 2c) is selected here by chain kind once it lands — the only place the orchestrator
-// needs to know more than one source type exists.
-const adapterForChain = (_chain: string): IngestAdapter => gtAdapter;
+// Pick the ingest adapter for a chain: the Osmosis SQS adapter for a Cosmos chain, the
+// GeckoTerminal/EVM adapter otherwise. The only place the orchestrator needs to know more than one
+// source transport exists (#128).
+const adapterForChain = (chain: string): IngestAdapter => (isCosmosRegistryChain(chain) ? sqsAdapter : gtAdapter);
 
 // --- source-neutral persistence ------------------------------------------
 
@@ -199,7 +201,16 @@ export async function ingestPoolPage(
   chain: string,
   dex: string,
   page: number,
-  opts: { now?: number; poolFetcher?: PoolPageFetcher; gtNetwork?: string; gtDex?: string } = {},
+  opts: {
+    now?: number;
+    poolFetcher?: PoolPageFetcher;
+    gtNetwork?: string;
+    gtDex?: string;
+    // Cosmos (SQS) transport hints, read only by the SQS adapter.
+    sqsUrl?: string;
+    poolsFetcher?: unknown;
+    pricesFetcher?: unknown;
+  } = {},
 ): Promise<IngestPageResult> {
   const now = opts.now ?? nowS();
 
@@ -211,6 +222,9 @@ export async function ingestPoolPage(
     gtNetwork: opts.gtNetwork ?? chain,
     gtDex: opts.gtDex ?? dex,
     poolFetcher: opts.poolFetcher,
+    sqsUrl: opts.sqsUrl,
+    poolsFetcher: opts.poolsFetcher,
+    pricesFetcher: opts.pricesFetcher,
   });
   if (poolCount === 0) {
     return { hadData: false, poolCount: 0, pairs: 0, tallies: {} };

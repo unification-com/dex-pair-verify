@@ -1,12 +1,13 @@
 import {requireAdminApi} from "../../../lib/apiAuth";
 import {ingestPoolPage} from "../../../lib/ingest";
-import {getSources} from "../../../lib/sourceConfig";
+import {getSources, isIngestableSource} from "../../../lib/sourceConfig";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
-// GeckoTerminal ingest, one (source, page) per call. The client loops, passing
-// back nextSourceIndex/nextPage until `done`. Non-GeckoTerminal sources (e.g.
-// qomswap) are skipped. Verdicts are assigned inline by ingestPoolPage.
+// Source ingest, one (source, page) per call. The client loops, passing back
+// nextSourceIndex/nextPage until `done`. Sources with no ingest path (an EVM DEX
+// GeckoTerminal doesn't index, e.g. qomswap) are skipped; a Cosmos source ingests
+// via SQS. Verdicts are assigned inline by ingestPoolPage.
 export default async function handler(
     req: NextApiRequest,
     res: NextApiResponse
@@ -23,8 +24,8 @@ export default async function handler(
         return res.status(200).json({ success: true, data: { done: true } })
     }
 
-    // Skip sources GeckoTerminal doesn't index (advance the cursor).
-    if (!source.onCoinGeckoTerminal) {
+    // Skip a source with no ingest path (advance the cursor).
+    if (!isIngestableSource(source)) {
         const nextSourceIndex = idx + 1
         return res.status(200).json({
             success: true,

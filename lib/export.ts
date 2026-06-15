@@ -136,8 +136,12 @@ export type ManifestSource = {
   chain: string;
   dex: string;
   // Ordered endpoint list — [0] is the primary, free-tier alternatives follow.
-  // go-ooo picks paid-vs-free by which API keys it holds.
+  // go-ooo picks paid-vs-free by which API keys it holds. For a rest-sqs source the
+  // single endpoint's urlTemplate is the SQS base URL (no {API_KEY}).
   endpoints: ManifestEndpoint[];
+  // Transport (#128): "subgraph" (default) or "rest-sqs" — tells go-ooo whether to build a subgraph
+  // price source or a Cosmos SQS one.
+  sourceType: string;
   subgraphSchemaFamily: string;
   factoryAddress: string;
   rpcUrl: string | null; // for go-ooo's at-block price sampling (null = chain not mapped)
@@ -213,6 +217,7 @@ export async function buildExportManifestV3(opts: { now?: number } = {}): Promis
       chain: s.chain,
       dex: s.dex,
       endpoints,
+      sourceType: s.sourceType,
       subgraphSchemaFamily: s.subgraphSchemaFamily,
       factoryAddress: s.factoryAddress,
       rpcUrl: ci?.rpc ?? null,

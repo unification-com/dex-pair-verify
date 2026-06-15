@@ -25,6 +25,7 @@ const main = async (): Promise<void> => {
     const data = {
       subgraphUrlTemplate: s.subgraphUrlTemplate,
       subgraphSchemaFamily: s.schemaFamily,
+      sourceType: s.sourceType ?? "subgraph",
       subgraphProvider: s.subgraphProvider,
       factoryAddress: s.factoryAddress,
       gtNetwork: s.gtNetwork ?? null,
