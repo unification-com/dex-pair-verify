@@ -24,6 +24,8 @@ const assetList = {
     { base: USDC, symbol: "USDC", name: "USDC", display: "usdc", coingecko_id: "usd-coin", denom_units: [{ denom: USDC, exponent: 0 }, { denom: "usdc", exponent: 6 }] },
     { base: AXLUSDC, symbol: "USDC", name: "Axelar USDC", display: "usdc", coingecko_id: "axlusdc", denom_units: [{ denom: AXLUSDC, exponent: 0 }, { denom: "usdc", exponent: 6 }] },
     { base: DYDX_ALLOYED, symbol: "DYDX", name: "Alloyed DYDX", display: "allDYDX", denom_units: [{ denom: DYDX_ALLOYED, exponent: 0 }, { denom: "allDYDX", exponent: 18 }] },
+    // Alloyed allBTC — the registry lists symbol/name but coingecko_id: null; the blue-chip overlay supplies "bitcoin".
+    { base: "factory/osmo1.../alloyed/allBTC", symbol: "BTC", name: "Bitcoin", display: "allBTC", coingecko_id: null, denom_units: [{ denom: "factory/osmo1.../alloyed/allBTC", exponent: 0 }, { denom: "allBTC", exponent: 8 }] },
     // No display match in denom_units → decimals falls back to the largest exponent (8).
     { base: "factory/osmo1.../wbtc", symbol: "WBTC", name: "Wrapped Bitcoin", display: "wbtc", coingecko_id: "wrapped-bitcoin", denom_units: [{ denom: "factory/osmo1.../wbtc", exponent: 0 }, { denom: "sats", exponent: 8 }] },
   ],
@@ -54,10 +56,17 @@ describe("resolveCosmosAsset", () => {
     expect((await resolveCosmosAsset("osmosis", AXLUSDC, { fetcher }))?.coingeckoCoinId).toBe("axlusdc");
   });
 
-  it("returns an empty coingecko id for a denom the registry lists without one", async () => {
+  it("returns an empty coingecko id for a non-overlay denom the registry lists without one", async () => {
+    // DYDX is NOT in the blue-chip overlay (it's a niche alloyed asset), so it stays unidentified.
     const dydx = await resolveCosmosAsset("osmosis", DYDX_ALLOYED, { fetcher });
     expect(dydx?.symbol).toBe("DYDX");
     expect(dydx?.coingeckoCoinId).toBe("");
+  });
+
+  it("applies the blue-chip overlay to an alloyed synthetic the registry lists without a coingecko id", async () => {
+    const btc = await resolveCosmosAsset("osmosis", "factory/osmo1.../alloyed/allBTC", { fetcher });
+    expect(btc?.symbol).toBe("BTC");
+    expect(btc?.coingeckoCoinId).toBe("bitcoin"); // overlay supplied it (registry had null)
   });
 
   it("falls back to the largest exponent when no denom_unit matches display", async () => {
@@ -82,7 +91,7 @@ describe("cosmosAssetMap", () => {
     };
     const a = await cosmosAssetMap("osmosis", { fetcher: counting });
     const b = await cosmosAssetMap("osmosis", { fetcher: counting });
-    expect(a.size).toBe(6);
+    expect(a.size).toBe(7);
     expect(b).toBe(a); // memoised — same map instance
     expect(calls).toBe(1);
   });

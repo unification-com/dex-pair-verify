@@ -23,6 +23,26 @@ const REGISTRY_DIR: Record<string, string> = {
 
 const REGISTRY_BASE = "https://raw.githubusercontent.com/cosmos/chain-registry/master";
 
+// Blue-chip symbols the chain-registry lists WITHOUT a coingecko_id — chiefly Osmosis's "alloyed"
+// synthetics (allBTC=Bitcoin, allETH=Ethereum, allUSDT=Tether, …), which fuse an asset's bridge
+// variants into one canonical Osmosis token but carry coingecko_id: null (all 32 alloyed assets do).
+// These are deep, genuine assets, so without this overlay they would stay unidentified (NeedsReview)
+// forever. Mapped by symbol → coingecko id, and applied ONLY when the registry itself supplies no id,
+// so a future registry that adds the id wins. Deliberately narrow: only unambiguous blue-chips —
+// niche staking derivatives (stTIA, ampOSMO) + minor stablecoins stay in manual review.
+const SYMBOL_COINGECKO_OVERLAY: Record<string, string> = {
+  BTC: "bitcoin",
+  WBTC: "wrapped-bitcoin",
+  ETH: "ethereum",
+  USDT: "tether",
+  USDC: "usd-coin",
+  DOGE: "dogecoin",
+  LINK: "chainlink",
+  SHIB: "shiba-inu",
+  PEPE: "pepe",
+  SOL: "solana",
+};
+
 // The slice of a chain-registry asset we consume (the file carries much more).
 type RegistryAsset = {
   base?: string;
@@ -85,12 +105,16 @@ const buildMap = async (chain: string, fetcher: AssetListFetcher): Promise<Map<s
     if (!a.base) {
       continue;
     }
+    const symbol = a.symbol ?? "";
+    // The registry's id wins; fall back to the blue-chip overlay only when it supplies none (chiefly
+    // the alloyed synthetics, which carry coingecko_id: null).
+    const coingeckoCoinId = (a.coingecko_id ?? "").trim() || SYMBOL_COINGECKO_OVERLAY[symbol] || "";
     out.set(a.base, {
       denom: a.base,
-      symbol: a.symbol ?? "",
-      name: a.name ?? a.symbol ?? "",
+      symbol,
+      name: a.name ?? symbol,
       decimals: assetDecimals(a),
-      coingeckoCoinId: a.coingecko_id ?? "",
+      coingeckoCoinId,
     });
   }
   return out;
