@@ -1,24 +1,22 @@
 import Link from "next/link";
 import React from "react";
 
+import { blockExplorerUrl } from "../lib/externalLinks";
+
 const ExplorerUrl: React.FC<{ chain: string, contractAddress: string, linkType: string }> = ({ chain, contractAddress, linkType }) => {
 
-    const explorerUrls = {
-        eth: "https://etherscan.io",
-        bsc: "https://bscscan.com",
-        polygon_pos: "https://polygonscan.com",
-        gnosis: "https://gnosis.blockscout.com",
-        xdai: "https://gnosis.blockscout.com",
+    const url = blockExplorerUrl(chain, linkType, contractAddress);
+
+    // No block explorer for this chain (e.g. a Cosmos IBC/factory denom, which isn't a contract
+    // address) — show the identifier as plain text rather than a broken `undefined/...` link.
+    if (!url) {
+        return <span>{contractAddress}</span>;
     }
 
-    const explorer = explorerUrls[chain]
-
     return (
-        <>
-            <Link href={`${explorer}/${linkType}/${contractAddress}`}>
-                <a target="_blank">{contractAddress}</a>
-            </Link>
-        </>
+        <Link href={url}>
+            <a target="_blank">{contractAddress}</a>
+        </Link>
     )
 
 }

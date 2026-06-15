@@ -68,6 +68,29 @@ export function blockscoutTokenUrl(chain: string, address: string): string | nul
   return bs ? `${bs}/token/${address}` : null;
 }
 
+// Canonical block-explorer base per chain (the chain's primary explorer, e.g. Etherscan) — distinct
+// from BLOCKSCOUT_BASE above (a Blockscout instance). A chain not listed has NO explorer link: chiefly
+// a non-EVM chain like Osmosis, whose token id is an IBC/factory denom, not a contract address an
+// explorer can deep-link by.
+export const BLOCK_EXPLORER_BASE: Record<string, string> = {
+  eth: "https://etherscan.io",
+  bsc: "https://bscscan.com",
+  polygon_pos: "https://polygonscan.com",
+  arbitrum: "https://arbiscan.io",
+  base: "https://basescan.org",
+  optimism: "https://optimistic.etherscan.io",
+  gnosis: "https://gnosis.blockscout.com",
+  xdai: "https://gnosis.blockscout.com",
+};
+
+// A token/address page on the chain's block explorer (linkType is "token" or "address"), or null when
+// the chain has no explorer mapped — the caller then shows the identifier as plain text instead of a
+// broken link.
+export function blockExplorerUrl(chain: string, linkType: string, address: string): string | null {
+  const base = BLOCK_EXPLORER_BASE[chain];
+  return base ? `${base}/${linkType}/${address}` : null;
+}
+
 // CoinMarketCap currency page, from the slug B1d backfills ("" = unknown).
 export function coinmarketcapUrl(slug: string | null | undefined): string | null {
   return slug ? `https://coinmarketcap.com/currencies/${encodeURIComponent(slug)}/` : null;

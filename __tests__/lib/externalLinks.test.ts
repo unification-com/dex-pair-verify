@@ -2,9 +2,20 @@
 
 import { describe, expect, it } from "vitest";
 
-import { blockscoutTokenUrl, coinmarketcapUrl, dexscreenerUrl, goPlusUrl, honeypotUrl } from "../../lib/externalLinks";
+import { blockExplorerUrl, blockscoutTokenUrl, coinmarketcapUrl, dexscreenerUrl, goPlusUrl, honeypotUrl } from "../../lib/externalLinks";
 
 const ADDR = "0x3bf3A8f82E54F376d882f99653B42eD6d0CcFc50";
+
+describe("blockExplorerUrl", () => {
+  it("builds a token/address link on the chain's explorer (incl. the L2s)", () => {
+    expect(blockExplorerUrl("eth", "token", ADDR)).toBe(`https://etherscan.io/token/${ADDR}`);
+    expect(blockExplorerUrl("arbitrum", "address", ADDR)).toBe(`https://arbiscan.io/address/${ADDR}`);
+    expect(blockExplorerUrl("base", "token", ADDR)).toBe(`https://basescan.org/token/${ADDR}`);
+  });
+  it("returns null for a chain with no block explorer (e.g. a Cosmos denom), so the UI shows plain text", () => {
+    expect(blockExplorerUrl("osmosis", "token", "factory/osmo1.../alloyed/allBTC")).toBeNull();
+  });
+});
 
 describe("goPlusUrl", () => {
   it("uses the numeric EVM chain id and lowercases the address", () => {
