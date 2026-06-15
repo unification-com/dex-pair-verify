@@ -36,7 +36,7 @@ const getCurrentBlockNumber = async (rpc: string): Promise<number> => {
 // token0Price/token1Price directly; the Messari dex-amm schema exposes per-token lastPriceUSD on
 // inputTokens, from which the pair price is derived (see the result mapping below). univ4 also
 // selects hooks so hooked pools (non-canonical price) can be skipped.
-const FAMILY_COLLECTION: Record<string, string> = { univ2: "pairs", univ3: "pools", univ4: "pools", messari: "liquidityPools" };
+export const FAMILY_COLLECTION: Record<string, string> = { univ2: "pairs", univ3: "pools", univ4: "pools", messari: "liquidityPools" };
 
 const genQuery = (family: string, addrStr: string, blockNum: number | null): string => {
   const blockArg = blockNum === null ? "" : `block: {number: ${blockNum}},`;

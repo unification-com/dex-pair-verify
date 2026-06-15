@@ -9,6 +9,7 @@
 import { utils as web3Utils } from "web3";
 
 import { cgKeyedFetch, GECKO_API_KEY } from "./coingecko";
+import { FAMILY_COLLECTION } from "./priceFetch";
 import prisma from "./prisma";
 import { getSource, getSources, gtDexFor, gtNetworkFor, resolveSubgraphUrl, thresholdSeedData } from "./sourceConfig";
 import { isNativeCurrency, poolAddressFromGt, wrappedNativeToken } from "./univ4";
@@ -121,27 +122,44 @@ const resolveNativeToken = (chain: string, address: string, gt: GtTokenData): { 
   };
 };
 
-// Fetch the hooks contract for a batch of v4 pools from the source's subgraph, keyed by lower-cased
-// poolId. GeckoTerminal does not expose hooks, so this is the one targeted subgraph read in the
-// otherwise GT-only ingest - run only for univ4 sources. A non-v4 source, an unconfigured subgraph,
-// or any fetch failure returns an empty map: pools then store hooks=null (unflagged), and go-ooo's
-// price path still refuses to price a hooked pool, so this never opens a safety gap.
-async function hooksForUniv4Pools(chain: string, dex: string, pools: GtPool[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
+// One batched read of a page's pools from the source's PRICING subgraph — the same subgraph and
+// id_in lookup go-ooo prices through, so "present" here means "go-ooo can actually price it".
+type SubgraphPoolFacts = {
+  // ≥1 of the queried pools was found, proving the source's pool-id format lines up with the
+  // subgraph. Only then is a pool's ABSENCE trustworthy (it's a GeckoTerminal-only phantom go-ooo
+  // can't price). If nothing was found we can't tell "all phantom" from "id format we don't line
+  // up" (e.g. a GT slug whose pool addresses diverge from the subgraph), so we claim nothing.
+  idsAlign: boolean;
+  present: Set<string>; // lower-cased pool ids the subgraph indexes
+  hooks: Map<string, string>; // lower-cased poolId → hooks contract (univ4 only; GT doesn't expose it)
+};
+
+// Corroborate a page of GeckoTerminal pools against the source's pricing subgraph: which pool ids it
+// actually indexes (presence — drops GT-phantom pools the oracle can never price) and, for univ4,
+// the hooks contract. One batched query per page, mirroring go-ooo's own id_in price lookup. A
+// non-subgraph family, an unconfigured subgraph, or any fetch/GraphQL error returns idsAlign=false
+// with empty maps: corroboration then makes NO claim (fail-open) and the pool stores
+// subgraphPresent=null / hooks=null — go-ooo's no-hook and num_pools price filters remain the
+// backstop, so this never wrongly demotes a working source or opens a safety gap.
+async function subgraphPoolFacts(chain: string, dex: string, pools: GtPool[]): Promise<SubgraphPoolFacts> {
+  const empty: SubgraphPoolFacts = { idsAlign: false, present: new Set(), hooks: new Map() };
   const source = await getSource(chain, dex);
-  if (source?.subgraphSchemaFamily !== "univ4") {
-    return out;
+  const family = source?.subgraphSchemaFamily;
+  const collection = family ? FAMILY_COLLECTION[family] : undefined;
+  const url = source ? resolveSubgraphUrl(source) : null;
+  if (!collection || !url) {
+    return empty; // custom / no-subgraph family — nothing to corroborate against
   }
-  const url = resolveSubgraphUrl(source);
-  if (!url) {
-    return out;
-  }
-  const poolIds = pools.map((p) => poolAddressFromGt(p.attributes.address)).filter((id): id is string => !!id);
+  const poolIds = pools
+    .map((p) => poolAddressFromGt(p.attributes.address))
+    .filter((id): id is string => !!id)
+    .map((id) => id.toLowerCase());
   if (poolIds.length === 0) {
-    return out;
+    return empty;
   }
-  const idList = poolIds.map((id) => `"${id.toLowerCase()}"`).join(",");
-  const query = `{ pools(where: { id_in: [${idList}] }) { id hooks } }`;
+  const idList = poolIds.map((id) => `"${id}"`).join(",");
+  const fields = family === "univ4" ? "id hooks" : "id";
+  const query = `{ ${collection}(where: { id_in: [${idList}] }) { ${fields} } }`;
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -149,18 +167,30 @@ async function hooksForUniv4Pools(chain: string, dex: string, pools: GtPool[]): 
       body: JSON.stringify({ query }),
     });
     if (!res.ok) {
-      return out;
+      return empty;
     }
-    const json = (await res.json()) as { data?: { pools?: { id?: string; hooks?: string }[] } } | null;
-    for (const p of json?.data?.pools ?? []) {
-      if (p?.id && typeof p.hooks === "string") {
-        out.set(p.id.toLowerCase(), p.hooks);
+    const json = (await res.json()) as { data?: Record<string, { id?: string; hooks?: string }[]> } | null;
+    const rows = json?.data?.[collection];
+    if (!Array.isArray(rows)) {
+      return empty; // GraphQL error / unexpected shape → make no claim
+    }
+    const present = new Set<string>();
+    const hooks = new Map<string, string>();
+    for (const r of rows) {
+      if (!r?.id) {
+        continue;
+      }
+      const id = r.id.toLowerCase();
+      present.add(id);
+      if (family === "univ4" && typeof r.hooks === "string") {
+        hooks.set(id, r.hooks);
       }
     }
+    return { idsAlign: present.size > 0, present, hooks };
   } catch {
-    // Subgraph/network failure — leave hooks unresolved (go-ooo's no-hook price filter is the backstop).
+    // Subgraph/network failure — corroboration makes no claim (go-ooo's price filters are the backstop).
+    return empty;
   }
-  return out;
 }
 
 const isoToUnix = (iso: string | null): number | null => {
@@ -250,6 +280,7 @@ async function upsertPair(
   pool: GtPool,
   now: number,
   hooks: string | null,
+  subgraphPresent: boolean | null,
 ): Promise<string> {
   const a = pool.attributes;
   const buys = a.transactions?.h24?.buys ?? 0;
@@ -259,6 +290,7 @@ async function upsertPair(
   const common = {
     pair: pairSym,
     hooks,
+    subgraphPresent,
     reserveUsd: num(a.reserve_in_usd),
     reserve0: 0,
     reserve1: 0,
@@ -309,7 +341,7 @@ async function ingestOnePool(
   p: GtPool,
   tokenMap: Map<string, GtTokenData>,
   now: number,
-  hooksByPoolId?: Map<string, string>,
+  facts?: SubgraphPoolFacts,
 ): Promise<string | null> {
   const pairAddr = poolAddressFromGt(p.attributes.address);
   const t0Addr = addressFromGtId(p.relationships.base_token?.data?.id);
@@ -317,9 +349,15 @@ async function ingestOnePool(
   if (!pairAddr || !t0Addr || !t1Addr) {
     return null;
   }
+  const idLower = pairAddr.toLowerCase();
   // v4 hooks for this pool (null for non-v4 sources or an unresolved hooks fetch). Stored on the
   // pair so the verdict routes a hooked pool to NeedsReview (and re-verdicts stay correct).
-  const hooks = hooksByPoolId?.get(pairAddr.toLowerCase()) ?? null;
+  const hooks = facts?.hooks.get(idLower) ?? null;
+  // Subgraph corroboration: only trust an ABSENCE when the page proved its id format aligns (≥1 of
+  // its pools was found) — otherwise leave it unknown (null, fail-open) so a source whose GT ids we
+  // can't line up is never demoted. true = the pricing subgraph indexes this pool; false = it's a
+  // GeckoTerminal-only phantom go-ooo can never price → the verdict keeps it out of the export.
+  const subgraphPresent = facts?.idsAlign ? facts.present.has(idLower) : null;
   const gt0 = tokenMap.get(t0Addr);
   const gt1 = tokenMap.get(t1Addr);
   if (!gt0 || !gt1) {
@@ -333,7 +371,7 @@ async function ingestOnePool(
   const poolCreatedAt = isoToUnix(p.attributes.pool_created_at);
   const token0Id = await upsertToken(chain, r0.address, r0.gt, poolCreatedAt, now);
   const token1Id = await upsertToken(chain, r1.address, r1.gt, poolCreatedAt, now);
-  const pairId = await upsertPair(chain, dex, pairAddr, `${r0.gt.symbol}-${r1.gt.symbol}`, token0Id, token1Id, p, now, hooks);
+  const pairId = await upsertPair(chain, dex, pairAddr, `${r0.gt.symbol}-${r1.gt.symbol}`, token0Id, token1Id, p, now, hooks, subgraphPresent);
 
   // The pair's CG (aggregated) prices come from the token-level price_usd.
   await prisma.pair.update({
@@ -398,13 +436,13 @@ export async function ingestPoolPage(
 
   // Tokens arrive embedded in the pools response (via GT `include`).
   const tokenMap = buildTokenMap(tokens);
-  // One batched subgraph read for the page's v4 hooks (empty for non-v4 sources).
-  const hooksByPoolId = await hooksForUniv4Pools(chain, dex, pools);
+  // One batched subgraph read for the page: pool presence (drops GT-phantom pools) + v4 hooks.
+  const facts = await subgraphPoolFacts(chain, dex, pools);
 
   const tallies: Record<string, number> = {};
   let pairs = 0;
   for (const p of pools) {
-    const key = await ingestOnePool(chain, dex, p, tokenMap, now, hooksByPoolId);
+    const key = await ingestOnePool(chain, dex, p, tokenMap, now, facts);
     if (key === null) {
       continue;
     }
@@ -469,9 +507,9 @@ export async function ingestTokenPools(
       skipped += 1; // pool on a DEX we don't support — can't export it
       continue;
     }
-    // Pools here can span several DEXs, so resolve hooks per pool (a no-op except for univ4).
-    const hooksByPoolId = await hooksForUniv4Pools(chain, dex, [p]);
-    const key = await ingestOnePool(chain, dex, p, tokenMap, now, hooksByPoolId);
+    // Pools here can span several DEXs, so corroborate per pool (presence + univ4 hooks).
+    const facts = await subgraphPoolFacts(chain, dex, [p]);
+    const key = await ingestOnePool(chain, dex, p, tokenMap, now, facts);
     if (key === null) {
       skipped += 1;
       continue;
@@ -552,8 +590,8 @@ export async function ingestPairByAddress(
     return { ok: false, reason: `pool is on '${gtPoolDex}', not '${gtDex}' — pick the matching DEX` };
   }
 
-  const hooksByPoolId = await hooksForUniv4Pools(chain, dex, [pool]);
-  const verdict = await ingestOnePool(chain, dex, pool, buildTokenMap(tokens), now, hooksByPoolId);
+  const facts = await subgraphPoolFacts(chain, dex, [pool]);
+  const verdict = await ingestOnePool(chain, dex, pool, buildTokenMap(tokens), now, facts);
   if (verdict === null) {
     return { ok: false, reason: "GeckoTerminal returned incomplete pool/token data" };
   }

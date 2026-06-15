@@ -244,6 +244,7 @@ const makeCtx = (over: Partial<VerdictContext> = {}): VerdictContext => ({
   intraChainImpostorLoser: false,
   tokenScamFlagged: false,
   hookedPool: false,
+  subgraphAbsent: false,
   pairFactoryAddress: null,
   canonicalFactoryAddress: UNI_V3_FACTORY,
   firstParty: false,
@@ -262,6 +263,19 @@ describe("evaluatePair", () => {
     const r = evaluatePair(makePair(), makeCtx({ hookedPool: true }));
     expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
     expect(r.reasonCode).toBe(VERDICT_REASON.hookedPool);
+  });
+
+  it("routes a subgraph-absent pool (GeckoTerminal-only phantom) out of the export, even when otherwise clean", () => {
+    const r = evaluatePair(makePair(), makeCtx({ subgraphAbsent: true }));
+    expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
+    expect(r.reasonCode).toBe(VERDICT_REASON.subgraphAbsent);
+  });
+
+  it("does NOT route to subgraphAbsent when corroboration made no claim (subgraphAbsent false)", () => {
+    // false covers both "present" and "unchecked / id format didn't align" — only positive
+    // evidence of absence demotes a pair, so a clean pair still auto-verifies.
+    const r = evaluatePair(makePair(), makeCtx({ subgraphAbsent: false }));
+    expect(r.verdict).toBe(TokenPairStatus.AutoVerified);
   });
 
   it("routes an IDENTIFIED phantom-liquidity pool (deep reserve, ~0 turnover) to review", () => {

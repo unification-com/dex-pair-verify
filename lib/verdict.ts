@@ -358,6 +358,11 @@ export type VerdictContext = {
   // A Uniswap-v4 pool with a non-zero hooks contract — its price can be non-canonical /
   // manipulable, so it never auto-verifies; route to review until hooks are allow-listed.
   hookedPool: boolean;
+  // The GT-sourced pool is ABSENT from the pricing subgraph go-ooo queries (corroborated at ingest):
+  // a GeckoTerminal-only phantom the oracle can never price. Routed out of the export. False when
+  // present OR when corroboration made no claim (subgraph unchecked / id format didn't align) — so
+  // this only fires on positive evidence of absence (see lib/ingest.ts subgraphPoolFacts).
+  subgraphAbsent: boolean;
   pairFactoryAddress: string | null; // unknown until A.4.1 RPC read
   canonicalFactoryAddress: string | null; // from lib/sources.js
   // Either token is one of OUR own tokens (FUND/xFUND/FUNDx — lib/firstParty.ts).
@@ -382,6 +387,7 @@ export const VERDICT_REASON = {
   unidentifiedThinPool: "unidentifiedThinPool",
   scamFlagged: "scamFlagged",
   hookedPool: "hookedPool",
+  subgraphAbsent: "subgraphAbsent",
   factoryMismatch: "factoryMismatch",
   canonicalImpostor: "canonicalImpostor",
   siblingVouched: "siblingVouched",
@@ -462,6 +468,7 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
     confidence,
     reserveUsd: pair.reserveUsd,
     phantomLiquidity,
+    subgraphAbsent: ctx.subgraphAbsent,
     firstParty: ctx.firstParty,
     txCount: pair.txCount,
     turnover: f.turnover.observed,
@@ -542,6 +549,23 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   //        to review until the hooks address is allow-listed (the oracle hooks-safety policy).
   if (ctx.hookedPool) {
     return result(TokenPairStatus.NeedsReview, VERDICT_REASON.hookedPool, "a Uniswap v4 hooked pool — price not yet trusted (hooks not allow-listed)");
+  }
+
+  // 3b-iii. Subgraph corroboration: the GT-sourced pool is ABSENT from the pricing subgraph go-ooo
+  //         queries — a GeckoTerminal-only phantom (often inflated/spoofed reserves) the oracle can
+  //         never price. Route OUT of the export (NeedsReview, not auto-reject: an absence can also
+  //         be transient subgraph indexing lag for a brand-new real pool, so it stays reversible —
+  //         a re-verify after the subgraph catches up flips it back). Only set when corroboration
+  //         had positive evidence the source's ids align (see lib/ingest.ts), so it never fires on a
+  //         source whose id format we simply couldn't line up. An unidentified phantom was already
+  //         AV-2 auto-rejected at step 3; this catches the IDENTIFIED phantoms (e.g. a GT "$15M"
+  //         pool for an obscure token that isn't in the subgraph at all).
+  if (ctx.subgraphAbsent) {
+    return result(
+      TokenPairStatus.NeedsReview,
+      VERDICT_REASON.subgraphAbsent,
+      "pool is absent from the pricing subgraph (GeckoTerminal-only) — the oracle cannot price it",
+    );
   }
 
   // 3c. Factory mismatch (T2): the pool's on-chain factory() does not match the

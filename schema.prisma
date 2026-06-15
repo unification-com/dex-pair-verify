@@ -163,6 +163,12 @@ model Pair {
   // pool, which the verdict routes to NeedsReview (its price can be non-canonical /
   // manipulable). null = not a v4 pool / not yet resolved.
   hooks                    String?
+  // Subgraph corroboration (drop GT-phantom pools): at ingest the GT-sourced pool
+  // is looked up in the same pricing subgraph go-ooo queries. true = found (real),
+  // false = absent (a GeckoTerminal-only phantom that go-ooo can never price → the
+  // verdict routes it out of the export), null = unchecked / read failed / id format
+  // didn't align for this source (fail-open — never flagged on that evidence alone).
+  subgraphPresent          Boolean?
   // Review-queue triage (T9): for a NeedsReview pair, "spam" (clear-bad —
   // impostor / scam-flagged / exact-symbol spoof → bulk-rejectable) or "review"
   // (genuine-but-uncertain → manual look). null when not in NeedsReview.

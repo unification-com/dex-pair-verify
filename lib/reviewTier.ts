@@ -45,6 +45,11 @@ export function computeReviewTier(reasonCode: VerdictReasonCode, token0: TierTok
   if (reasonCode === VERDICT_REASON.canonicalImpostor) {
     return "spam";
   }
+  // Phantom: the pool isn't in the pricing subgraph at all (GeckoTerminal-only) — not oracle-usable
+  // and almost always spoofed/inflated liquidity, so it's bulk-rejectable.
+  if (reasonCode === VERDICT_REASON.subgraphAbsent) {
+    return "spam";
+  }
   // GoPlus scam flag (honeypot / extreme tax / hidden owner…) on either token.
   if (token0.isScamFlagged || token1.isScamFlagged) {
     return "spam";

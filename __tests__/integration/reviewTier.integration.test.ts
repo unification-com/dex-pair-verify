@@ -35,6 +35,10 @@ describe("computeReviewTier", () => {
     expect(computeReviewTier(VERDICT_REASON.canonicalImpostor, tok(), tok())).toBe("spam");
   });
 
+  it("flags a subgraph-absent (GeckoTerminal-only phantom) pool as spam", () => {
+    expect(computeReviewTier(VERDICT_REASON.subgraphAbsent, tok(), tok())).toBe("spam");
+  });
+
   it("flags a scam-flagged token as spam", () => {
     expect(computeReviewTier(NON_IMPOSTOR, tok({ isScamFlagged: true }), tok())).toBe("spam");
   });

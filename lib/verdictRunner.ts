@@ -43,6 +43,7 @@ export type PairWithTokens = {
   txCount: number;
   factoryAddress: string | null;
   hooks: string | null;
+  subgraphPresent: boolean | null;
   status: TokenPairStatus;
   token0PriceCg: number;
   token0PriceDex: number;
@@ -162,6 +163,9 @@ export async function buildVerdictContext(
     intraChainImpostorLoser,
     tokenScamFlagged: pair.token0.isScamFlagged || pair.token1.isScamFlagged,
     hookedPool: isHookedPool(pair.hooks),
+    // Persisted at ingest by the subgraph-corroboration read: false = the pool is absent from the
+    // pricing subgraph (a GT-only phantom) → route out of the export. null/true → no claim.
+    subgraphAbsent: pair.subgraphPresent === false,
     pairFactoryAddress: pair.factoryAddress, // read on-chain by the factory-check pass (T2)
     canonicalFactoryAddress: await getCanonicalFactoryAddress(pair.chain, pair.dex),
     firstParty:
