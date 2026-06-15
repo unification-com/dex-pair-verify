@@ -39,16 +39,18 @@ export const poolAddressFromGt = (raw: string | undefined | null): string | null
   }
 };
 
-// Wrapped-native symbol per chain (native currency id 0x0 → this symbol). Only the ETH-native
-// chains v4 is being brought online on are mapped (all wrap to WETH); this mirrors the go-ooo
-// univ4 family's map. A chain absent here gets no native rewrite, so its wrapped symbol must be
-// added (and verified live) before v4 is enabled on it - the "verify before seeding" discipline.
+// Wrapped-native symbol per chain (native currency id 0x0 → this symbol). The ETH-native chains
+// wrap to WETH, Polygon's native POL to WPOL, and BSC's native BNB to WBNB; this mirrors the
+// go-ooo univ4 family's map. A chain absent here gets no native rewrite, so its wrapped symbol
+// must be added (and verified live) before a v4-style source is enabled on it - the "verify
+// before seeding" discipline.
 const WRAPPED_NATIVE: Record<string, string> = {
   eth: "WETH",
   base: "WETH",
   arbitrum: "WETH",
   optimism: "WETH",
   polygon_pos: "WPOL",
+  bsc: "WBNB",
 };
 
 // The chain's wrapped-native symbol, or null when the chain is not yet mapped.
@@ -117,6 +119,16 @@ const WRAPPED_NATIVE_TOKEN: Record<string, WrappedNativeToken> = {
     symbol: "WPOL",
     name: "Wrapped POL",
     coingeckoCoinId: "wmatic",
+    decimals: 18,
+  },
+  // BSC's native currency is BNB; it wraps to WBNB, whose GeckoTerminal coingecko_coin_id is the
+  // clean "wbnb" (verified live) - matching that chain's existing v2/v3 WBNB pairs. Brought online
+  // with PancakeSwap Infinity CL (a univ4-shaped source whose native pools report id 0x0 / "BNB").
+  bsc: {
+    address: "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+    symbol: "WBNB",
+    name: "Wrapped BNB",
+    coingeckoCoinId: "wbnb",
     decimals: 18,
   },
 };

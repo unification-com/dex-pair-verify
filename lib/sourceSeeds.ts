@@ -60,6 +60,14 @@ export const SOURCE_SEEDS: SourceSeed[] = [
   { chain: "polygon_pos", dex: "uniswap_v4", gtNetwork: "polygon_pos", gtDex: "uniswap-v4-polygon", schemaFamily: "univ4", subgraphId: "CwpebM66AH5uqS5sreKij8yEkkPcHvmyEs7EwFtdM5ND", factoryAddress: "0x67366782805870060151383F4BbFF9daB53e5cD6", priceable: true, note: "Uniswap v4 on Polygon; native POL→WPOL (cg wmatic) - the one non-ETH-native v4 chain" },
   { chain: "optimism", dex: "uniswap_v4", gtNetwork: "optimism", gtDex: "uniswap-v4-optimism", schemaFamily: "univ4", subgraphId: "3Tn7Y1NJAr4ySKm7KFu1dwvH2WM3mHJnXzXAxQsdBDvW", factoryAddress: "0x9a13F98Cb987694C9F086b1F5eB990EeA8264Ec3", priceable: true, note: "Uniswap v4 on Optimism; native ETH→WETH (l2-standard-bridged-weth-optimism)" },
 
+  // PancakeSwap Infinity CL (concentrated-liquidity AMM) — a univ4-shaped fork: a singleton CL
+  // PoolManager (the "factory" slot below), 32-byte poolIds, hooks + hooksRegistration, native
+  // currency 0x0. The existing univ4 family prices it with no new go-ooo code. On BSC + Base only
+  // (no Ethereum/Arbitrum deployment). Infinity's Bin (liquidity-book) side is a SEPARATE subgraph
+  // schema (lbpair/bins) that awaits a dedicated LB family — not these rows.
+  { chain: "bsc", dex: "pancakeswap_infinity_cl", gtNetwork: "bsc", gtDex: "pancakeswap-infinity-clmm", schemaFamily: "univ4", subgraphId: "DBhFM9MxjBr7ekNez6iCWQvNkVpwsb46PxWbr98kxAC7", factoryAddress: "0xa0FfB9c1CE1Fe56963B0321B32E7A0302114058b", priceable: true, note: "PancakeSwap Infinity CL on BSC; native BNB→WBNB (cg wbnb); no-hook pools only" },
+  { chain: "base", dex: "pancakeswap_infinity_cl", gtNetwork: "base", gtDex: "pancakeswap-infinity-clmm-base", schemaFamily: "univ4", subgraphId: "HCNnRkh8Uf4yrEZXqaHUZEo3RPAG7xx1REoudVWwZRS", factoryAddress: "0xa0FfB9c1CE1Fe56963B0321B32E7A0302114058b", priceable: true, note: "PancakeSwap Infinity CL on Base; native ETH→WETH (l2-standard-bridged-weth-base); no-hook pools only" },
+
   // ── New 4.D targets (researched; validated live via `yarn validate-seeds`).
   //    GT slugs map to discovered candidates for /admin/sources pre-fill. IDs the
   //    research flagged UNKNOWN (Sushi-V2 on polygon/bsc/gnosis/avax, QuickSwap V2,
