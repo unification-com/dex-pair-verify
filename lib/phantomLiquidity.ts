@@ -26,3 +26,21 @@ export function isPhantomLiquidity(reserveUsd: number, volumeUsd: number, minLiq
   // volumeUsd 0 ⇒ turnover 0 ⇒ phantom (a deep pool with literally no 24h volume).
   return volumeUsd / reserveUsd < PHANTOM_TURNOVER_FLOOR;
 }
+
+// Whether the phantom-liquidity guard should FIRE for a pool, accounting for the bypass conditions.
+// The single gate BOTH the verdict engine (evaluatePair) and the UI fence mirror (deriveFences) call,
+// so the bypass set can't drift between them (it did once — reserveTrusted was added to the verdict
+// alone, which then showed an AutoVerified Osmosis pair as "Held on: Liquidity meets floor"). Both
+// firstParty (OUR token) and reserveTrusted (an authoritative on-chain reserve, e.g. an Osmosis SQS
+// liquidity_cap, whose volume feed is unreliable so the turnover signal can't be trusted) waive it.
+export function phantomLiquidityApplies(
+  reserveUsd: number,
+  volumeUsd: number,
+  minLiquidityUsd: number,
+  opts: { firstParty?: boolean; reserveTrusted?: boolean } = {},
+): boolean {
+  if (opts.firstParty || opts.reserveTrusted) {
+    return false;
+  }
+  return isPhantomLiquidity(reserveUsd, volumeUsd, minLiquidityUsd);
+}

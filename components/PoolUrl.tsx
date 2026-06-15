@@ -16,12 +16,17 @@ const PoolUrl: React.FC<{ chain: string, dex: string, contractAddress: string }>
 
     const pool = poolUrls[`${chain}_${dex}`]
 
+    // No DEX analytics URL for this (chain, dex) — many sources have none, and a Cosmos pool id /
+    // denom doesn't fit a DEX pair URL anyway. Show the identifier as plain text, not a broken
+    // `href="undefined…"` link.
+    if (!pool) {
+        return <span>{contractAddress}</span>;
+    }
+
     return (
-        <>
-            <Link href={`${pool}${contractAddress}`}>
-                <a target="_blank">{contractAddress}</a>
-            </Link>
-        </>
+        <Link href={`${pool}${contractAddress}`}>
+            <a target="_blank">{contractAddress}</a>
+        </Link>
     )
 
 }

@@ -17,7 +17,7 @@
 // rule changes there, change it here too (they intentionally duplicate so the
 // UI can explain a verdict without importing the prisma-backed engine).
 
-import { isPhantomLiquidity } from "./phantomLiquidity";
+import { phantomLiquidityApplies } from "./phantomLiquidity";
 
 export type FenceGroup = "Identity" | "Provenance" | "Liquidity & Activity" | "Price";
 
@@ -90,16 +90,20 @@ export function deriveFences(args: {
   canonicalFactoryAddress: string | null;
   config: FenceConfig;
   firstParty?: boolean; // OUR token — liquidity floors + phantom guard waived (mirrors verdict.ts)
+  reserveTrusted?: boolean; // authoritative on-chain reserve (Cosmos SQS) — phantom guard waived (mirrors verdict.ts)
   now?: number; // unix seconds, defaults to Date.now()/1000
 }): UiFence[] {
   const { token0: t0, token1: t1, config: c } = args;
   const now = args.now ?? Date.now() / 1000;
   const F: UiFence[] = [];
 
-  // Phantom liquidity: a deep-looking pool with near-zero turnover reports a
-  // reserveUsd that isn't real — withhold the liquidity credit (mirrors verdict.ts).
-  // First-party tokens trust the reserve absolutely, so the guard is waived.
-  const phantom = !args.firstParty && isPhantomLiquidity(args.reserveUsd, args.volumeUsd, c.minLiquidityUsd);
+  // Phantom liquidity: a deep-looking pool with near-zero turnover reports a reserveUsd that isn't
+  // real — withhold the liquidity credit. The bypass set (first-party + reserveTrusted) is the SAME
+  // shared gate the verdict uses, so this mirror can't drift from evaluatePair.
+  const phantom = phantomLiquidityApplies(args.reserveUsd, args.volumeUsd, c.minLiquidityUsd, {
+    firstParty: args.firstParty,
+    reserveTrusted: args.reserveTrusted,
+  });
   const effectiveReserve = phantom ? 0 : args.reserveUsd;
 
   // Identity

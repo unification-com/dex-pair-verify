@@ -16,7 +16,7 @@
 // the DB context-builder lives at the call sites (the A.4.1 ingest, the
 // re-verify cron, the UI rescan).
 
-import { isPhantomLiquidity } from "./phantomLiquidity";
+import { phantomLiquidityApplies } from "./phantomLiquidity";
 import { TokenPairStatus } from "../types/types";
 
 export type Fence = {
@@ -449,8 +449,10 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   // (Osmosis SQS liquidity_cap) rather than a token-price-derived estimate — there the guard's premise
   // (a garbage price inflated the reserve) cannot hold, and the source's volume feed is unreliable
   // (~0 on deep pools), so the guard would misfire on every pair.
-  const phantomLiquidity =
-    !ctx.firstParty && !ctx.reserveTrusted && isPhantomLiquidity(pair.reserveUsd, pair.volumeUsd, config.minLiquidityUsd);
+  const phantomLiquidity = phantomLiquidityApplies(pair.reserveUsd, pair.volumeUsd, config.minLiquidityUsd, {
+    firstParty: ctx.firstParty,
+    reserveTrusted: ctx.reserveTrusted,
+  });
   const effectiveReserveUsd = phantomLiquidity ? 0 : pair.reserveUsd;
 
   const f = {

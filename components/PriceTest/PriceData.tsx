@@ -1,6 +1,5 @@
 import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
-import { Web3 } from "web3";
 
 import { usd, num as fmtNum, ageStr } from "../../lib/format";
 import {
@@ -99,7 +98,9 @@ const PriceData: React.FC<{
             let reserveUsd = 0
             for (let i = 0; i < pairs.length; i += 1) {
                 const p = pairs[i]
-                if (p.chain === c && p.dex === d && Web3.utils.toChecksumAddress(p.contractAddress) === Web3.utils.toChecksumAddress(cAddr)) {
+                // Case-insensitive identifier match — works for both EVM addresses and Cosmos denoms
+                // (toChecksumAddress would throw on a non-hex denom like factory/.../allBTC).
+                if (p.chain === c && p.dex === d && String(p.contractAddress).toLowerCase() === String(cAddr).toLowerCase()) {
                     pId = p.id; t0Id = p.token0Id; t1Id = p.token1Id; pairName = p.pair; reserveUsd = p.reserveUsd
                     break
                 }

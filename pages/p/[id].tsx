@@ -108,6 +108,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     canonicalFactoryAddress: context.canonicalFactoryAddress,
     config: context.config,
     firstParty: context.firstParty,
+    reserveTrusted: context.reserveTrusted,
   });
 
   // Trust signals, derived from the same primitives as the fences.
