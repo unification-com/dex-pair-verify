@@ -19,6 +19,7 @@
 // discipline).
 const REGISTRY_DIR: Record<string, string> = {
   osmosis: "osmosis",
+  neutron: "neutron",
 };
 
 const REGISTRY_BASE = "https://raw.githubusercontent.com/cosmos/chain-registry/master";

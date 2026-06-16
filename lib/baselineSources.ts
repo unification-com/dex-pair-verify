@@ -111,6 +111,22 @@ const COSMOS_SOURCES: BaselineSource[] = [
     lastPage: 1,
     defaultThresholds: { minLiquidityUsd: 25000, hardMinLiquidityUsd: 5000, minTxCount: 0 },
   },
+  // Astroport on Neutron (#128) — the second Cosmos source. Discovered + valued off the Astroport REST
+  // API (subgraphUrlTemplate holds its base URL), identity via the Neutron chain-registry asset-list.
+  // sourceType rest-astroport drives the go-ooo Astroport price source. minTxCount 0 (no per-pool tx
+  // counts); lastPage 1 (the API returns the whole pool set at once).
+  {
+    chain: "neutron",
+    dex: "astroport_neutron",
+    subgraphUrlTemplate: "https://api.astroport.fi",
+    subgraphProvider: "self-hosted",
+    schemaFamily: "custom",
+    sourceType: "rest-astroport",
+    factoryAddress: "",
+    onCoinGeckoTerminal: false,
+    lastPage: 1,
+    defaultThresholds: { minLiquidityUsd: 25000, hardMinLiquidityUsd: 5000, minTxCount: 0 },
+  },
 ];
 
 export const BASELINE_SOURCES: BaselineSource[] = [...ORIGINAL_SOURCES, ...adoptedSources, ...COSMOS_SOURCES];

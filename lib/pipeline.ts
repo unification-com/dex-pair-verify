@@ -90,7 +90,7 @@ export async function ingestAll(opts: { log?: Logger } = {}): Promise<IngestSumm
     // A Cosmos source ingests via SQS (subgraphUrlTemplate holds the SQS base URL); an EVM source via
     // GeckoTerminal (its network/dex slugs). The adapter is selected by chain inside ingestPoolPage.
     const ingestOpts = isCosmosRegistryChain(s.chain)
-      ? { sqsUrl: s.subgraphUrlTemplate }
+      ? { cosmosApiUrl: s.subgraphUrlTemplate }
       : { gtNetwork: gtNetworkFor(s), gtDex: gtDexFor(s) };
     for (let page = 1; page <= lastPage; page += 1) {
       const res = await ingestPoolPage(s.chain, s.dex, page, ingestOpts);

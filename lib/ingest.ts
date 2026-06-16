@@ -10,6 +10,7 @@
 // GeckoTerminal adapter directly; the page ingest is fully adapter-driven and is the path a Cosmos
 // source implements.
 
+import { astroportAdapter } from "./astroportAdapter";
 import { isCosmosRegistryChain } from "./cosmosRegistry";
 import { gtAdapter, normaliseGtPage, defaultPoolByAddressFetcher, defaultTokenPoolsFetcher, PoolByAddressFetcher, PoolPageFetcher, TokenPoolsFetcher } from "./gtAdapter";
 import { IngestAdapter, NormalisedPool, NormalisedToken, PoolFacts } from "./ingestAdapter";
@@ -21,10 +22,16 @@ import { runVerdictForPair } from "./verdictRunner";
 
 const nowS = (): number => Math.floor(Date.now() / 1000);
 
-// Pick the ingest adapter for a chain: the Osmosis SQS adapter for a Cosmos chain, the
-// GeckoTerminal/EVM adapter otherwise. The only place the orchestrator needs to know more than one
-// source transport exists (#128).
-const adapterForChain = (chain: string): IngestAdapter => (isCosmosRegistryChain(chain) ? sqsAdapter : gtAdapter);
+// The ingest adapter per Cosmos chain — each uses its own DEX's REST API (Osmosis→SQS,
+// Neutron→Astroport). Adding a Cosmos chain is one entry here + its chain-registry mapping.
+const cosmosAdapters: Record<string, IngestAdapter> = {
+  osmosis: sqsAdapter,
+  neutron: astroportAdapter,
+};
+
+// Pick the ingest adapter for a chain: a Cosmos chain's REST adapter, or the GeckoTerminal/EVM adapter
+// otherwise. The only place the orchestrator needs to know more than one source transport exists (#128).
+const adapterForChain = (chain: string): IngestAdapter => cosmosAdapters[chain] ?? gtAdapter;
 
 // --- source-neutral persistence ------------------------------------------
 
@@ -206,8 +213,8 @@ export async function ingestPoolPage(
     poolFetcher?: PoolPageFetcher;
     gtNetwork?: string;
     gtDex?: string;
-    // Cosmos (SQS) transport hints, read only by the SQS adapter.
-    sqsUrl?: string;
+    // Cosmos REST transport hints, read only by a Cosmos adapter (SQS / Astroport).
+    cosmosApiUrl?: string;
     poolsFetcher?: unknown;
     pricesFetcher?: unknown;
   } = {},
@@ -230,7 +237,7 @@ export async function ingestPoolPage(
     gtNetwork: opts.gtNetwork ?? chain,
     gtDex: opts.gtDex ?? dex,
     poolFetcher: opts.poolFetcher,
-    sqsUrl: opts.sqsUrl,
+    cosmosApiUrl: opts.cosmosApiUrl,
     poolsFetcher: opts.poolsFetcher,
     pricesFetcher: opts.pricesFetcher,
     minLiquidityCap,

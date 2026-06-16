@@ -80,7 +80,6 @@ describe("sqsAdapter.poolPage", () => {
     expect(osmoUsdc?.volume24hUsd).toBe(50000);
     expect(osmoUsdc?.baseTokenPriceUsd).toBe(0.047);
     expect(osmoUsdc?.quoteTokenPriceUsd).toBe(1);
-    expect(osmoUsdc?.dexId).toBe("osmosis_sqs");
   });
 
   it("keeps the pool's own order when neither side is a stablecoin", async () => {

@@ -82,9 +82,10 @@ export type PoolPageRequest = {
   gtNetwork?: string;
   gtDex?: string;
   poolFetcher?: unknown;
-  // Cosmos (SQS) transport hints — read only by the Cosmos adapter, ignored by the EVM one. Typed
-  // loosely (the fetchers are `unknown`) to keep this seam free of any SQS shape; the adapter casts.
-  sqsUrl?: string;
+  // Cosmos REST transport hints — read only by a Cosmos adapter (SQS / Astroport), ignored by the EVM
+  // one. cosmosApiUrl is the source's REST API base; the fetchers are injectable test stubs, typed
+  // loosely (`unknown`) so this seam carries no SQS/Astroport shape — the adapter casts to its own.
+  cosmosApiUrl?: string;
   poolsFetcher?: unknown;
   pricesFetcher?: unknown;
   // The source's curation floor (USD) — bounds the SQS pool-discovery fetch to the eligible set.
