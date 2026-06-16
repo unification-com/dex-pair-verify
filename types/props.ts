@@ -17,6 +17,8 @@ export type PairProps = {
         txCount: number;
         status: TokenPairStatus;
         coingeckoCoinId: string;
+        isScamFlagged: boolean;
+        scamReason: string;
     } | null;
     token1: {
         id: string;
@@ -25,6 +27,8 @@ export type PairProps = {
         txCount: number;
         status: TokenPairStatus;
         coingeckoCoinId: string;
+        isScamFlagged: boolean;
+        scamReason: string;
     } | null;
     reserveUsd: number;
     reserve0: number;

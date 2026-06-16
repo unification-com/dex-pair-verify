@@ -260,6 +260,16 @@ describe("evaluatePair", () => {
     expect(r.canonicalKey).toBe("usd-coin:weth");
   });
 
+  it("floors confidence to 0 on a scam-flagged pair (a honeypot passes the fences but is not trusted)", () => {
+    // The SAME otherwise-clean pair that scores 1.0 above — only the scam flag differs. It routes to
+    // review AND its confidence is floored, so the score never reads high on a flagged pair.
+    const r = evaluatePair(makePair(), makeCtx({ tokenScamFlagged: true }));
+    expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
+    expect(r.reasonCode).toBe(VERDICT_REASON.scamFlagged);
+    expect(r.confidence).toBe(0);
+    expect(r.evidence.fenceConfidence).toBe(1); // the fences still pass — the floor is the scam overlay
+  });
+
   it("routes a Uniswap v4 hooked pool to review (never auto-verifies, even when otherwise clean)", () => {
     const r = evaluatePair(makePair(), makeCtx({ hookedPool: true }));
     expect(r.verdict).toBe(TokenPairStatus.NeedsReview);

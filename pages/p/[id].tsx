@@ -22,13 +22,14 @@ import Icon from "../../components/ui/Icon";
 import KV from "../../components/ui/KV";
 import PageHeader from "../../components/ui/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
+import TokenStatusBadge from "../../components/ui/TokenStatusBadge";
 import { deriveFences, UiFence } from "../../lib/fences";
 import { num as fmtNum } from "../../lib/format";
 import { isOperatorCtx } from "../../lib/operatorGate";
 import prisma from '../../lib/prisma';
 import { publicPairDetailSelect } from "../../lib/publicSelect";
 import { isStatus, isVerifiedStatus, VERIFIED_STATUSES } from "../../lib/status";
-import { REASON_LABEL } from "../../lib/statusMeta";
+import { REASON_LABEL, REASON_TONE } from "../../lib/statusMeta";
 import { evaluatePair } from "../../lib/verdict";
 import { buildVerdictContext, PairWithTokens } from "../../lib/verdictRunner";
 import { PairProps } from "../../types/props";
@@ -155,8 +156,8 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const pair = await prisma.pair.findUnique({
     where: { id },
     include: {
-      token0: { select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true, coingeckoCoinId: true } },
-      token1: { select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true, coingeckoCoinId: true } },
+      token0: { select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true, coingeckoCoinId: true, isScamFlagged: true, scamReason: true } },
+      token1: { select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true, coingeckoCoinId: true, isScamFlagged: true, scamReason: true } },
       duplicatePairs: { select: { duplicatePair: true } },
     },
   });
@@ -368,6 +369,9 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
   }, [q, qIndex, bothTokensVerified]);
 
   const reasonLabel = REASON_LABEL[props.verdict.reasonCode] || props.verdict.reason || props.verdict.reasonCode;
+  // Tone the Verdict chip: a negative reason (scam / impostor / reject) reads red, a needs-review one
+  // amber, a positive one green; an unmapped code stays neutral.
+  const reasonTone = REASON_TONE[props.verdict.reasonCode] || "neutral";
 
   // Confidence maths: it's the share of SCORED (non-skipped) fence weight that
   // passed. Surfaced so the operator can see how the number was reached.
@@ -411,9 +415,10 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
               <div className="card card-pad token-card" key={`tok_${i}`}>
                 <div className="row spread items-center">
                   <span className="eyebrow">Token {i}</span>
-                  <StatusBadge status={t.status} size="sm" />
+                  <TokenStatusBadge status={t.status} scamFlagged={t.isScamFlagged} scamReason={t.scamReason} size="sm" />
                 </div>
                 <div className="tok-sym">{t.symbol}</div>
+                {t.isScamFlagged ? <p style={{ margin: "var(--sp-2) 0 0", color: "var(--fail)", fontSize: "0.85em" }} title={t.scamReason}>⚠ {t.scamReason || "flagged on a scam list"}</p> : null}
                 <KV k="Address" v={<ExplorerUrl chain={props.pair.chain} contractAddress={t.contractAddress} linkType={"token"} />} />
                 <KV k="CoinGecko" v={<CoinGeckoCoinLink coingeckoId={t.coingeckoCoinId} />} />
                 <KV k="Tx count" v={num(t.txCount)} />
@@ -441,7 +446,7 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
         <aside className="pair-rail">
           <div className="card card-pad rail-card">
             <span className="eyebrow">Verdict</span>
-            <div className="reason-chip mono">{props.verdict.reasonCode}</div>
+            <div className={`reason-chip mono tone-${reasonTone}`}>{props.verdict.reasonCode}</div>
             <p className="reason-label">{reasonLabel}</p>
             {heldOn.length > 0 && (
               <div className="held-on">
@@ -453,10 +458,12 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
             <ConfidenceMeter value={props.verdict.confidence} threshold={props.autoVerifyBar} />
             <details className="conf-breakdown">
               <summary>How is this computed?</summary>
-              <div className="cb-formula mono">{passedW} / {totalW} scored weight{props.verdict.confidence != null ? ` = ${Math.round(props.verdict.confidence * 100)}%` : ""}</div>
+              {props.signals.scamFlagged
+                ? <div className="cb-formula mono">scam-flagged → confidence floored to 0% (fences: {passedW}/{totalW})</div>
+                : <div className="cb-formula mono">{passedW} / {totalW} scored weight{props.verdict.confidence != null ? ` = ${Math.round(props.verdict.confidence * 100)}%` : ""}</div>}
               <p className="cb-note muted">
                 Each fence carries a weight; confidence is the share of <em>scored</em> weight that passed.
-                {skippedN > 0 ? ` ${skippedN} skipped (unknown input).` : ""} An operator “Verify” sets it to 100%.{" "}
+                {skippedN > 0 ? ` ${skippedN} skipped (unknown input).` : ""} A scam-list flag floors it to 0%. An operator “Verify” sets it to 100%.{" "}
                 <Link href="/help"><a>Scoring guide →</a></Link>
               </p>
               <div className="cb-list">
@@ -523,6 +530,9 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
         .raw { padding: var(--sp-4) var(--sp-5); }
         .raw > summary { cursor: pointer; font-weight: 600; font-size: var(--fs-sm); color: var(--text-1); }
         .reason-chip { align-self: flex-start; font-size: var(--fs-xs); padding: 2px 8px; border: 1px solid var(--border-strong); border-radius: var(--r-pill); color: var(--text-1); }
+        .reason-chip.tone-fail { color: var(--fail); border-color: var(--fail-line); background: var(--fail-dim); }
+        .reason-chip.tone-warn { color: var(--warn); border-color: var(--warn-line); background: var(--warn-dim); }
+        .reason-chip.tone-pass { color: var(--pass); border-color: var(--pass-line); background: var(--pass-dim); }
         .reason-label { margin: 0; font-size: var(--fs-md); color: var(--text-0); }
         .held-on { display: flex; flex-direction: column; gap: 2px; padding: var(--sp-2) var(--sp-3); border-radius: var(--r-sm, 6px); border: 1px solid var(--warn-line, var(--warn)); background: var(--warn-dim, rgba(245,184,61,.1)); }
         .held-label { text-transform: uppercase; letter-spacing: .04em; font-weight: 600; font-size: 10px; color: var(--warn); }

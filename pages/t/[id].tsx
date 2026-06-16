@@ -17,6 +17,7 @@ import Icon from "../../components/ui/Icon";
 import KV from "../../components/ui/KV";
 import PageHeader from "../../components/ui/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
+import TokenStatusBadge from "../../components/ui/TokenStatusBadge";
 import { usd, num as fmtNum, ageStr } from "../../lib/format";
 import { isOperatorCtx } from "../../lib/operatorGate";
 import { OrganicitySummary, summariseOrganicity } from "../../lib/organicity";
@@ -267,7 +268,7 @@ const OperatorToken: React.FC<OperatorProps> = (props) => {
         { key: "symbol", label: "Symbol", sortable: true, render: (tk) => <span style={{ fontWeight: 600 }}>{tk.symbol}</span> },
         { key: "name", label: "Name", sortable: true },
         { key: "coingeckoCoinId", label: "CG ID", render: (tk) => <CoinGeckoCoinLink coingeckoId={tk.coingeckoCoinId} /> },
-        { key: "status", label: "Status", render: (tk) => <StatusBadge status={tk.status} size="sm" /> },
+        { key: "status", label: "Status", render: (tk) => <TokenStatusBadge status={tk.status} scamFlagged={tk.isScamFlagged} scamReason={tk.scamReason} size="sm" /> },
     ]
     const similarCols: Column<TokenProps>[] = [
         { key: "chain", label: "Chain", render: (tk) => <ChainName chain={tk.chain} /> },
@@ -286,7 +287,7 @@ const OperatorToken: React.FC<OperatorProps> = (props) => {
         <Layout crumb="Token">
             <PageHeader
                 title={t.symbol}
-                badge={<StatusBadge status={currentStatus} method={t.verificationMethod} />}
+                badge={<TokenStatusBadge status={currentStatus} scamFlagged={t.isScamFlagged} scamReason={t.scamReason} method={t.verificationMethod} />}
                 sub={<span className="row gap-3 wrap items-center">
                     {t.name} · <ChainName chain={t.chain} /> ·{" "}
                     <ExplorerUrl chain={t.chain} contractAddress={t.contractAddress} linkType={"token"} /> ·{" "}

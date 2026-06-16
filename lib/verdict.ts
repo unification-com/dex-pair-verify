@@ -475,11 +475,18 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   };
 
   const allFences = Object.values(f);
-  const confidence = computeConfidence(allFences);
+  const fenceConfidence = computeConfidence(allFences);
+  // A scam-list flag (honeypot / GoPlus) is a hard trust failure the structural fences do NOT capture —
+  // a well-built honeypot still passes identity + liquidity + factory, so the fence confidence can read
+  // ~100%. Floor the confidence to 0 on a flagged pair so the score never contradicts the scam signal
+  // (the pair is already routed to review at step 3b below).
+  const confidence = ctx.tokenScamFlagged ? 0 : fenceConfidence;
 
   const evidence: Record<string, number | string | boolean> = {
     canonicalKey: ctx.canonicalKey ?? "none",
     confidence,
+    fenceConfidence,
+    scamFlagged: ctx.tokenScamFlagged,
     reserveUsd: pair.reserveUsd,
     phantomLiquidity,
     subgraphAbsent: ctx.subgraphAbsent,

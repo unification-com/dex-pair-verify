@@ -35,6 +35,32 @@ export const REASON_LABEL: Record<string, string> = {
   canonicalImpostor: "Token address ≠ canonical (possible impostor)",
   siblingVouched: "Vouched by a verified cross-source sibling",
   priceDeviation: "CG/DEX price deviation exceeds tolerance",
+  unidentifiedThinPool: "Unidentified token in a sub-floor pool",
+  hookedPool: "Uniswap v4 hooked pool (price not yet trusted)",
+  subgraphAbsent: "Not found in the pricing subgraph (possible phantom)",
   highConfidence: "All fences passed with high confidence",
+  canonicalConfirmed: "Token addresses confirmed canonical",
   belowAutoVerifyBar: "Meets some fences, below the auto-verify bar",
+};
+
+// Tone for each verdict reason — colours the pair-page Verdict chip so a negative reason (scam,
+// impostor, reject, factory/price problem) reads red, a needs-review reason amber, and a positive one
+// green. Unmapped codes fall back to neutral (the chip's default look).
+export const REASON_TONE: Record<string, Tone> = {
+  scamFlagged: "fail",
+  canonicalImpostor: "fail",
+  intraChainImpostorLoser: "fail",
+  liquidityBelowHardFloor: "fail",
+  decimalsBogus: "fail",
+  unidentifiedThinPool: "fail",
+  phantomLiquidity: "fail",
+  factoryMismatch: "fail",
+  priceDeviation: "fail",
+  notIdentified: "warn",
+  hookedPool: "warn",
+  subgraphAbsent: "warn",
+  belowAutoVerifyBar: "warn",
+  highConfidence: "pass",
+  canonicalConfirmed: "pass",
+  siblingVouched: "pass",
 };
