@@ -9,7 +9,7 @@ import Layout from "../components/shell/Layout"
 import DataTable, { Column } from "../components/ui/DataTable";
 import PageHeader from "../components/ui/PageHeader";
 import SearchBox from "../components/ui/SearchBox";
-import StatusBadge from "../components/ui/StatusBadge";
+import TokenStatusBadge from "../components/ui/TokenStatusBadge";
 import { usd, num } from "../lib/format";
 import { isOperatorCtx } from "../lib/operatorGate";
 import prisma from '../lib/prisma';
@@ -92,14 +92,17 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
       }
     : {}
 
-  // Public visitors get a read-only listing of VERIFIED tokens only.
+  // Public visitors get a read-only listing of VERIFIED tokens only. Scam-flagged tokens are excluded
+  // outright: a token's status can read AutoVerified while a later scam pass flagged it (the promotion
+  // is forward-only), so without this a honeypot would leak into the public verified list — and the
+  // public select carries no scam fields to warn with. So filter them out rather than show them.
   if (!operator) {
-    const where = { status: { in: [...VERIFIED_STATUSES] }, ...(chain ? { chain } : {}), ...search }
+    const where = { status: { in: [...VERIFIED_STATUSES] }, isScamFlagged: false, ...(chain ? { chain } : {}), ...search }
     const [rows, agg, chainGroups] = await Promise.all([
       // Public list: identity columns only (no scam internals).
       prisma.token.findMany({ where, select: publicTokenListSelect }),
       tokenAggregates(),
-      prisma.token.groupBy({ by: ['chain'], where: { status: { in: [...VERIFIED_STATUSES] } }, _count: { _all: true } }),
+      prisma.token.groupBy({ by: ['chain'], where: { status: { in: [...VERIFIED_STATUSES] }, isScamFlagged: false }, _count: { _all: true } }),
     ])
     const all = enrich(rows as RawToken[], agg.liq, agg.cnt).sort((a, b) => compareTokens(a, b, sortKey, sortDir))
     const chains = Array.from(new Set(chainGroups.map((g) => g.chain))).sort()
@@ -201,7 +204,7 @@ const baseTokenCols = (): Column<ListToken>[] => [
     },
     { key: "liquidityUsd", label: "Liquidity", num: true, sortable: true, render: (t) => usd(t.liquidityUsd) },
     { key: "poolCount", label: "Pools", num: true, sortable: true, render: (t) => num(t.poolCount) },
-    { key: "status", label: "Status", render: (t) => <StatusBadge status={t.status} size="sm" /> },
+    { key: "status", label: "Status", render: (t) => <TokenStatusBadge status={t.status} scamFlagged={t.isScamFlagged} scamReason={t.scamReason} size="sm" /> },
 ];
 
 const PublicTokens: React.FC<PublicProps> = (props) => {

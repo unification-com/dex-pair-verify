@@ -53,7 +53,10 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   // Public: read-only view of VERIFIED tokens only. Anything else is 404 to anon.
   if (!operator) {
     const token = await prisma.token.findFirst({
-      where: { id, status: { in: [...VERIFIED_STATUSES] } },
+      // Exclude scam-flagged tokens: a stale AutoVerified status (the promotion is forward-only and a
+      // later scam pass never demotes it) would otherwise render a honeypot's public detail as verified,
+      // and the public select carries no scam fields to warn with — so 404 it instead.
+      where: { id, status: { in: [...VERIFIED_STATUSES] }, isScamFlagged: false },
       // Explicit public select — never an un-`select`-ed row, which would ship the
       // scam/identity internals into __NEXT_DATA__. Pools use the confidence-free
       // lite select (no verdict drivers).

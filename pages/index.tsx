@@ -40,7 +40,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   if (!(await isOperatorCtx(ctx))) {
     const [verifiedPairs, verifiedTokens, supported, verifiedSourceGroups] = await Promise.all([
       prisma.pair.count({ where: { status: { in: [...VERIFIED_STATUSES] } } }),
-      prisma.token.count({ where: { status: { in: [...VERIFIED_STATUSES] } } }),
+      prisma.token.count({ where: { status: { in: [...VERIFIED_STATUSES] }, isScamFlagged: false } }), // exclude scam-flagged (stale-AutoVerified) tokens from the public count
       prisma.supportedSource.findMany({ select: { chain: true, dex: true }, orderBy: [{ chain: 'asc' }, { dex: 'asc' }] }),
       prisma.pair.groupBy({ by: ['chain', 'dex'], where: { status: { in: [...VERIFIED_STATUSES] } }, _count: { _all: true } }),
     ]);
