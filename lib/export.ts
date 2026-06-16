@@ -8,6 +8,7 @@
 
 import { Prisma } from "@prisma/client";
 
+import { buildAliasExport, ExportAliasGroup, ExportAliasPair } from "./aliasExport";
 import { chainInfo } from "./chains";
 import prisma from "./prisma";
 import { VERIFIED_STATUSES } from "./status";
@@ -156,6 +157,11 @@ export type ExportManifestV3 = {
   schemaVersion: number;
   generatedAt: number;
   supportedSources: ManifestSource[];
+  // Asset-class aliases (T13 → go-ooo S7). aliasGroups = the curated fungible classes (symbol → member
+  // cg ids); aliasPairs = the active cross-class pairs (e.g. "ETH.USD") + the canonical keys that back
+  // them. Additive — an older go-ooo ignores these and prices exact pairs only.
+  aliasGroups: ExportAliasGroup[];
+  aliasPairs: ExportAliasPair[];
 };
 
 // The decentralised network is the paid (per-query-billed) tier; Studio / hosted /
@@ -190,11 +196,13 @@ const parseAdditionalEndpoints = (raw: Prisma.JsonValue | null): ManifestEndpoin
 // schema families it can't price (logs a warning), so a forward-compat family
 // doesn't break an old binary.
 export async function buildExportManifestV3(opts: { now?: number } = {}): Promise<ExportManifestV3> {
-  const [sources, verifiedGroups, modifiedGroups] = await Promise.all([
+  const [sources, verifiedGroups, modifiedGroups, aliases] = await Promise.all([
     prisma.supportedSource.findMany({ orderBy: [{ chain: "asc" }, { dex: "asc" }] }),
     prisma.pair.groupBy({ by: ["chain", "dex"], where: { status: { in: VERIFIED } }, _count: { _all: true } }),
     // Modified-time over ALL pairs (see pairsModifiedAt) so a demotion counts.
     prisma.pair.groupBy({ by: ["chain", "dex"], _max: { lastChecked: true, verdictAt: true } }),
+    // Asset-class aliases (T13) — curated groups + the active alias-pairs they back.
+    buildAliasExport(),
   ]);
 
   const countByKey = new Map<string, number>();
@@ -233,6 +241,8 @@ export async function buildExportManifestV3(opts: { now?: number } = {}): Promis
     schemaVersion: EXPORT_MANIFEST_SCHEMA_VERSION,
     generatedAt: opts.now ?? nowSeconds(),
     supportedSources,
+    aliasGroups: aliases.aliasGroups,
+    aliasPairs: aliases.aliasPairs,
   };
 }
 

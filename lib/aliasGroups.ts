@@ -25,7 +25,7 @@ export const ALIAS_GROUPS: Record<string, string[]> = {
   // that CoinGecko gives a DISTINCT coin id (same-id variants like USDC.e→usd-coin already collapse via
   // the canonical key, so they need no listing here).
   USD: [
-    "usd-coin", "tether", "dai", "true-usd", "paypal-usd", "liquity-usd", "usds",
+    "usd-coin", "tether", "dai", "paypal-usd", "liquity-usd", "usds",
     // USDC bridged/chain variants with their own cg id:
     "usd-coin-ethereum-bridged", "bridged-usd-coin-base", "bridged-usd-coin-optimism",
     "bridged-usdc-polygon-pos-bridge", "binance-bridged-usdc-bnb-smart-chain",
@@ -80,3 +80,20 @@ export const aliasForCgId = (cgId: string | null | undefined): string | null =>
 
 // The member cg ids of an alias class, or [] for a non-alias symbol.
 export const membersOfAlias = (symbol: string): string[] => ALIAS_GROUPS[symbol.trim().toUpperCase()] ?? [];
+
+// Given a pair's canonicalKey (`cgA:cgB`, the order-independent CoinGecko-id pair from lib/canonical.ts),
+// return the sorted alias-pair it backs (e.g. `ETH.USD`), or null when it is NOT a cross-class alias
+// pair — one side isn't a curated member, or both sides are in the same class (e.g. a USDC/USDT pool is
+// USD↔USD, not a queryable alias pair). Used to derive the active alias-pairs for the export.
+export function aliasPairForCanonicalKey(canonicalKey: string): string | null {
+  const parts = canonicalKey.split(":");
+  if (parts.length !== 2) {
+    return null;
+  }
+  const a = aliasForCgId(parts[0]);
+  const b = aliasForCgId(parts[1]);
+  if (!a || !b || a === b) {
+    return null;
+  }
+  return [a, b].sort().join(".");
+}

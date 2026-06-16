@@ -3,7 +3,7 @@
 // plus the no-overlap invariant.
 import { describe, expect, it } from "vitest";
 
-import { ALIAS_GROUPS, aliasForCgId, isAliasSymbol, membersOfAlias } from "../../lib/aliasGroups";
+import { ALIAS_GROUPS, aliasForCgId, aliasPairForCanonicalKey, isAliasSymbol, membersOfAlias } from "../../lib/aliasGroups";
 
 describe("aliasGroups", () => {
   it("maps fungible members to their class", () => {
@@ -49,6 +49,19 @@ describe("aliasGroups", () => {
     expect(membersOfAlias("BTC")).toContain("bitcoin");
     expect(membersOfAlias("BTC")).toContain("wrapped-bitcoin");
     expect(membersOfAlias("NOPE")).toEqual([]);
+  });
+
+  it("derives the cross-class alias-pair a canonical key backs", () => {
+    expect(aliasPairForCanonicalKey("ethereum:usd-coin")).toBe("ETH.USD");
+    expect(aliasPairForCanonicalKey("tether:weth")).toBe("ETH.USD"); // sorted regardless of cg order
+    expect(aliasPairForCanonicalKey("bitcoin:usd-coin")).toBe("BTC.USD");
+    expect(aliasPairForCanonicalKey("weth:wrapped-bitcoin")).toBe("BTC.ETH"); // alias symbols sorted
+  });
+
+  it("returns null for non-alias-pair canonical keys", () => {
+    expect(aliasPairForCanonicalKey("tether:usd-coin")).toBeNull();   // both USD — same class, not a pair
+    expect(aliasPairForCanonicalKey("ethereum:some-random-token")).toBeNull(); // one side unmapped
+    expect(aliasPairForCanonicalKey("just-one-part")).toBeNull();     // malformed
   });
 
   it("holds the no-overlap invariant (no cg id in two classes)", () => {
