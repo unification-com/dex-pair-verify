@@ -12,6 +12,7 @@ import { fetchHoneypot, HoneypotResult } from "./honeypot";
 import { makePacedFetch } from "./httpBackoff";
 import prisma from "./prisma";
 import { VERIFIED_STATUSES } from "./status";
+import { demoteScamFlaggedTokens } from "./tokenStatus";
 import { runVerdictForPair } from "./verdictRunner";
 import { TokenPairStatus } from "../types/types";
 
@@ -220,6 +221,8 @@ export async function runScamCheckForToken(
         demotedPairs += 1;
       }
     }
+    // Demote the token itself out of AutoVerified — the forward-only promotion never would.
+    await demoteScamFlaggedTokens([token.id]);
   }
 
   return { checked: true, flagged, reasons, demotedPairs, honeypot };
@@ -282,6 +285,11 @@ export async function rescoreScamForToken(
   });
   for (const p of pairs) {
     await runVerdictForPair(p.id, { now });
+  }
+  // A newly-flagged token is demoted out of AutoVerified; a cleared one re-promotes via the re-verify
+  // above (promoteTokensToVerified now skips a still-flagged token, so only a genuinely cleared one does).
+  if (flagged) {
+    await demoteScamFlaggedTokens([token.id]);
   }
 
   return { changed: true, flagged, affectedPairs: pairs.length };

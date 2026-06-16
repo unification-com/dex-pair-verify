@@ -19,6 +19,7 @@ import {
 } from "./scamCheck";
 import { runSecurityScanForToken } from "./securitySignals";
 import { getSources, gtDexFor, gtNetworkFor, isIngestableSource } from "./sourceConfig";
+import { demoteScamFlaggedTokens } from "./tokenStatus";
 import { runVerdictForPair } from "./verdictRunner";
 
 export type Logger = (msg: string) => void;
@@ -279,7 +280,7 @@ export async function reviewEnrichPass(opts: { log?: Logger } = {}): Promise<Rev
   return { total, scanned, flagged };
 }
 
-export type RevalidateSummary = { count: number; tallies: Record<string, number> };
+export type RevalidateSummary = { count: number; tallies: Record<string, number>; scamTokensDemoted: number };
 export async function revalidatePass(opts: { log?: Logger } = {}): Promise<RevalidateSummary> {
   const log = opts.log ?? noop;
   const now = nowS();
@@ -295,5 +296,12 @@ export async function revalidatePass(opts: { log?: Logger } = {}): Promise<Reval
       log(`[revalidate] …${done}/${pairs.length}`);
     }
   }
-  return { count: pairs.length, tallies };
+  // Catch-up demotion: the forward-only promotion can leave a scam-flagged token in AutoVerified (it was
+  // verified before a later scam pass flagged it), and re-running the pair verdicts above never demotes
+  // the token itself — so sweep them out of AutoVerified here.
+  const scamTokensDemoted = await demoteScamFlaggedTokens();
+  if (scamTokensDemoted > 0) {
+    log(`[revalidate] demoted ${scamTokensDemoted} scam-flagged token(s) out of AutoVerified`);
+  }
+  return { count: pairs.length, tallies, scamTokensDemoted };
 }

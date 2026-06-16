@@ -16,6 +16,9 @@ const main = async (): Promise<void> => {
   for (const [verdict, count] of Object.entries(s.tallies).sort((a, b) => b[1] - a[1])) {
     console.log(`  ${verdict.padEnd(20)} ${count}`);
   }
+  if (s.scamTokensDemoted > 0) {
+    console.log(`Demoted ${s.scamTokensDemoted} scam-flagged token(s) out of AutoVerified → NeedsReview.`);
+  }
 };
 
 main()
