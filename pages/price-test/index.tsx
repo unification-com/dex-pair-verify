@@ -11,8 +11,8 @@ import PageHeader from "../../components/ui/PageHeader";
 // (anonymous visitors get 7-day-cached prices; the page itself is just a form).
 const PriceTestIndex: React.FC = () => {
   const router = useRouter();
-  const [base, setBase] = useState("WETH");
-  const [target, setTarget] = useState("USDC");
+  const [base, setBase] = useState("ETH");
+  const [target, setTarget] = useState("USD");
 
   const go = (e: FormEvent) => {
     e.preventDefault();
@@ -27,12 +27,12 @@ const PriceTestIndex: React.FC = () => {
       <form onSubmit={go} className="card card-pad" style={{ display: "flex", gap: "var(--sp-4)", alignItems: "flex-end", flexWrap: "wrap", maxWidth: 520 }}>
         <label className="col gap-2">
           <span className="eyebrow">Base</span>
-          <input className="input" value={base} onChange={(e) => setBase(e.target.value)} placeholder="WETH" />
+          <input className="input" value={base} onChange={(e) => setBase(e.target.value)} placeholder="ETH" />
         </label>
         <span style={{ paddingBottom: 8, color: "var(--text-2)" }}>→</span>
         <label className="col gap-2">
           <span className="eyebrow">Target</span>
-          <input className="input" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="USDC" />
+          <input className="input" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="USD" />
         </label>
         <button type="submit" className="btn btn-primary"><Icon name="price" size={14} />Run test</button>
       </form>
