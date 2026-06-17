@@ -78,14 +78,14 @@ const round4 = (n: number): number => Math.round(n * 1e4) / 1e4;
 // DEMOTION still advances the signal — the demoted pair carries the change
 // timestamp but is no longer verified, so a verified-only max would miss it and
 // a polling go-ooo would keep serving the delisted pair on a stale 304.
-const pairsModifiedAt = async (where: Prisma.PairWhereInput): Promise<number> => {
+export const pairsModifiedAt = async (where: Prisma.PairWhereInput): Promise<number> => {
   const agg = await prisma.pair.aggregate({ where, _max: { lastChecked: true, verdictAt: true } });
   return Math.max(agg._max.lastChecked ?? 0, agg._max.verdictAt ?? 0);
 };
 
 // The export-ready trust score: operator-vouched pairs are max trust; otherwise
 // the engine confidence (null → 0, e.g. a legacy verified pair never re-run).
-const trustScore = (status: string, confidence: number | null): number =>
+export const trustScore = (status: string, confidence: number | null): number =>
   status === TokenPairStatus.ManualVerified ? 1 : round4(confidence ?? 0);
 
 // Build the export for one (chain, dex): every verified pair, highest liquidity
