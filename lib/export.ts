@@ -29,6 +29,10 @@ export type ExportTokenV2 = {
   symbol: string;
   name: string;
   contractAddress: string;
+  // CoinGecko coin id (or "" if unidentified). go-ooo needs the per-token cg id to orient an alias
+  // query (S7): the token whose cg id is in the base-alias class is the base side. canonicalKey alone
+  // is cg-id-SORTED so it can't tell you which of token0/token1 is which class.
+  coingeckoCoinId: string;
 };
 
 export type ExportPairV2 = {
@@ -95,8 +99,8 @@ export async function buildExportV2(
     prisma.pair.findMany({
       where: { chain, dex, status: { in: VERIFIED } },
       include: {
-        token0: { select: { chain: true, symbol: true, name: true, contractAddress: true } },
-        token1: { select: { chain: true, symbol: true, name: true, contractAddress: true } },
+        token0: { select: { chain: true, symbol: true, name: true, contractAddress: true, coingeckoCoinId: true } },
+        token1: { select: { chain: true, symbol: true, name: true, contractAddress: true, coingeckoCoinId: true } },
       },
       orderBy: [{ reserveUsd: "desc" }],
     }),
