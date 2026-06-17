@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 
+import { clientIp } from "../../../../lib/clientIp";
 import { fetchPoolPrices } from "../../../../lib/priceFetch";
 import prisma from "../../../../lib/prisma";
 import { rateLimit } from "../../../../lib/rateLimit";
@@ -16,12 +17,6 @@ const CACHE_TTL_S = 7 * 24 * 3600; // 7 days
 const RATE_LIMIT = 60; // requests
 const RATE_WINDOW_MS = 60_000; // per minute, per IP
 const MAX_ADDRESSES = 25; // bound the subgraph query size
-
-const clientIp = (req: NextApiRequest): string => {
-  const fwd = req.headers["x-forwarded-for"];
-  if (typeof fwd === "string" && fwd.length > 0) return fwd.split(",")[0].trim();
-  return req.socket?.remoteAddress ?? "anon";
-};
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") {

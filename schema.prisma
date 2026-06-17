@@ -432,3 +432,35 @@ model PriceCache {
 
   @@index([fetchedAt])
 }
+
+// Provider auth (T8): the one-time, address+chain-bound challenge a go-ooo provider signs to prove it
+// controls a wallet registered on the OoO Router. Single-use (consumedAt set on verify), short TTL.
+model ProviderChallenge {
+  id         String @id @default(cuid())
+  address    String // lowercased provider wallet
+  chainId    Int
+  nonce      String @unique
+  message    String // the exact EIP-191 text the provider signs
+  expiresAt  Int // unix seconds
+  consumedAt Int    @default(0) // 0 = unused; set on successful verify (single-use)
+  createdAt  Int    @default(0)
+
+  @@index([address])
+}
+
+// Provider auth (T8): an issued bearer token. Only sha256(token) is stored (like a password hash — a DB
+// read can't recover a live bearer); opaque + DB-backed for revocability. Short TTL; go-ooo re-auths on
+// expiry/401. `address` is the audit trail + the hook for future per-provider feed customisation.
+model ProviderToken {
+  id         String @id @default(cuid())
+  tokenHash  String @unique // sha256(bearer); the raw token is shown once on issue
+  address    String // lowercased provider wallet
+  chainId    Int
+  issuedAt   Int
+  expiresAt  Int
+  lastUsedAt Int    @default(0)
+  revokedAt  Int    @default(0) // 0 = live; operator break-glass revoke
+
+  @@index([address])
+  @@index([expiresAt])
+}

@@ -11,32 +11,14 @@
 import { utils as web3Utils } from "web3";
 
 import { chainInfo } from "../chains";
+import { defaultEthCall, type EthCaller } from "./ethCall";
+
+// Re-exported so existing importers (lib/factoryCheck.ts) keep their `./onchain/factory` import path.
+export type { EthCaller };
 
 // keccak256("factory()")[:4]
 const FACTORY_SELECTOR = "0xc45a0155";
 const ZERO_ADDRESS = /^0x0+$/;
-
-export type EthCaller = (rpcUrl: string, to: string, data: string) => Promise<string | null>;
-
-const defaultEthCall: EthCaller = async (rpcUrl, to, data) => {
-  try {
-    const res = await fetch(rpcUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to, data }, "latest"] }),
-    });
-    if (!res.ok) {
-      return null;
-    }
-    const json = await res.json();
-    if (json?.error || typeof json?.result !== "string") {
-      return null;
-    }
-    return json.result;
-  } catch {
-    return null;
-  }
-};
 
 // Decode a 32-byte ABI word into a checksummed address, or null when it doesn't
 // cleanly hold one (revert/empty `0x`, wrong length, or the zero address).

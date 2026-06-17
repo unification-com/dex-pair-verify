@@ -1,3 +1,4 @@
+import { clientIp } from "../../../../lib/clientIp";
 import { buildPublicPairsCatalogue, publicCatalogueLastModified } from "../../../../lib/export";
 import { rateLimit } from "../../../../lib/rateLimit";
 
@@ -12,14 +13,6 @@ import type { NextApiRequest, NextApiResponse } from "next";
 const RATE_LIMIT = 120; // requests
 const RATE_WINDOW_MS = 60_000; // per minute, per IP
 const MAX_AGE_S = 300; // 5-minute public cache
-
-const clientIp = (req: NextApiRequest): string => {
-  const fwd = req.headers["x-forwarded-for"];
-  if (typeof fwd === "string" && fwd.length > 0) {
-    return fwd.split(",")[0].trim();
-  }
-  return req.socket?.remoteAddress ?? "anon";
-};
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") {

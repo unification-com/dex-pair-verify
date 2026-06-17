@@ -82,6 +82,8 @@ const TABLES = [
   "CanonicalAddress",
   "SupportedSource",
   "CandidateDexNetwork",
+  "ProviderChallenge",
+  "ProviderToken",
 ];
 
 export async function resetDb(): Promise<void> {

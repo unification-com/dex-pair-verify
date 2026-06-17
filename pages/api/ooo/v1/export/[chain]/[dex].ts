@@ -1,5 +1,5 @@
 import {buildExportV2, exportLastModified} from "../../../../../../lib/export";
-import {checkBearerToken, parseBearer, tokenPrefix} from "../../../../../../lib/exportAuth";
+import {authoriseExport, parseBearer, tokenPrefix} from "../../../../../../lib/exportAuth";
 import {rateLimit} from "../../../../../../lib/rateLimit";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -15,7 +15,7 @@ export default async function handler(
 ) {
     const started = Date.now()
 
-    if (!checkBearerToken(req)) {
+    if (!(await authoriseExport(req, started))) {
         return res.status(401).json({ error: "unauthorised" })
     }
 
