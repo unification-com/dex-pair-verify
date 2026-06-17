@@ -5,10 +5,8 @@ import React from "react";
 import ThresholdPriceTest from "../../../components/PriceTest/ThresholdPriceTest";
 import Layout from "../../../components/shell/Layout";
 import PageHeader from "../../../components/ui/PageHeader";
+import { resolvePriceTestPairs } from "../../../lib/aliasResolve";
 import { isOperatorCtx } from "../../../lib/operatorGate";
-import prisma from "../../../lib/prisma";
-import { priceTestPairSelect } from "../../../lib/publicSelect";
-import { VERIFIED_STATUSES } from "../../../lib/status";
 import { buildThresholdMap, ThresholdMap } from "../../../lib/thresholds";
 import { PairProps } from "../../../types/props";
 
@@ -21,14 +19,10 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const base = String(params?.base);
   const target = String(params?.target);
 
-  const pairs = await prisma.pair.findMany({
-    where: {
-      OR: [{ pair: `${base}-${target}` }, { pair: `${target}-${base}` }],
-      status: { in: [...VERIFIED_STATUSES] },
-    },
-    // Price-test only needs market facts + pool/token ids — never verdict internals.
-    select: priceTestPairSelect,
-  });
+  // Resolve the backing pools: an exact symbol pair (WETH/USDC) OR — when both sides are curated
+  // alias classes (ETH/USD) — every fungible member pool of that class, the same expansion go-ooo S7
+  // does. Price-test only needs market facts + pool/token ids, never verdict internals.
+  const { pairs } = await resolvePriceTestPairs(base, target);
 
   const thresholds = await buildThresholdMap(pairs);
 

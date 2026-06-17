@@ -109,6 +109,8 @@ export const publicTokenListSelect = Prisma.validator<Prisma.TokenSelect>()({
 // public paths: a price simulation needs market facts + the pool address + the two
 // token FK ids, never the verdict internals — and the public path must not leak
 // them. Kept here so the "what may a price-test pool expose" answer lives in one place.
+// The two tokens' symbol + coingecko id are needed to ORIENT an asset-class alias query
+// (e.g. ETH/USD) onto each pool's real token symbols (both are already public on /t/[id]).
 export const priceTestPairSelect = Prisma.validator<Prisma.PairSelect>()({
   id: true,
   chain: true,
@@ -121,4 +123,6 @@ export const priceTestPairSelect = Prisma.validator<Prisma.PairSelect>()({
   sells24h: true,
   token0Id: true,
   token1Id: true,
+  token0: { select: { symbol: true, coingeckoCoinId: true } },
+  token1: { select: { symbol: true, coingeckoCoinId: true } },
 });

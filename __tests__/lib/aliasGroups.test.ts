@@ -3,7 +3,7 @@
 // plus the no-overlap invariant.
 import { describe, expect, it } from "vitest";
 
-import { ALIAS_GROUPS, aliasForCgId, aliasPairForCanonicalKey, isAliasSymbol, membersOfAlias } from "../../lib/aliasGroups";
+import { ALIAS_GROUPS, aliasForCgId, aliasPairForCanonicalKey, aliasPairLabel, isAliasSymbol, membersOfAlias, targetSideSymbol } from "../../lib/aliasGroups";
 
 describe("aliasGroups", () => {
   it("maps fungible members to their class", () => {
@@ -72,5 +72,44 @@ describe("aliasGroups", () => {
         seen.add(cg);
       }
     }
+  });
+});
+
+describe("aliasPairLabel", () => {
+  it("labels a query only when BOTH sides are alias classes — order/case-independent", () => {
+    expect(aliasPairLabel("ETH", "USD")).toBe("ETH.USD");
+    expect(aliasPairLabel("USD", "ETH")).toBe("ETH.USD"); // sorted regardless of query order
+    expect(aliasPairLabel("btc", "eth")).toBe("BTC.ETH"); // case-insensitive
+    expect(aliasPairLabel("USD", "BTC")).toBe("BTC.USD");
+  });
+
+  it("returns null when either side is a concrete token symbol", () => {
+    expect(aliasPairLabel("WETH", "USDC")).toBeNull(); // neither is a class
+    expect(aliasPairLabel("ETH", "WETH")).toBeNull(); // WETH is a token, not a class
+    expect(aliasPairLabel("ETH", "USDC")).toBeNull(); // mixed — go-ooo S7 needs both alias
+  });
+});
+
+describe("targetSideSymbol", () => {
+  const usdc = { symbol: "USDC", coingeckoCoinId: "usd-coin" };
+  const usdt = { symbol: "USDT", coingeckoCoinId: "tether" };
+  const weth = { symbol: "WETH", coingeckoCoinId: "weth" };
+
+  it("returns the query target verbatim for a non-alias (exact) query", () => {
+    expect(targetSideSymbol({ token0: weth, token1: usdc }, "USDC", false)).toBe("USDC");
+  });
+
+  it("orients an alias query to the pool's class token regardless of which side it sits on", () => {
+    // The bug: a literal "USD" never equals "USDC", so the old symbol-match defaulted every pool to
+    // one side. Orientation must follow the cg-id class, whichever index the dollar token holds.
+    expect(targetSideSymbol({ token0: usdc, token1: weth }, "USD", true)).toBe("USDC"); // USD at token0
+    expect(targetSideSymbol({ token0: weth, token1: usdc }, "USD", true)).toBe("USDC"); // USD at token1
+    expect(targetSideSymbol({ token0: weth, token1: usdt }, "USD", true)).toBe("USDT"); // a different stable
+    expect(targetSideSymbol({ token0: usdc, token1: weth }, "ETH", true)).toBe("WETH"); // target the ETH side
+  });
+
+  it("falls back to the query target when no token is in the class", () => {
+    expect(targetSideSymbol({ token0: weth, token1: usdc }, "BTC", true)).toBe("BTC");
+    expect(targetSideSymbol({ token0: null, token1: null }, "USD", true)).toBe("USD");
   });
 });

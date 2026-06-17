@@ -1,6 +1,7 @@
 import Link from "next/link";
 import React, { useEffect, useMemo, useState } from "react";
 
+import { aliasPairLabel, targetSideSymbol } from "../../lib/aliasGroups";
 import { usd, num as fmtNum, ageStr } from "../../lib/format";
 import {
     aggregatePrices,
@@ -26,6 +27,10 @@ type PoolPrice = {
     t1Id: string | null;
     pairName: string | null;
     reserveUsd: number;
+    // The pool's target-side symbol — the query target for an exact pair, or the pool's own
+    // dollar/ether/bitcoin token symbol for an alias-class query (so orientation survives whichever
+    // side that token sits on). See lib/aliasGroups.targetSideSymbol.
+    targetSymbol: string;
 };
 
 type ContractMap = Record<string, Record<string, string[]>>;
@@ -58,6 +63,14 @@ const PriceData: React.FC<{
     // Public path: prices come from the 7-day-cached /api/ooo/v1/prices; track the
     // oldest cache stamp across the (chain,dex) groups for the "cached" banner.
     const [cacheFetchedAt, setCacheFetchedAt] = useState<number | null>(null)
+    // Venues this EVM-subgraph preview can't price (Cosmos "custom" sources, or a temporarily-down
+    // subgraph). Non-fatal: the rest still aggregate. Important for alias queries, whose member pools
+    // can span Cosmos chains the live oracle prices but this preview does not.
+    const [skipped, setSkipped] = useState<{ chain: string; dex: string; error: string }[]>([])
+
+    // An asset-class query (both sides are curated alias classes, e.g. ETH/USD) — orient each pool by
+    // cg-id class membership rather than by matching the literal "USD"/"ETH" against a real symbol.
+    const isAlias = aliasPairLabel(base, target) !== null
 
     // Group contract addresses by (chain, dex). Memoised so the fetch effect's
     // dependency is stable.
@@ -96,16 +109,20 @@ const PriceData: React.FC<{
             let t1Id = null
             let pairName = null
             let reserveUsd = 0
+            let targetSymbol = target
             for (let i = 0; i < pairs.length; i += 1) {
                 const p = pairs[i]
                 // Case-insensitive identifier match — works for both EVM addresses and Cosmos denoms
                 // (toChecksumAddress would throw on a non-hex denom like factory/.../allBTC).
                 if (p.chain === c && p.dex === d && String(p.contractAddress).toLowerCase() === String(cAddr).toLowerCase()) {
                     pId = p.id; t0Id = p.token0Id; t1Id = p.token1Id; pairName = p.pair; reserveUsd = p.reserveUsd
+                    // For an alias query, the target side is this pool's own class token (USDC/USDT/…),
+                    // not the literal "USD"; for an exact query it stays the queried target symbol.
+                    targetSymbol = targetSideSymbol({ token0: p.token0, token1: p.token1 }, target, isAlias)
                     break
                 }
             }
-            return { pId, t0Id, t1Id, pairName, reserveUsd }
+            return { pId, t0Id, t1Id, pairName, reserveUsd, targetSymbol }
         }
 
         const fetchPromises = endpoints.map(endpoint => fetch(endpoint, { signal: controller.signal }));
@@ -114,12 +131,15 @@ const PriceData: React.FC<{
             .then(responses => Promise.all(responses.map(response => response.json())))
             .then(data => {
                 const pd: PoolPrice[] = []
-                const fetchErrors = []
+                // A failed (chain,dex) group is NON-fatal — skip it and keep aggregating the rest, so
+                // one unpriceable Cosmos venue (or a temporarily-down subgraph) can't wipe out the
+                // whole price test. Catastrophic failures are caught below and shown as a hard error.
+                const skips: { chain: string; dex: string; error: string }[] = []
                 for (let i = 0; i < data.length; i += 1) {
                     const d = data[i]
                     if (d.success) {
                         for (let j = 0; j < d.prices.length; j += 1) {
-                            const { pId, t0Id, t1Id, pairName, reserveUsd } = getPairInfo(d.prices[j].chain, d.prices[j].dex, d.prices[j].pairContractAddress)
+                            const { pId, t0Id, t1Id, pairName, reserveUsd, targetSymbol } = getPairInfo(d.prices[j].chain, d.prices[j].dex, d.prices[j].pairContractAddress)
                             pd.push({
                                 id: `price_${d.chain}_${d.dex}_${j}`,
                                 chain: d.chain,
@@ -128,19 +148,19 @@ const PriceData: React.FC<{
                                 token0Price: d.prices[j].token0Price,
                                 token1Symbol: d.prices[j].token1Symbol,
                                 token1Price: d.prices[j].token1Price,
-                                pId, t0Id, t1Id, pairName, reserveUsd,
+                                pId, t0Id, t1Id, pairName, reserveUsd, targetSymbol,
                             })
                         }
                     } else {
-                        fetchErrors.push(`FETCH ERROR ${i}: ${d.chain}, ${d.dex}, ${d.addresses} - ${d.error}`)
+                        skips.push({ chain: d.chain, dex: d.dex, error: d.error })
                     }
                 }
-                if (fetchErrors.length > 0) setErrorMsg(fetchErrors.join(" | "))
                 if (isPublic) {
                     const stamps = data.filter((d) => d.success && typeof d.fetchedAt === "number").map((d) => d.fetchedAt as number)
                     setCacheFetchedAt(stamps.length ? Math.min(...stamps) : null)
                 }
                 setPriceTableData(pd)
+                setSkipped(skips)
                 setIsFetching(false)
             })
             .catch(e => {
@@ -151,13 +171,16 @@ const PriceData: React.FC<{
             });
 
         return () => controller.abort()
-    }, [pairs, contractList, minsOfData, isPublic]);
+    }, [pairs, contractList, minsOfData, isPublic, target, isAlias]);
 
     // THE single aggregation, computed in render: per-pool samples (price + pool
     // liquidity) → outlier removal by each method → (liquidity-weighted) mean of
     // survivors. The selected method drives the headline; the others fill the
     // comparison cards. MAD + weighting is the go-ooo default.
-    const targetPrice = (p: PoolPrice) => parseFloat(target === p.token0Symbol ? p.token0Price : p.token1Price)
+    // Orient by the pool's resolved target-side symbol (= the query target for an exact pair; the
+    // pool's own class token for an alias query) so an alias pool prices the right way up whichever
+    // side its dollar/ether/bitcoin token sits on.
+    const targetPrice = (p: PoolPrice) => parseFloat(p.targetSymbol === p.token0Symbol ? p.token0Price : p.token1Price)
     const samples = useMemo(() => priceTableData.map((p) => ({ price: targetPrice(p), liquidity: p.reserveUsd ?? 0 })),
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [priceTableData, target])
@@ -180,12 +203,30 @@ const PriceData: React.FC<{
 
     if (isFetching) return <div className="card card-pad"><h2 className="muted">Fetching prices…</h2></div>
     if (errorMsg !== null) return <div className="card card-pad"><h3 style={{ color: "var(--fail)" }}>Error fetching data</h3><p className="muted">{errorMsg}</p></div>
+    // Nothing priceable in this preview (e.g. an all-Cosmos class/pair) — say so plainly rather than
+    // rendering a misleading "= 0" headline from an empty sample set.
+    if (priceTableData.length === 0 && skipped.length > 0) return (
+        <div className="card card-pad" style={{ maxWidth: 640 }}>
+            <h3 style={{ marginTop: 0 }}>Not priceable in this preview</h3>
+            <p className="muted">
+                None of the backing venues can be priced by the public simulator, which prices EVM
+                subgraph pools only: <span className="mono">{skipped.map((s) => `${s.chain}/${s.dex}`).join(", ")}</span>.
+                Cosmos pools (and any temporarily-unavailable subgraph) are priced by the live oracle, not here.
+            </p>
+        </div>
+    )
 
     return (
         <div key={`price-data-results-${base}-${target}`}>
             {isPublic && (
                 <div className="cached-note">
                     Showing <strong>cached</strong> prices{cacheFetchedAt ? ` — last refreshed ${ageStr(cacheFetchedAt)} ago` : ""}, not real-time. The public simulator refreshes each pair&apos;s prices at most once every 7 days.
+                </div>
+            )}
+            {skipped.length > 0 && (
+                <div className="skip-note">
+                    Priced {priceTableData.length} pool{priceTableData.length === 1 ? "" : "s"} across the EVM venues. {skipped.length} venue{skipped.length === 1 ? "" : "s"} could not be priced by this preview
+                    (<span className="mono">{skipped.map((s) => `${s.chain}/${s.dex}`).join(", ")}</span>) — Cosmos pools and any temporarily-unavailable subgraph are priced by the live oracle only.
                 </div>
             )}
             {/* Controls */}
@@ -259,6 +300,7 @@ const PriceData: React.FC<{
 
             <style jsx>{`
                 .cached-note { padding: var(--sp-3) var(--sp-4); margin-bottom: var(--sp-4); border: 1px solid var(--warn-line, var(--warn)); background: var(--warn-dim, rgba(245,184,61,.1)); border-radius: var(--r-md); font-size: var(--fs-sm); color: var(--text-1); }
+                .skip-note { padding: var(--sp-3) var(--sp-4); margin-bottom: var(--sp-4); border: 1px solid var(--border); background: var(--surface-2, rgba(127,127,127,.06)); border-radius: var(--r-md); font-size: var(--fs-sm); color: var(--text-2); }
                 .pt-controls { display: flex; gap: var(--sp-6); align-items: flex-end; flex-wrap: wrap; margin-bottom: var(--sp-5); }
                 .ctl { display: flex; flex-direction: column; gap: var(--sp-2); }
                 .ctl-label { font-size: var(--fs-xs); color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; }

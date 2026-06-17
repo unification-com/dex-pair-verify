@@ -97,3 +97,40 @@ export function aliasPairForCanonicalKey(canonicalKey: string): string | null {
   }
   return [a, b].sort().join(".");
 }
+
+// The (base, target) counterpart to aliasPairForCanonicalKey: the sorted alias-pair label
+// (e.g. "ETH.USD") for two QUERY symbols when BOTH are curated alias classes, else null. Order- and
+// case-independent — ("ETH","USD"), ("USD","ETH") and ("usd","eth") all give "ETH.USD". This decides
+// whether a price-test query is an asset-class query at all (it mirrors go-ooo S7's IsAliasPair gate,
+// which likewise requires both sides to be alias symbols).
+export function aliasPairLabel(base: string, target: string): string | null {
+  if (!isAliasSymbol(base) || !isAliasSymbol(target)) {
+    return null;
+  }
+  return [base.trim().toUpperCase(), target.trim().toUpperCase()].sort().join(".");
+}
+
+// The symbol of a pool's TARGET side, used to orient its price for the simulator. For a NORMAL query
+// the target side is just the target symbol itself (unchanged behaviour). For an ALIAS query the
+// target ("USD") never equals a pool's real token symbol ("USDC"/"USDT"/…), so the side is chosen by
+// which token's coingecko id is in the target class — exactly how go-ooo S7 orients via t0_cg/t1_cg.
+// Without this a pool whose dollar token is token0 would be priced upside-down (the reciprocal),
+// poisoning the class aggregate.
+type AliasOrientToken = { symbol: string; coingeckoCoinId: string | null } | null | undefined;
+export function targetSideSymbol(
+  tokens: { token0: AliasOrientToken; token1: AliasOrientToken },
+  target: string,
+  isAlias: boolean,
+): string {
+  if (!isAlias) {
+    return target;
+  }
+  const cls = target.trim().toUpperCase();
+  if (tokens.token0 && aliasForCgId(tokens.token0.coingeckoCoinId) === cls) {
+    return tokens.token0.symbol;
+  }
+  if (tokens.token1 && aliasForCgId(tokens.token1.coingeckoCoinId) === cls) {
+    return tokens.token1.symbol;
+  }
+  return target;
+}

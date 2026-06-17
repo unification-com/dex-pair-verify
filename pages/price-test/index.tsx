@@ -36,6 +36,11 @@ const PriceTestIndex: React.FC = () => {
         </label>
         <button type="submit" className="btn btn-primary"><Icon name="price" size={14} />Run test</button>
       </form>
+      <p className="muted" style={{ marginTop: "var(--sp-4)", maxWidth: 520, fontSize: "var(--fs-sm)" }}>
+        Tip: enter an asset class — <span className="mono">ETH</span>, <span className="mono">USD</span> or{" "}
+        <span className="mono">BTC</span> — to aggregate every fungible pool at once (e.g.{" "}
+        <span className="mono">ETH → USD</span> prices all WETH×dollar-stable pools across chains and DEXs as one robust price).
+      </p>
     </Layout>
   );
 };
