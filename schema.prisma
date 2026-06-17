@@ -433,6 +433,27 @@ model PriceCache {
   @@index([fetchedAt])
 }
 
+// BEACON anchoring (#130): one row per successful on-chain heartbeat — the dpv beacon-writer recorded
+// `root` (the verified-set Merkle root) to mainchain beacon `beaconId` as timestamp `timestampId` in tx
+// `txHash` at `submitTime`. `metadata` is the local descriptor (schema/pairs/changed); `leafCount` is the
+// committed pair count. Powers the per-pair "Notarised on Mainchain" badge (latest anchor whose root the
+// pair's proof verifies against) + the liveness view. Append-only mirror of on-chain state.
+model BeaconAnchor {
+  id          Int      @id @default(autoincrement())
+  beaconId    Int
+  timestampId Int
+  txHash      String
+  root        String
+  leafCount   Int      @default(0)
+  metadata    String   @default("")
+  submitTime  Int      @default(0)
+  createdAt   Int      @default(0)
+
+  @@unique([beaconId, timestampId])
+  @@index([root])
+  @@index([submitTime])
+}
+
 // Provider auth (T8): the one-time, address+chain-bound challenge a go-ooo provider signs to prove it
 // controls a wallet registered on the OoO Router. Single-use (consumedAt set on verify), short TTL.
 model ProviderChallenge {
