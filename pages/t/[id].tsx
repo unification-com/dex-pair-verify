@@ -152,7 +152,7 @@ const PublicToken: React.FC<PublicProps> = ({ token: t, pools, web, organicity }
                 badge={<StatusBadge status={t.status} method={t.verificationMethod} />}
                 sub={<span className="row gap-3 wrap items-center">
                     {t.name} · <ChainName chain={t.chain} /> ·{" "}
-                    <ExplorerUrl chain={t.chain} contractAddress={t.contractAddress} linkType={"token"} /> ·{" "}
+                    <ExplorerUrl chain={t.chain} contractAddress={t.contractAddress} linkType={"token"} symbol={t.symbol} /> ·{" "}
                     <CoinGeckoCoinLink coingeckoId={t.coingeckoCoinId} />
                 </span>}
             />
@@ -164,7 +164,7 @@ const PublicToken: React.FC<PublicProps> = ({ token: t, pools, web, organicity }
                         <KV k="CoinGecko" v={t.coingeckoCoinId ? <CoinGeckoCoinLink coingeckoId={t.coingeckoCoinId} /> : "—"} />
                         <KV k="Decimals" v={String(t.decimals)} />
                         <KV k="Age" v={ageStr(t.deploymentTimestamp)} />
-                        <KV k="Address" v={<ExplorerUrl chain={t.chain} contractAddress={t.contractAddress} linkType={"token"} />} />
+                        <KV k="Address" v={<ExplorerUrl chain={t.chain} contractAddress={t.contractAddress} linkType={"token"} symbol={t.symbol} />} />
                     </div>
                 </div>
 
@@ -293,7 +293,7 @@ const OperatorToken: React.FC<OperatorProps> = (props) => {
                 badge={<TokenStatusBadge status={currentStatus} scamFlagged={t.isScamFlagged} scamReason={t.scamReason} method={t.verificationMethod} />}
                 sub={<span className="row gap-3 wrap items-center">
                     {t.name} · <ChainName chain={t.chain} /> ·{" "}
-                    <ExplorerUrl chain={t.chain} contractAddress={t.contractAddress} linkType={"token"} /> ·{" "}
+                    <ExplorerUrl chain={t.chain} contractAddress={t.contractAddress} linkType={"token"} symbol={t.symbol} /> ·{" "}
                     <CoinGeckoCoinLink coingeckoId={t.coingeckoCoinId} />
                 </span>}
             />

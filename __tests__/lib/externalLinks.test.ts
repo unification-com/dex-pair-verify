@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { blockExplorerUrl, blockscoutTokenUrl, coinmarketcapUrl, dexscreenerUrl, goPlusUrl, honeypotUrl } from "../../lib/externalLinks";
+import { blockExplorerUrl, blockscoutTokenUrl, coinmarketcapUrl, cosmosExplorerUrl, dexscreenerUrl, explorerUrl, goPlusUrl, honeypotUrl } from "../../lib/externalLinks";
 
 const ADDR = "0x3bf3A8f82E54F376d882f99653B42eD6d0CcFc50";
 
@@ -14,6 +14,40 @@ describe("blockExplorerUrl", () => {
   });
   it("returns null for a chain with no block explorer (e.g. a Cosmos denom), so the UI shows plain text", () => {
     expect(blockExplorerUrl("osmosis", "token", "factory/osmo1.../alloyed/allBTC")).toBeNull();
+  });
+});
+
+describe("cosmosExplorerUrl", () => {
+  const NEUTRON_POOL = "neutron1nfns3ck2ykrs0fknckrzd9728cyf77devuzernhwcwrdxw7ssk2s3tjf8r";
+  const ASTRO_FACTORY = "factory/neutron1ffus553eet978k024lmssw0czsxwr97mggyv85lpcsdk7vzu8fh5q/uastro";
+
+  it("links a bech32 pool contract (Neutron Astroport) to its Mintscan account page", () => {
+    expect(cosmosExplorerUrl("neutron", "address", NEUTRON_POOL)).toBe(`https://www.mintscan.io/neutron/account/${NEUTRON_POOL}`);
+  });
+  it("links a numeric Osmosis pool id to the Osmosis app pool page", () => {
+    expect(cosmosExplorerUrl("osmosis", "address", "1932")).toBe("https://app.osmosis.zone/pool/1932");
+  });
+  it("links an Osmosis token denom to the Osmosis app asset page by symbol", () => {
+    expect(cosmosExplorerUrl("osmosis", "token", "ibc/27394FB0...", "ATOM")).toBe("https://app.osmosis.zone/assets/ATOM");
+  });
+  it("links a Neutron tokenfactory denom to its issuing account on Mintscan", () => {
+    expect(cosmosExplorerUrl("neutron", "token", ASTRO_FACTORY)).toBe("https://www.mintscan.io/neutron/account/neutron1ffus553eet978k024lmssw0czsxwr97mggyv85lpcsdk7vzu8fh5q");
+  });
+  it("returns null for an ibc/native denom with no reliable per-denom page (plain text)", () => {
+    expect(cosmosExplorerUrl("neutron", "token", "ibc/C4CFF46F...")).toBeNull();
+    expect(cosmosExplorerUrl("osmosis", "token", "ibc/27394FB0...")).toBeNull(); // no symbol → can't resolve
+  });
+  it("returns null for an unmapped (non-Cosmos) chain", () => {
+    expect(cosmosExplorerUrl("eth", "token", ADDR)).toBeNull();
+  });
+});
+
+describe("explorerUrl (EVM then Cosmos)", () => {
+  it("uses the EVM block explorer where mapped", () => {
+    expect(explorerUrl("eth", "token", ADDR)).toBe(`https://etherscan.io/token/${ADDR}`);
+  });
+  it("falls back to the Cosmos resolver for a Cosmos chain", () => {
+    expect(explorerUrl("osmosis", "address", "1932")).toBe("https://app.osmosis.zone/pool/1932");
   });
 });
 

@@ -255,7 +255,7 @@ const PublicPair: React.FC<PublicProps> = ({ pair, similar }) => (
               <StatusBadge status={t.status} size="sm" />
             </div>
             <div className="tok-sym">{t.symbol}</div>
-            <KV k="Address" v={<ExplorerUrl chain={pair.chain} contractAddress={t.contractAddress} linkType={"token"} />} />
+            <KV k="Address" v={<ExplorerUrl chain={pair.chain} contractAddress={t.contractAddress} linkType={"token"} symbol={t.symbol} />} />
             <KV k="CoinGecko" v={<CoinGeckoCoinLink coingeckoId={t.coingeckoCoinId} />} />
             <KV k="Tx count" v={num(t.txCount)} />
             <Link href={`/t/${t.id}`}><a className="btn btn-ghost btn-sm" style={{ marginTop: "var(--sp-4)" }}>View token →</a></Link>
@@ -419,7 +419,7 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
                 </div>
                 <div className="tok-sym">{t.symbol}</div>
                 {t.isScamFlagged ? <p style={{ margin: "var(--sp-2) 0 0", color: "var(--fail)", fontSize: "0.85em" }} title={t.scamReason}>⚠ {t.scamReason || "flagged on a scam list"}</p> : null}
-                <KV k="Address" v={<ExplorerUrl chain={props.pair.chain} contractAddress={t.contractAddress} linkType={"token"} />} />
+                <KV k="Address" v={<ExplorerUrl chain={props.pair.chain} contractAddress={t.contractAddress} linkType={"token"} symbol={t.symbol} />} />
                 <KV k="CoinGecko" v={<CoinGeckoCoinLink coingeckoId={t.coingeckoCoinId} />} />
                 <KV k="Tx count" v={num(t.txCount)} />
                 <Link href={`/t/${t.id}`}><a className="btn btn-ghost btn-sm" style={{ marginTop: "var(--sp-4)" }}>View token →</a></Link>

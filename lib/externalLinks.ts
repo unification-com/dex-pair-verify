@@ -91,6 +91,72 @@ export function blockExplorerUrl(chain: string, linkType: string, address: strin
   return base ? `${base}/${linkType}/${address}` : null;
 }
 
+// --- Cosmos (non-EVM) explorer / app links ---
+// Mintscan (by Cosmostation) is the de-facto multi-chain Cosmos explorer, but its only deterministic
+// deep link is an account/contract page — it cannot deep-link a numeric Osmosis pool id or an
+// ibc//factory/ token denom. So a Cosmos chain's identifiers are linked to wherever each actually
+// resolves: a bech32 contract → Mintscan; a numeric Osmosis pool → the Osmosis app's pool page; an
+// Osmosis token → the Osmosis app's asset page (keyed by symbol); a tokenfactory denom → its issuing
+// account on Mintscan. Anything with no reliable target returns null, so the caller shows plain text.
+
+// Mintscan chain slug per dpv chain key (the Cosmos chains we curate).
+export const MINTSCAN_CHAIN: Record<string, string> = {
+  osmosis: "osmosis",
+  neutron: "neutron",
+};
+
+// A Cosmos bech32 account/contract address: an HRP, the separator "1", then ≥38 data chars from the
+// bech32 charset (which excludes b, i, o and 1). Matches both a 20-byte wallet and a 32-byte contract.
+const BECH32_ADDRESS = /^[a-z]{2,}1[ac-hj-np-z02-9]{38,}$/;
+
+// The bech32 creator of a tokenfactory denom: factory/<creator-address>/<subdenom>.
+const FACTORY_CREATOR = /^factory\/([a-z]{2,}1[ac-hj-np-z02-9]{38,})\//;
+
+const mintscanAccount = (slug: string, address: string): string => `https://www.mintscan.io/${slug}/account/${address}`;
+
+// A Cosmos explorer/app deep link for a pool address (linkType "address") or token denom (linkType
+// "token"), or null when none is reliable. symbol is only used for an Osmosis token, whose app asset
+// page is keyed by symbol rather than denom.
+export function cosmosExplorerUrl(chain: string, linkType: string, id: string, symbol?: string | null): string | null {
+  const slug = MINTSCAN_CHAIN[chain];
+  if (!slug) {
+    return null;
+  }
+
+  // A bech32 contract/account (an Astroport pool contract, a CW20 token) → Mintscan's account page.
+  if (BECH32_ADDRESS.test(id)) {
+    return mintscanAccount(slug, id);
+  }
+
+  // An Osmosis numeric pool id → the canonical Osmosis app pool page.
+  if (chain === "osmosis" && linkType === "address" && /^[0-9]+$/.test(id)) {
+    return `https://app.osmosis.zone/pool/${id}`;
+  }
+
+  // An Osmosis token (an ibc//factory/ denom) → the Osmosis app asset page (keyed by symbol).
+  if (chain === "osmosis" && linkType === "token" && symbol) {
+    return `https://app.osmosis.zone/assets/${encodeURIComponent(symbol)}`;
+  }
+
+  // A tokenfactory token denom → its issuing account/contract on Mintscan (e.g. a Neutron factory denom
+  // whose chain has no per-denom asset page; Osmosis factory denoms are already handled above by symbol).
+  if (linkType === "token") {
+    const creator = id.match(FACTORY_CREATOR);
+    if (creator) {
+      return mintscanAccount(slug, creator[1]);
+    }
+  }
+
+  // An ibc//native denom with no reliable per-denom page → caller shows plain text.
+  return null;
+}
+
+// The explorer link for a token/pool on any supported chain: the EVM block explorer where mapped,
+// else the Cosmos resolver. Returns null when neither has a reliable target.
+export function explorerUrl(chain: string, linkType: string, id: string, symbol?: string | null): string | null {
+  return blockExplorerUrl(chain, linkType, id) ?? cosmosExplorerUrl(chain, linkType, id, symbol);
+}
+
 // CoinMarketCap currency page, from the slug B1d backfills ("" = unknown).
 export function coinmarketcapUrl(slug: string | null | undefined): string | null {
   return slug ? `https://coinmarketcap.com/currencies/${encodeURIComponent(slug)}/` : null;
