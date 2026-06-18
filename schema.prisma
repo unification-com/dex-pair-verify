@@ -455,6 +455,25 @@ model BeaconAnchor {
   @@index([tree, submitTime])
 }
 
+// BEACON leaf-drip queue (#130): the backlog of per-pair / per-token LEAF hashes to anchor individually,
+// one tx per block, so every pair/token gets a DIRECT on-chain timestamp (not only a Merkle proof). Unique
+// on (tree, leafHash) so each distinct committed state is anchored exactly once — a changed verdict yields a
+// new leaf hash → a new row → re-anchored. `anchoredAt` null = pending; the worker drips the oldest pending.
+model BeaconQueue {
+  id          Int     @id @default(autoincrement())
+  tree        String // "pairs" | "tokens"
+  leafKey     String // the pair/token key (chain/dex/contract or chain/contract) — context only
+  leafHash    String // the 64-char hash recorded on-chain
+  root        String  @default("") // the root this leaf belonged to when enqueued (context)
+  timestampId Int? // set when anchored
+  txHash      String? // set when anchored
+  anchoredAt  Int? // unix seconds when anchored; null = pending
+  createdAt   Int     @default(0)
+
+  @@unique([tree, leafHash])
+  @@index([anchoredAt, id])
+}
+
 // Provider auth (T8): the one-time, address+chain-bound challenge a go-ooo provider signs to prove it
 // controls a wallet registered on the OoO Router. Single-use (consumedAt set on verify), short TTL.
 model ProviderChallenge {

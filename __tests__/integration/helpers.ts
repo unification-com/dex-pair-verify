@@ -84,6 +84,8 @@ const TABLES = [
   "CandidateDexNetwork",
   "ProviderChallenge",
   "ProviderToken",
+  "BeaconAnchor",
+  "BeaconQueue",
 ];
 
 export async function resetDb(): Promise<void> {
