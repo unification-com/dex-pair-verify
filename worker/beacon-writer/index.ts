@@ -14,10 +14,11 @@
 //   tsx worker/beacon-writer/index.ts               # the heartbeat + drip loop
 import "../../lib/env"; // load .env (POSTGRES_PRISMA_URL etc.) before prisma is imported
 
-import { BeaconSigner, connectBeaconSigner, disconnect, recordTimestamp, registerBeacon } from "./chain";
+import { BeaconSigner, chainSupportsMetadata, connectBeaconSigner, disconnect, recordTimestamp, registerBeacon } from "./chain";
 import { BeaconWriterConfig, loadConfig, stdFee } from "./config";
 import { AnchorSnapshot, getAnchorSnapshot, getTokenAnchorSnapshot } from "../../lib/anchor";
-import { enqueueLeaves, markAnchored, nextPending, queueStats } from "../../lib/beaconQueue";
+import { getChainState, markMetadataLive, markReanchorSeeded } from "../../lib/beaconChainState";
+import { enqueueLeaves, markAnchored, nextPending, queueStats, seedReanchorBacklog } from "../../lib/beaconQueue";
 import prisma from "../../lib/prisma";
 
 const log = (msg: string): void => console.log(`[beacon-writer ${new Date().toISOString()}] ${msg}`);
@@ -26,6 +27,35 @@ const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 // Last anchored root per tree, so a re-stamp between changes is flagged changed=0.
 type BeatState = { pairs: string; tokens: string };
 type Tree = "pairs" | "tokens";
+
+// #129 roll-out: false until the vaxildan upgrade is detected, then latched on for this process so every
+// record carries its on-chain metadata descriptor. Pre-detection we record metadata-less (wire-identical to
+// a v0.2.0 client) so the old chain accepts the txs. Sticky in the DB too (BeaconChainState).
+let metadataLive = false;
+
+// Probe + latch the upgrade. Once metadata goes live, seed the one-time re-anchor backlog (every pre-upgrade
+// anchor re-queued to be re-recorded WITH metadata — the only way they reach the forward-only hash index).
+// Cheap to call each heartbeat: a no-op once latched, a single read-only abci_query while still pending.
+async function ensureMetadata(cfg: BeaconWriterConfig): Promise<void> {
+  if (metadataLive) {
+    return;
+  }
+  let st = await getChainState();
+  if (!st.metadataLive) {
+    if (!(await chainSupportsMetadata(cfg.rpc, cfg.beaconId))) {
+      return; // upgrade not applied yet — keep recording metadata-less
+    }
+    await markMetadataLive(nowSeconds());
+    st = await getChainState();
+    log("vaxildan upgrade detected (BeaconTimestampsByHash served) — metadata is now LIVE");
+  }
+  metadataLive = true;
+  if (cfg.reanchorEnabled && !st.reanchorSeeded) {
+    const n = await seedReanchorBacklog(nowSeconds());
+    await markReanchorSeeded();
+    log(`re-anchor backlog seeded: ${n} pre-upgrade records queued to re-record WITH metadata`);
+  }
+}
 
 // Record one tree's ROOT on-chain + persist the anchor row. Returns the root just anchored (for the state).
 async function recordTree(s: BeaconSigner, cfg: BeaconWriterConfig, tree: Tree, snap: AnchorSnapshot, lastRoot: string): Promise<string> {
@@ -36,7 +66,8 @@ async function recordTree(s: BeaconSigner, cfg: BeaconWriterConfig, tree: Tree, 
   const changed = snap.root === lastRoot ? 0 : 1;
   const metadata = `tree=${tree};schema=v3;leaves=${snap.leafCount};changed=${changed}`;
   const submitTime = nowSeconds();
-  const r = await recordTimestamp(s, cfg.beaconId, snap.root, submitTime, stdFee(cfg.recordFee, cfg.gas));
+  // Always store the descriptor off-chain; only put it ON-chain once the upgrade is live (else "" ⇒ omitted).
+  const r = await recordTimestamp(s, cfg.beaconId, snap.root, submitTime, stdFee(cfg.recordFee, cfg.gas), metadataLive ? metadata : "");
   await prisma.beaconAnchor.create({
     data: { beaconId: cfg.beaconId, timestampId: r.timestampId, tree, txHash: r.txHash, root: snap.root, leafCount: snap.leafCount, metadata, submitTime, createdAt: submitTime },
   });
@@ -68,7 +99,8 @@ async function dripOne(s: BeaconSigner, cfg: BeaconWriterConfig): Promise<boolea
     return false;
   }
   const submitTime = nowSeconds();
-  const r = await recordTimestamp(s, cfg.beaconId, item.hash, submitTime, stdFee(cfg.recordFee, cfg.gas));
+  // A queue row (leaf / fulfilment / reanchor) carries its descriptor in `metadata`; put it on-chain once live.
+  const r = await recordTimestamp(s, cfg.beaconId, item.hash, submitTime, stdFee(cfg.recordFee, cfg.gas), metadataLive ? item.metadata : "");
   await markAnchored(item.id, r.timestampId, r.txHash, submitTime);
   log(`drip[${item.stream}] ${item.refKey} hash=${item.hash.slice(0, 12)}… ts=${r.timestampId} tx=${r.txHash}`);
   return true;
@@ -97,12 +129,14 @@ async function main(): Promise<void> {
   const state: BeatState = { pairs: await lastOf("pairs"), tokens: await lastOf("tokens") };
 
   if (mode === "once") {
+    await ensureMetadata(cfg);
     await heartbeat(s, cfg, state);
     disconnect(s);
     return;
   }
 
   if (mode === "drip") {
+    await ensureMetadata(cfg);
     const n = Math.max(1, parseInt(process.argv[3] ?? "1", 10) || 1);
     let done = 0;
     for (let i = 0; i < n; i += 1) {
@@ -122,6 +156,7 @@ async function main(): Promise<void> {
   const tick = async (): Promise<void> => {
     try {
       if (Date.now() >= nextHeartbeat) {
+        await ensureMetadata(cfg); // probe for the upgrade once per heartbeat until it latches on
         await heartbeat(s, cfg, state);
         nextHeartbeat = Date.now() + cfg.intervalSec * 1000;
       } else if (cfg.dripEnabled) {

@@ -6,12 +6,15 @@
 import { stringToPath } from "@cosmjs/crypto";
 import { DirectSecp256k1HdWallet, GeneratedType, Registry } from "@cosmjs/proto-signing";
 import { defaultRegistryTypes, DeliverTxResponse, SigningStargateClient, StdFee } from "@cosmjs/stargate";
+import { connectComet } from "@cosmjs/tendermint-rpc";
+import { QueryBeaconTimestampsByHashRequest } from "@unification-com/fundjs/mainchain/beacon/v1/query";
 import { registry as beaconRegistry } from "@unification-com/fundjs/mainchain/beacon/v1/tx.registry";
 
 const UND_PREFIX = "und";
 const UND_SLIP44 = 5555; // Unification BIP44 coin type
 const REGISTER_TYPE_URL = "/mainchain.beacon.v1.MsgRegisterBeacon";
 const RECORD_TYPE_URL = "/mainchain.beacon.v1.MsgRecordBeaconTimestamp";
+const BYHASH_QUERY_PATH = "/mainchain.beacon.v1.Query/BeaconTimestampsByHash";
 
 export type BeaconSigner = { client: SigningStargateClient; address: string };
 
@@ -67,16 +70,36 @@ export async function registerBeacon(s: BeaconSigner, moniker: string, name: str
 
 export type RecordResult = { timestampId: number; txHash: string; submitTime: number };
 
-// Record one timestamp hash (the Merkle root) on the beacon. submitTime is the unix epoch we claim.
-export async function recordTimestamp(s: BeaconSigner, beaconId: number, hash: string, submitTime: number, fee: StdFee): Promise<RecordResult> {
+// Record one timestamp hash on the beacon. submitTime is the unix epoch we claim. `metadata` is the #129
+// descriptor: pass it ONLY once the chain is upgraded — when "" the encoder omits proto field 5 entirely,
+// so the tx is wire-identical to a v0.2.0 client and a pre-upgrade chain accepts it (setting it pre-upgrade
+// would trip the SDK's strict unknown-field rejection).
+export async function recordTimestamp(s: BeaconSigner, beaconId: number, hash: string, submitTime: number, fee: StdFee, metadata = ""): Promise<RecordResult> {
   const msg = {
     typeUrl: RECORD_TYPE_URL,
-    value: { beaconId: BigInt(beaconId), hash, submitTime: BigInt(submitTime), owner: s.address },
+    value: { beaconId: BigInt(beaconId), hash, submitTime: BigInt(submitTime), owner: s.address, metadata },
   };
   const res = await s.client.signAndBroadcast(s.address, [msg], fee);
   assertOk(res);
   const tsId = eventAttr(res, "beacon_timestamp_id");
   return { timestampId: tsId ? Number(tsId) : 0, txHash: res.transactionHash, submitTime };
+}
+
+// Probe whether the chain serves the #129 BeaconTimestampsByHash query — i.e. the vaxildan upgrade has
+// landed and the metadata field is live. Pre-upgrade the node has no such gRPC method, so abci_query returns
+// a non-zero "unknown query path" code; post-upgrade it returns code 0 even for a hash with no timestamps.
+// Read-only, its own short-lived Comet connection (separate from the signing client).
+export async function chainSupportsMetadata(rpc: string, beaconId: number): Promise<boolean> {
+  const cm = await connectComet(rpc);
+  try {
+    const data = QueryBeaconTimestampsByHashRequest.encode({ beaconId: BigInt(beaconId || 1), hash: "0".repeat(64) }).finish();
+    const res = await cm.abciQuery({ path: BYHASH_QUERY_PATH, data });
+    return res.code === 0;
+  } catch {
+    return false;
+  } finally {
+    cm.disconnect();
+  }
 }
 
 export const disconnect = (s: BeaconSigner): void => s.client.disconnect();

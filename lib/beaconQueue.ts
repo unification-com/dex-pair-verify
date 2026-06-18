@@ -6,8 +6,14 @@
 // re-anchored. `metadata` is the off-chain descriptor (it becomes the on-chain #129 metadata field later).
 import prisma from "./prisma";
 
-export type Stream = "pair-leaf" | "token-leaf" | "fulfilment";
+// "reanchor" is the one-time #129 backlog: every pre-upgrade anchor re-queued to be re-recorded WITH
+// metadata once the vaxildan upgrade lands (see seedReanchorBacklog). It drains through the same drip path.
+export type Stream = "pair-leaf" | "token-leaf" | "fulfilment" | "reanchor";
 export type QueueItem = { id: number; stream: string; refKey: string; hash: string; metadata: string };
+
+// Tag a descriptor as a re-anchor (preserves the original provenance, adds the marker, stays within the
+// on-chain 256-byte metadata cap). Idempotent — re-tagging an already-tagged descriptor is a no-op.
+const reanchorMeta = (m: string): string => (m.includes("reanchor=1") ? m : `${m};reanchor=1`).slice(0, 256);
 
 // Generic enqueue — rows whose (stream, hash) already exist are skipped (idempotent). Returns count added.
 export async function enqueue(items: { stream: string; refKey: string; hash: string; metadata: string }[], now: number): Promise<number> {
@@ -48,6 +54,30 @@ export async function queueStats(): Promise<{ pending: number; anchored: number 
     prisma.beaconQueue.count({ where: { anchoredAt: { not: null } } }),
   ]);
   return { pending, anchored };
+}
+
+// Seed the one-time re-anchor backlog (#129): re-queue every pre-upgrade anchor as a `reanchor` row so the
+// drip re-records it WITH metadata now the chain is upgraded. Covers EVERYTHING except heartbeats —
+// - leaves + fulfilments: every already-anchored queue row (its `metadata` was kept off-chain, now applied);
+// - roots: ONE row per DISTINCT (tree, root) — the per-heartbeat re-stamps of an unchanged root collapse to
+//   a single re-anchor (those re-stamps ARE the liveness heartbeat, deliberately not re-anchored).
+// Idempotent: `reanchor` rows are unique on (stream, hash), so a re-run (or a hash already re-anchored)
+// skips. A leaf/fulfilment recorded AFTER go-live is born with metadata and is never seeded. Returns rows added.
+export async function seedReanchorBacklog(now: number): Promise<number> {
+  const anchored = await prisma.beaconQueue.findMany({
+    where: { anchoredAt: { not: null }, stream: { in: ["pair-leaf", "token-leaf", "fulfilment"] } },
+    select: { refKey: true, hash: true, metadata: true },
+  });
+  const roots = await prisma.beaconAnchor.findMany({
+    distinct: ["tree", "root"],
+    orderBy: { submitTime: "asc" }, // first sighting of each root (its changed=1 record)
+    select: { tree: true, root: true, metadata: true },
+  });
+  const rows = [
+    ...anchored.map((a) => ({ stream: "reanchor", refKey: a.refKey, hash: a.hash, metadata: reanchorMeta(a.metadata) })),
+    ...roots.map((r) => ({ stream: "reanchor", refKey: `root:${r.tree}`, hash: r.root, metadata: reanchorMeta(r.metadata) })),
+  ];
+  return enqueue(rows, now);
 }
 
 // --- per-chain block cursor for the fulfilment watcher ----------------------------------------------

@@ -12,6 +12,7 @@ export type BeaconWriterConfig = {
   intervalSec: number; // heartbeat cadence
   dripEnabled: boolean; // drip individual leaves on-chain (one per tick)
   dripIntervalSec: number; // leaf-drip tick (~ block time)
+  reanchorEnabled: boolean; // after the #129 upgrade, re-anchor the pre-upgrade backlog WITH metadata
   recordFee: string; // nund — must cover the beacon module fee_record
   registerFee: string; // nund — must cover fee_register
   gas: string;
@@ -58,6 +59,7 @@ export function loadConfig(): BeaconWriterConfig {
     intervalSec: parseInt(env("BEACON_INTERVAL_SEC", "60"), 10),
     dripEnabled: bool("BEACON_DRIP_ENABLED", false),
     dripIntervalSec: parseInt(env("BEACON_DRIP_INTERVAL_SEC", "6"), 10),
+    reanchorEnabled: bool("BEACON_REANCHOR_ENABLED", true),
     recordFee: env("BEACON_RECORD_FEE", "1000000000"), // 1 FUND
     registerFee: env("BEACON_REGISTER_FEE", "1000000000000"), // 1000 FUND
     gas: env("BEACON_GAS", "200000"),

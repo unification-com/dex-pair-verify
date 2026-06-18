@@ -484,6 +484,19 @@ model BeaconWatchCursor {
   updatedAt Int    @default(0)
 }
 
+// Singleton (id = 1) tracking the #129 metadata roll-out. Pre-vaxildan the writer records hashes WITHOUT
+// metadata (wire-identical to a v0.2.0 client, so the old chain accepts them). The writer probes the chain
+// each heartbeat (BeaconTimestampsByHash served ⇒ upgrade applied); once detected, `metadataLive` latches on
+// so all NEW records carry their descriptor, and a one-time `reanchor` backlog is seeded (`reanchorSeeded`)
+// to re-record every pre-upgrade anchor WITH metadata — the hash index is forward-only, so re-recording is
+// the only way pre-upgrade anchors become BeaconTimestampsByHash-discoverable.
+model BeaconChainState {
+  id             Int     @id @default(1)
+  metadataLive   Boolean @default(false) // vaxildan upgrade detected; records now carry on-chain metadata
+  reanchorSeeded Boolean @default(false) // the one-time re-anchor backlog has been queued
+  detectedAt     Int     @default(0) // unix seconds the upgrade was first detected
+}
+
 // Provider auth (T8): the one-time, address+chain-bound challenge a go-ooo provider signs to prove it
 // controls a wallet registered on the OoO Router. Single-use (consumedAt set on verify), short TTL.
 model ProviderChallenge {

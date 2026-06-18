@@ -48,7 +48,7 @@
     "@next-auth/prisma-adapter": "^1.0.7",
     "@prisma-extensions/find-or-create": "^0.1.0-canary.20230204011658",
     "@prisma/client": "^5.15.0",
-    "@unification-com/fundjs": "^0.2.0",
+    "@unification-com/fundjs": "^0.2.1",
     "dotenv": "^16.4.5",
     "formidable": "^3.5.1",
     "graphql": "^16.8.2",

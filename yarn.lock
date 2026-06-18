@@ -1175,10 +1175,10 @@
   resolved "https://registry.yarnpkg.com/@ungap/structured-clone/-/structured-clone-1.3.1.tgz#0e8f34854df7966b09304a18e808b23997bb9fc1"
   integrity sha512-mUFwbeTqrVgDQxFveS+df2yfap6iuP20NAKAsBt5jDEoOTDew+zwLAOilHCeQJOVSvmgCX4ogqIrA0mnyr08yQ==
 
-"@unification-com/fundjs@^0.2.0":
-  version "0.2.0"
-  resolved "https://registry.yarnpkg.com/@unification-com/fundjs/-/fundjs-0.2.0.tgz#2fe9d4c0ff17a18a20d242b88d52e2dead6cce63"
-  integrity sha512-BHSQPchLItQwM8hhOHMCF9/qTe/D7hwKyi5st6rHaQ0tdRSMMhSASlEZDL5FZXZRtlo6y164FFj8M4GmbuUbcg==
+"@unification-com/fundjs@^0.2.1":
+  version "0.2.1"
+  resolved "https://registry.yarnpkg.com/@unification-com/fundjs/-/fundjs-0.2.1.tgz#3616a131cb5c0d3e55e5a660e28167fc98fa065c"
+  integrity sha512-/MiJPFQLSuLMyNxsY8I+8JHT8pQR2Zb03fueb9rmth0NgwWjTBG9zJw+BO/IXSGbrDWDDyX+y/dMaiYjJii61A==
   dependencies:
     "@chain-registry/v2" "^1.71.237"
     "@chain-registry/v2-types" "^0.53.146"
