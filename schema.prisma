@@ -455,23 +455,33 @@ model BeaconAnchor {
   @@index([tree, submitTime])
 }
 
-// BEACON leaf-drip queue (#130): the backlog of per-pair / per-token LEAF hashes to anchor individually,
-// one tx per block, so every pair/token gets a DIRECT on-chain timestamp (not only a Merkle proof). Unique
-// on (tree, leafHash) so each distinct committed state is anchored exactly once — a changed verdict yields a
-// new leaf hash → a new row → re-anchored. `anchoredAt` null = pending; the worker drips the oldest pending.
+// BEACON anchor-drip queue (#130): the backlog of individual hashes to record one tx per block, so every
+// item gets a DIRECT on-chain timestamp. Generic over the STREAM — a pair/token leaf (so each pair/token is
+// notarised directly, not only via a Merkle proof) or an OoO fulfilment receipt (path ii). Unique on
+// (stream, hash) so each distinct hash is anchored exactly once — a changed verdict yields a new leaf hash →
+// a new row → re-anchored. `metadata` is the off-chain descriptor (becomes the on-chain #129 metadata field
+// when that lands). `anchoredAt` null = pending; the worker drips the oldest pending.
 model BeaconQueue {
   id          Int     @id @default(autoincrement())
-  tree        String // "pairs" | "tokens"
-  leafKey     String // the pair/token key (chain/dex/contract or chain/contract) — context only
-  leafHash    String // the 64-char hash recorded on-chain
-  root        String  @default("") // the root this leaf belonged to when enqueued (context)
+  stream      String // "pair-leaf" | "token-leaf" | "fulfilment"
+  refKey      String // context key: pair/token key, or chain/router/requestId for a fulfilment
+  hash        String // the 64-char hash recorded on-chain
+  metadata    String  @default("") // off-chain descriptor (type/tree/root or net/router/req)
   timestampId Int? // set when anchored
   txHash      String? // set when anchored
   anchoredAt  Int? // unix seconds when anchored; null = pending
   createdAt   Int     @default(0)
 
-  @@unique([tree, leafHash])
+  @@unique([stream, hash])
   @@index([anchoredAt, id])
+}
+
+// Per-chain block cursor for the fulfilment watcher (#130 path ii): the last EVM block scanned for a
+// Router's RequestFulfilled events, so a restart resumes without rescanning or missing logs.
+model BeaconWatchCursor {
+  chainId   Int    @id
+  lastBlock Int    @default(0)
+  updatedAt Int    @default(0)
 }
 
 // Provider auth (T8): the one-time, address+chain-bound challenge a go-ooo provider signs to prove it

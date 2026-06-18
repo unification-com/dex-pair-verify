@@ -41,3 +41,6 @@ export function oooRouterForChain(chainId: number): OooRouter | null {
 
 // Is the OoO Router deployed (and resolvable) on this chain?
 export const isOooChain = (chainId: number): boolean => oooRouterForChain(chainId) !== null;
+
+// The built-in OoO chain ids — the default watch set for the fulfilment watcher (override via env).
+export const builtInOooChainIds = (): number[] => Object.keys(ROUTERS).map((k) => Number(k));

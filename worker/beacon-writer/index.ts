@@ -17,7 +17,7 @@ import "../../lib/env"; // load .env (POSTGRES_PRISMA_URL etc.) before prisma is
 import { BeaconSigner, connectBeaconSigner, disconnect, recordTimestamp, registerBeacon } from "./chain";
 import { BeaconWriterConfig, loadConfig, stdFee } from "./config";
 import { AnchorSnapshot, getAnchorSnapshot, getTokenAnchorSnapshot } from "../../lib/anchor";
-import { enqueueLeaves, markLeafAnchored, nextPendingLeaf, queueStats } from "../../lib/beaconQueue";
+import { enqueueLeaves, markAnchored, nextPending, queueStats } from "../../lib/beaconQueue";
 import prisma from "../../lib/prisma";
 
 const log = (msg: string): void => console.log(`[beacon-writer ${new Date().toISOString()}] ${msg}`);
@@ -61,16 +61,16 @@ async function heartbeat(s: BeaconSigner, cfg: BeaconWriterConfig, state: BeatSt
   }
 }
 
-// Drip ONE pending leaf on-chain. Returns false when the backlog is drained.
+// Drip ONE pending item (a pair/token leaf or a fulfilment receipt) on-chain. False when the backlog drains.
 async function dripOne(s: BeaconSigner, cfg: BeaconWriterConfig): Promise<boolean> {
-  const leaf = await nextPendingLeaf();
-  if (!leaf) {
+  const item = await nextPending();
+  if (!item) {
     return false;
   }
   const submitTime = nowSeconds();
-  const r = await recordTimestamp(s, cfg.beaconId, leaf.leafHash, submitTime, stdFee(cfg.recordFee, cfg.gas));
-  await markLeafAnchored(leaf.id, r.timestampId, r.txHash, submitTime);
-  log(`drip[${leaf.tree}] ${leaf.leafKey} leaf=${leaf.leafHash.slice(0, 12)}… ts=${r.timestampId} tx=${r.txHash}`);
+  const r = await recordTimestamp(s, cfg.beaconId, item.hash, submitTime, stdFee(cfg.recordFee, cfg.gas));
+  await markAnchored(item.id, r.timestampId, r.txHash, submitTime);
+  log(`drip[${item.stream}] ${item.refKey} hash=${item.hash.slice(0, 12)}… ts=${r.timestampId} tx=${r.txHash}`);
   return true;
 }
 
