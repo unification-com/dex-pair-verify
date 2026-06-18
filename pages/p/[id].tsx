@@ -4,6 +4,7 @@ import { useRouter } from "next/router";
 import React, { FormEvent, useEffect, useState } from "react"
 import { NotificationManager } from 'react-notifications';
 
+import BeaconNotarised from "../../components/BeaconNotarised";
 import ChainName from "../../components/ChainName";
 import CoinGeckoCoinLink from "../../components/CoinGeckoCoinLink";
 import CoinGeckoPoolLink from "../../components/CoinGeckoPoolLink";
@@ -246,6 +247,8 @@ const PublicPair: React.FC<PublicProps> = ({ pair, similar }) => (
       </span>}
     />
 
+    <BeaconNotarised pair={{ chain: pair.chain, dex: pair.dex, address: pair.contractAddress }} />
+
     <div className="pub-grid">
       <div className="token-cards">
         {[pair.token0, pair.token1].map((t, i) => (
@@ -404,6 +407,8 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
           ? <Link href={`/price-test/pair/${props.pair.id}`}><a className="btn btn-ghost btn-sm" target="_blank"><Icon name="price" size={14} />Price test</a></Link>
           : null}
       />
+
+      <BeaconNotarised pair={{ chain: props.pair.chain, dex: props.pair.dex, address: props.pair.contractAddress }} />
 
       <div className="pair-grid">
         <div className="pair-main">

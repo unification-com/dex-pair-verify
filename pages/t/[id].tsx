@@ -4,6 +4,7 @@ import { useRouter } from "next/router";
 import React, { FormEvent, useEffect, useState } from "react"
 import { NotificationManager } from 'react-notifications';
 
+import BeaconNotarised from "../../components/BeaconNotarised";
 import ChainName from "../../components/ChainName";
 import CoinGeckoCoinLink from "../../components/CoinGeckoCoinLink";
 import ExplorerUrl from "../../components/ExplorerUrl";
@@ -157,6 +158,8 @@ const PublicToken: React.FC<PublicProps> = ({ token: t, pools, web, organicity }
                 </span>}
             />
 
+            <BeaconNotarised />
+
             <div className="tok-main">
                 <div className="card card-pad">
                     <span className="eyebrow" style={{ display: "block", marginBottom: "var(--sp-1)" }}>Identity</span>
@@ -297,6 +300,8 @@ const OperatorToken: React.FC<OperatorProps> = (props) => {
                     <CoinGeckoCoinLink coingeckoId={t.coingeckoCoinId} />
                 </span>}
             />
+
+            <BeaconNotarised />
 
             <div className="tok-grid">
                 <div className="tok-main">

@@ -72,6 +72,19 @@ export async function getAnchorSnapshot(opts: { now?: number; force?: boolean } 
   return cache;
 }
 
+// The on-chain record (BeaconAnchor row) of a given root, latest first — null if that root has not been
+// anchored yet (the worker re-stamps within a heartbeat of any verdict change, so this is null only in the
+// brief window between a verdict change and the next beat).
+export type OnChainAnchor = { beaconId: number; timestampId: number; txHash: string; submitTime: number; metadata: string };
+
+export async function getOnChainAnchor(root: string): Promise<OnChainAnchor | null> {
+  if (!root) {
+    return null;
+  }
+  const a = await prisma.beaconAnchor.findFirst({ where: { root }, orderBy: { timestampId: "desc" } });
+  return a ? { beaconId: a.beaconId, timestampId: a.timestampId, txHash: a.txHash, submitTime: a.submitTime, metadata: a.metadata } : null;
+}
+
 // A single pair's published leaf (preimage + proof) for the page badge / per-pair verify, or null.
 export async function getAnchorLeaf(chain: string, dex: string, contractAddress: string): Promise<{ root: string; modifiedAt: number; generatedAt: number; leaf: AnchorLeaf } | null> {
   const snap = await getAnchorSnapshot();

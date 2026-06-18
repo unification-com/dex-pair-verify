@@ -1,4 +1,4 @@
-import { getAnchorLeaf, getAnchorSnapshot } from "../../../../lib/anchor";
+import { getAnchorLeaf, getAnchorSnapshot, getOnChainAnchor } from "../../../../lib/anchor";
 import { clientIp } from "../../../../lib/clientIp";
 import { MERKLE_LEAF_VERSION } from "../../../../lib/merkle";
 import { rateLimit } from "../../../../lib/rateLimit";
@@ -28,17 +28,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const dex = String(req.query?.dex || "");
   const address = String(req.query?.address || "");
 
-  // Per-pair lookup (the badge): return just that pair's preimage + proof against the current root.
+  // Per-pair lookup (the badge): return that pair's preimage + proof + the on-chain anchor of its root.
   if (chain && dex && address) {
     const r = await getAnchorLeaf(chain, dex, address);
     if (!r) {
       return res.status(404).json({ success: false, error: "pair not in the current verified anchor set" });
     }
-    return res.status(200).json({ success: true, leafVersion: MERKLE_LEAF_VERSION, root: r.root, modifiedAt: r.modifiedAt, generatedAt: r.generatedAt, ...r.leaf });
+    const onChain = await getOnChainAnchor(r.root);
+    return res.status(200).json({ success: true, leafVersion: MERKLE_LEAF_VERSION, root: r.root, modifiedAt: r.modifiedAt, generatedAt: r.generatedAt, onChain, ...r.leaf });
   }
 
   const snap = await getAnchorSnapshot();
-  const base = { success: true, leafVersion: MERKLE_LEAF_VERSION, root: snap.root, leafCount: snap.leafCount, modifiedAt: snap.modifiedAt, generatedAt: snap.generatedAt };
+  const onChain = await getOnChainAnchor(snap.root);
+  const base = { success: true, leafVersion: MERKLE_LEAF_VERSION, root: snap.root, leafCount: snap.leafCount, modifiedAt: snap.modifiedAt, generatedAt: snap.generatedAt, onChain };
 
   // Full preimage set — opt-in (it can be large); lets anyone recompute the root + verify any proof.
   if (String(req.query?.full || "") === "1") {
