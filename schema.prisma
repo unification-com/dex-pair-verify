@@ -442,6 +442,7 @@ model BeaconAnchor {
   id          Int      @id @default(autoincrement())
   beaconId    Int
   timestampId Int
+  tree        String   @default("pairs") // which Merkle tree this root is over: "pairs" | "tokens"
   txHash      String
   root        String
   leafCount   Int      @default(0)
@@ -451,7 +452,7 @@ model BeaconAnchor {
 
   @@unique([beaconId, timestampId])
   @@index([root])
-  @@index([submitTime])
+  @@index([tree, submitTime])
 }
 
 // Provider auth (T8): the one-time, address+chain-bound challenge a go-ooo provider signs to prove it

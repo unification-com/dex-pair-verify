@@ -7,9 +7,10 @@ import { traceLeafPreimage, VerifyTrace } from "../lib/merkleVerify";
 // on-chain anchor (BEACON #, timestamp #, tx) and, in `pair` mode, an in-browser proof check that walks
 // the actual Merkle branches leaf→root (Web Crypto, lib/merkleVerify) and shows every hash step — so it is
 // a real reconstruction, not a server-asserted "✓". Renders nothing until the current root is anchored.
-type OnChain = { beaconId: number; timestampId: number; txHash: string; submitTime: number; metadata: string };
+type OnChain = { beaconId: number; timestampId: number; txHash: string; submitTime: number; metadata: string; tree: string };
 type AnchorResponse = {
   success: boolean;
+  tree?: string;
   root: string;
   leafCount?: number;
   onChain: OnChain | null;
@@ -23,20 +24,25 @@ const TX_EXPLORER = process.env.NEXT_PUBLIC_BEACON_TX_EXPLORER || "";
 const txUrl = (hash: string): string | null => (TX_EXPLORER ? TX_EXPLORER.replace("{hash}", hash) : null);
 const short = (s: string, n = 8): string => (s.length > 2 * n ? `${s.slice(0, n)}…${s.slice(-n)}` : s);
 
-const BeaconNotarised: React.FC<{ pair?: { chain: string; dex: string; address: string } }> = ({ pair }) => {
+const BeaconNotarised: React.FC<{ pair?: { chain: string; dex: string; address: string }; token?: { chain: string; address: string } }> = ({ pair, token }) => {
   const [data, setData] = useState<AnchorResponse | null>(null);
   const [trace, setTrace] = useState<VerifyTrace | null>(null);
   const [busy, setBusy] = useState(false);
+  const item = Boolean(pair || token);
 
   useEffect(() => {
     const ctrl = new AbortController();
-    const qs = pair ? `?chain=${encodeURIComponent(pair.chain)}&dex=${encodeURIComponent(pair.dex)}&address=${encodeURIComponent(pair.address)}` : "";
+    const qs = pair
+      ? `?chain=${encodeURIComponent(pair.chain)}&dex=${encodeURIComponent(pair.dex)}&address=${encodeURIComponent(pair.address)}`
+      : token
+        ? `?tree=tokens&chain=${encodeURIComponent(token.chain)}&address=${encodeURIComponent(token.address)}`
+        : "";
     fetch(`/api/ooo/v1/anchor${qs}`, { signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setData(d && d.success ? d : null))
       .catch(() => undefined);
     return () => ctrl.abort();
-  }, [pair]);
+  }, [pair, token]);
 
   if (!data || !data.onChain) {
     return null; // not yet anchored on-chain → make no claim
@@ -65,13 +71,13 @@ const BeaconNotarised: React.FC<{ pair?: { chain: string; dex: string; address: 
 
       <div className="body">
         <p className="muted meta" style={{ margin: 0 }}>
-          {pair ? "This pair is committed in" : `${data.leafCount ?? ""} verified pairs are committed in`} Merkle root{" "}
+          {pair ? "This pair is committed in" : token ? "This token is committed in" : `${data.leafCount ?? ""} verified ${data.tree ?? "pairs"} are committed in`} Merkle root{" "}
           <span className="mono">{short(data.root)}</span>, recorded on BEACON #{oc.beaconId} as timestamp #{oc.timestampId}
           {oc.metadata ? ` (${oc.metadata})` : ""}. Tx{" "}
           {link ? <a className="mono" href={link} target="_blank" rel="noreferrer">{short(oc.txHash)}</a> : <span className="mono">{short(oc.txHash)}</span>}.
         </p>
 
-        {pair && data.preimage && data.proof && (
+        {item && data.preimage && data.proof && (
           <div className="verify">
             <button type="button" className="btn btn-ghost btn-sm" onClick={runVerify} disabled={busy}>
               {busy ? "Verifying…" : trace ? "Re-verify" : "Verify proof in your browser"}
@@ -79,7 +85,7 @@ const BeaconNotarised: React.FC<{ pair?: { chain: string; dex: string; address: 
 
             {trace && (
               <div className="trace mono">
-                <div className="trow"><span className="lbl">leaf</span><span className="hx" title={trace.leaf}>{short(trace.leaf, 10)}</span><span className="note">= sha256(this pair&apos;s committed facts)</span></div>
+                <div className="trow"><span className="lbl">leaf</span><span className="hx" title={trace.leaf}>{short(trace.leaf, 10)}</span><span className="note">= sha256(this {token ? "token" : "pair"}&apos;s committed facts)</span></div>
                 {trace.steps.map((s, i) => (
                   <div className="trow" key={i}>
                     <span className="lbl">+ sibling {s.position === "left" ? "◀ left" : "right ▶"}</span>
@@ -96,7 +102,7 @@ const BeaconNotarised: React.FC<{ pair?: { chain: string; dex: string; address: 
               </div>
             )}
             {trace?.ok && (
-              <p className="okline">Recomputed locally from the published pair data through {trace.steps.length} hash steps — it matches the root on Mainchain, so this pair was provably in the anchored set. No need to trust this server.</p>
+              <p className="okline">Recomputed locally from the published {token ? "token" : "pair"} data through {trace.steps.length} hash steps — it matches the root on Mainchain, so this {token ? "token" : "pair"} was provably in the anchored set. No need to trust this server.</p>
             )}
           </div>
         )}

@@ -12,40 +12,36 @@ import "../../lib/env"; // load .env (POSTGRES_PRISMA_URL etc.) before prisma is
 
 import { BeaconSigner, connectBeaconSigner, disconnect, recordTimestamp, registerBeacon } from "./chain";
 import { BeaconWriterConfig, loadConfig, stdFee } from "./config";
-import { getAnchorSnapshot } from "../../lib/anchor";
+import { AnchorSnapshot, getAnchorSnapshot, getTokenAnchorSnapshot } from "../../lib/anchor";
 import prisma from "../../lib/prisma";
 
 const log = (msg: string): void => console.log(`[beacon-writer ${new Date().toISOString()}] ${msg}`);
 
-type BeatState = { lastRoot: string };
+// Last anchored root per tree, so a re-stamp between changes is flagged changed=0.
+type BeatState = { pairs: string; tokens: string };
+type Tree = "pairs" | "tokens";
 
-// One heartbeat: snapshot the root → record it on-chain → persist the anchor row.
-async function beat(s: BeaconSigner, cfg: BeaconWriterConfig, state: BeatState): Promise<void> {
-  const snap = await getAnchorSnapshot();
+// Record one tree's root on-chain + persist the anchor row. Returns the root just anchored (for the state).
+async function recordTree(s: BeaconSigner, cfg: BeaconWriterConfig, tree: Tree, snap: AnchorSnapshot, lastRoot: string): Promise<string> {
   if (!snap.root) {
-    log("no verified pairs in the set — skipping this beat");
-    return;
+    log(`${tree}: empty set — skipping`);
+    return lastRoot;
   }
-  const changed = snap.root === state.lastRoot ? 0 : 1;
-  const metadata = `schema=v3;pairs=${snap.leafCount};changed=${changed}`;
+  const changed = snap.root === lastRoot ? 0 : 1;
+  const metadata = `tree=${tree};schema=v3;leaves=${snap.leafCount};changed=${changed}`;
   const submitTime = Math.floor(Date.now() / 1000);
-
   const r = await recordTimestamp(s, cfg.beaconId, snap.root, submitTime, stdFee(cfg.recordFee, cfg.gas));
-
   await prisma.beaconAnchor.create({
-    data: {
-      beaconId: cfg.beaconId,
-      timestampId: r.timestampId,
-      txHash: r.txHash,
-      root: snap.root,
-      leafCount: snap.leafCount,
-      metadata,
-      submitTime,
-      createdAt: submitTime,
-    },
+    data: { beaconId: cfg.beaconId, timestampId: r.timestampId, tree, txHash: r.txHash, root: snap.root, leafCount: snap.leafCount, metadata, submitTime, createdAt: submitTime },
   });
-  state.lastRoot = snap.root;
-  log(`beat: root=${snap.root.slice(0, 16)}… pairs=${snap.leafCount} changed=${changed} ts=${r.timestampId} tx=${r.txHash}`);
+  log(`beat[${tree}]: root=${snap.root.slice(0, 16)}… leaves=${snap.leafCount} changed=${changed} ts=${r.timestampId} tx=${r.txHash}`);
+  return snap.root;
+}
+
+// One heartbeat: anchor BOTH the pair tree and the token tree (two records per beat).
+async function beat(s: BeaconSigner, cfg: BeaconWriterConfig, state: BeatState): Promise<void> {
+  state.pairs = await recordTree(s, cfg, "pairs", await getAnchorSnapshot(), state.pairs);
+  state.tokens = await recordTree(s, cfg, "tokens", await getTokenAnchorSnapshot(), state.tokens);
 }
 
 async function main(): Promise<void> {
@@ -65,9 +61,10 @@ async function main(): Promise<void> {
     throw new Error("BEACON_ID not set — run the `register` subcommand once, then set BEACON_ID");
   }
 
-  // Seed lastRoot from the most recent stored anchor so a restart doesn't false-flag changed=1.
-  const last = await prisma.beaconAnchor.findFirst({ where: { beaconId: cfg.beaconId }, orderBy: { submitTime: "desc" } });
-  const state: BeatState = { lastRoot: last?.root ?? "" };
+  // Seed each tree's last root from the most recent stored anchor so a restart doesn't false-flag changed=1.
+  const lastOf = async (tree: Tree): Promise<string> =>
+    (await prisma.beaconAnchor.findFirst({ where: { beaconId: cfg.beaconId, tree }, orderBy: { submitTime: "desc" } }))?.root ?? "";
+  const state: BeatState = { pairs: await lastOf("pairs"), tokens: await lastOf("tokens") };
 
   if (mode === "once") {
     await beat(s, cfg, state);

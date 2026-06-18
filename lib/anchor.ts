@@ -1,14 +1,16 @@
 // lib/anchor.ts
-// The dpv anchor snapshot: a single Merkle root (lib/merkle.ts) over EVERY verified pair's DURABLE verdict
-// facts, plus each pair's proof + leaf preimage so a third party can recompute the root and verify any
-// pair. The committed facts are the SAME durable fields the provider export publishes — reusing
-// `trustScore` so the anchor's confidence matches the feed by construction (no second source of truth).
+// dpv anchor snapshots: TWO Merkle trees (#130) — one over every verified PAIR's durable verdict facts,
+// one over every verified TOKEN's durable identity facts. Each yields a root + per-item proof + leaf
+// preimage so a third party can recompute the root and verify any pair/token. The committed facts reuse
+// the export's `trustScore` (pairs) so the anchor matches the feed by construction.
 //
-// Cached on the GLOBAL modified-at watermark (`pairsModifiedAt({})` — max lastChecked/verdictAt over ALL
-// pairs, so a DEMOTION advances it too): the root is recomputed only when a verdict actually changes; the
-// per-minute beacon heartbeat (#130 S2) re-stamps the cached root between changes. Server-only.
+// Both snapshots are memoised on the SAME watermark — `pairsModifiedAt({})` (max lastChecked/verdictAt
+// over ALL pairs). It is a valid signal for tokens too: a token's verdict only changes inside a pipeline
+// run (which bumps pair lastChecked/verdictAt) or via the manual token form (which cascades the status to
+// the token's pairs, bumping their verdictAt) — so token changes always co-occur with a pair-watermark
+// advance. The per-minute beacon heartbeat re-stamps the cached roots between changes. Server-only.
 import { pairsModifiedAt, trustScore } from "./export";
-import { buildMerkle, canonicalLeaf, MerkleProof, pairCommitmentKey, PairCommitment } from "./merkle";
+import { buildMerkle, LeafInput, MerkleProof, pairLeafInput, PairCommitment, tokenLeafInput } from "./merkle";
 import prisma from "./prisma";
 import { VERIFIED_STATUSES } from "./status";
 
@@ -25,75 +27,103 @@ export type AnchorLeaf = {
 };
 
 export type AnchorSnapshot = {
-  root: string; // "" when there are no verified pairs
+  root: string; // "" when the set is empty
   leafCount: number;
   modifiedAt: number; // the watermark the root is keyed on
   generatedAt: number; // when this root was (re)computed
   leaves: AnchorLeaf[]; // committed (sorted) order
 };
 
+const toSnapshot = (tree: { root: string; leafCount: number; leaves: { key: string; leaf: string; proof: MerkleProof }[] }, preimages: Map<string, Record<string, unknown>>, modifiedAt: number, now: number): AnchorSnapshot => ({
+  root: tree.root,
+  leafCount: tree.leafCount,
+  modifiedAt,
+  generatedAt: now,
+  leaves: tree.leaves.map((l) => ({ key: l.key, preimage: preimages.get(l.key) ?? {}, leaf: l.leaf, proof: l.proof })),
+});
+
+const snapshotOf = (inputs: LeafInput[], modifiedAt: number, now: number): AnchorSnapshot =>
+  toSnapshot(buildMerkle(inputs), new Map(inputs.map((i) => [i.key, i.preimage])), modifiedAt, now);
+
 const tokenSelect = { chain: true, symbol: true, name: true, contractAddress: true, coingeckoCoinId: true } as const;
 
-let cache: AnchorSnapshot | null = null;
+let pairCache: AnchorSnapshot | null = null;
+let tokenCache: AnchorSnapshot | null = null;
 
-// Build the durable Merkle snapshot over all verified pairs. Memoised on the modified-at watermark.
+// The PAIR tree: every verified pair's durable verdict facts. Memoised on the modified-at watermark.
 export async function getAnchorSnapshot(opts: { now?: number; force?: boolean } = {}): Promise<AnchorSnapshot> {
   const modifiedAt = await pairsModifiedAt({});
-  if (!opts.force && cache && cache.modifiedAt === modifiedAt) {
-    return cache;
+  if (!opts.force && pairCache && pairCache.modifiedAt === modifiedAt) {
+    return pairCache;
   }
-
   const data = await prisma.pair.findMany({
     where: { status: { in: VERIFIED } },
     include: { token0: { select: tokenSelect }, token1: { select: tokenSelect } },
   });
-
-  const commitments: PairCommitment[] = data.map((d) => ({
-    chain: d.chain,
-    dex: d.dex,
-    contractAddress: d.contractAddress,
-    status: d.status,
-    confidence: trustScore(d.status, d.confidence),
-    canonicalKey: d.canonicalKey,
-    token0: d.token0,
-    token1: d.token1,
-  }));
-
-  const preimages = new Map<string, Record<string, unknown>>(commitments.map((c) => [pairCommitmentKey(c), canonicalLeaf(c)]));
-  const tree = buildMerkle(commitments);
-
-  cache = {
-    root: tree.root,
-    leafCount: tree.leafCount,
-    modifiedAt,
-    generatedAt: opts.now ?? nowSeconds(),
-    leaves: tree.leaves.map((l) => ({ key: l.key, preimage: preimages.get(l.key) ?? {}, leaf: l.leaf, proof: l.proof })),
-  };
-  return cache;
+  const inputs = data.map((d) => {
+    const c: PairCommitment = {
+      chain: d.chain,
+      dex: d.dex,
+      contractAddress: d.contractAddress,
+      status: d.status,
+      confidence: trustScore(d.status, d.confidence),
+      canonicalKey: d.canonicalKey,
+      token0: d.token0,
+      token1: d.token1,
+    };
+    return pairLeafInput(c);
+  });
+  pairCache = snapshotOf(inputs, modifiedAt, opts.now ?? nowSeconds());
+  return pairCache;
 }
 
-// The on-chain record (BeaconAnchor row) of a given root, latest first — null if that root has not been
-// anchored yet (the worker re-stamps within a heartbeat of any verdict change, so this is null only in the
-// brief window between a verdict change and the next beat).
-export type OnChainAnchor = { beaconId: number; timestampId: number; txHash: string; submitTime: number; metadata: string };
+// The TOKEN tree: every verified token's durable identity + verdict. Memoised on the same watermark.
+export async function getTokenAnchorSnapshot(opts: { now?: number; force?: boolean } = {}): Promise<AnchorSnapshot> {
+  const modifiedAt = await pairsModifiedAt({});
+  if (!opts.force && tokenCache && tokenCache.modifiedAt === modifiedAt) {
+    return tokenCache;
+  }
+  const tokens = await prisma.token.findMany({
+    where: { status: { in: VERIFIED } },
+    select: { chain: true, contractAddress: true, symbol: true, name: true, coingeckoCoinId: true, status: true },
+  });
+  const inputs = tokens.map((t) => tokenLeafInput(t));
+  tokenCache = snapshotOf(inputs, modifiedAt, opts.now ?? nowSeconds());
+  return tokenCache;
+}
+
+// The on-chain record (BeaconAnchor row) of a given root, latest first — null until the worker anchors it.
+// A root identifies its tree (pair roots ≠ token roots — the leaf `kind` differs), so a lookup by root is
+// unambiguous across both trees.
+export type OnChainAnchor = { beaconId: number; timestampId: number; txHash: string; submitTime: number; metadata: string; tree: string };
 
 export async function getOnChainAnchor(root: string): Promise<OnChainAnchor | null> {
   if (!root) {
     return null;
   }
   const a = await prisma.beaconAnchor.findFirst({ where: { root }, orderBy: { timestampId: "desc" } });
-  return a ? { beaconId: a.beaconId, timestampId: a.timestampId, txHash: a.txHash, submitTime: a.submitTime, metadata: a.metadata } : null;
+  return a ? { beaconId: a.beaconId, timestampId: a.timestampId, txHash: a.txHash, submitTime: a.submitTime, metadata: a.metadata, tree: a.tree } : null;
 }
 
-// A single pair's published leaf (preimage + proof) for the page badge / per-pair verify, or null.
-export async function getAnchorLeaf(chain: string, dex: string, contractAddress: string): Promise<{ root: string; modifiedAt: number; generatedAt: number; leaf: AnchorLeaf } | null> {
-  const snap = await getAnchorSnapshot();
-  const key = `${chain}/${dex}/${contractAddress}`;
+type LeafResult = { root: string; modifiedAt: number; generatedAt: number; leaf: AnchorLeaf };
+
+const findLeaf = (snap: AnchorSnapshot, key: string): LeafResult | null => {
   const leaf = snap.leaves.find((l) => l.key === key);
   return leaf ? { root: snap.root, modifiedAt: snap.modifiedAt, generatedAt: snap.generatedAt, leaf } : null;
+};
+
+// A single pair's published leaf (preimage + proof) for the pair-page badge, or null.
+export async function getAnchorLeaf(chain: string, dex: string, contractAddress: string): Promise<LeafResult | null> {
+  return findLeaf(await getAnchorSnapshot(), `${chain}/${dex}/${contractAddress}`);
 }
 
-// Test/maintenance hook to drop the in-memory memo.
+// A single token's published leaf (preimage + proof) for the token-page badge, or null.
+export async function getTokenAnchorLeaf(chain: string, contractAddress: string): Promise<LeafResult | null> {
+  return findLeaf(await getTokenAnchorSnapshot(), `${chain}/${contractAddress}`);
+}
+
+// Test/maintenance hook to drop the in-memory memos.
 export const _clearAnchorCache = (): void => {
-  cache = null;
+  pairCache = null;
+  tokenCache = null;
 };

@@ -8,13 +8,12 @@ import { createHash } from "crypto";
 import {
   canonicalLeaf,
   LEAF_PREFIX_BYTE,
+  LeafInput,
   LeafProof,
   MerkleProof,
   MerkleResult,
   NODE_PREFIX_BYTE,
   PairCommitment,
-  pairCommitmentKey,
-  sortKey,
   stableStringify,
 } from "./merkleCore";
 
@@ -26,18 +25,21 @@ const NODE_PREFIX = Buffer.from([NODE_PREFIX_BYTE]);
 
 const sha256 = (b: Buffer): Buffer => createHash("sha256").update(b).digest();
 
-// The leaf hash (hex) for one pair commitment.
-export function leafHash(c: PairCommitment): string {
-  return sha256(Buffer.concat([LEAF_PREFIX, Buffer.from(stableStringify(canonicalLeaf(c)), "utf8")])).toString("hex");
+// The leaf hash (hex) for a canonical preimage object.
+export function leafHashOf(preimage: Record<string, unknown>): string {
+  return sha256(Buffer.concat([LEAF_PREFIX, Buffer.from(stableStringify(preimage), "utf8")])).toString("hex");
 }
+
+// The leaf hash (hex) for one pair commitment (convenience).
+export const leafHash = (c: PairCommitment): string => leafHashOf(canonicalLeaf(c));
 
 // Hash two child nodes (domain-separated internal node).
 const hashNode = (a: Buffer, b: Buffer): Buffer => sha256(Buffer.concat([NODE_PREFIX, a, b]));
 
-// Build the Merkle tree + every leaf's proof over a set of pair commitments.
-export function buildMerkle(commitments: PairCommitment[]): MerkleResult {
-  const entries = commitments
-    .map((c) => ({ key: pairCommitmentKey(c), sortKey: sortKey(c), leaf: Buffer.from(leafHash(c), "hex") }))
+// Build the Merkle tree + every leaf's proof over a set of generic leaf inputs (pairs OR tokens).
+export function buildMerkle(inputs: LeafInput[]): MerkleResult {
+  const entries = inputs
+    .map((i) => ({ key: i.key, sortKey: i.sortKey, leaf: Buffer.from(leafHashOf(i.preimage), "hex") }))
     .sort((a, b) => (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0));
 
   if (entries.length === 0) {

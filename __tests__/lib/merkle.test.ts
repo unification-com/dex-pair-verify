@@ -4,7 +4,7 @@
 // exclusion, tamper detection, and a GOLDEN root so the exact hashing/serialisation can't drift silently.
 import { describe, expect, it } from "vitest";
 
-import { buildMerkle, canonicalLeaf, findProof, leafHash, MERKLE_LEAF_VERSION, PairCommitment, verifyProof } from "../../lib/merkle";
+import { buildMerkle, canonicalLeaf, findProof, leafHash, MERKLE_LEAF_VERSION, pairLeafInput, PairCommitment, verifyProof } from "../../lib/merkle";
 
 const tok = (symbol: string, cg: string): PairCommitment["token0"] => ({
   chain: "eth",
@@ -26,6 +26,9 @@ const pair = (over: Partial<PairCommitment> = {}): PairCommitment => ({
   ...over,
 });
 
+// buildMerkle now takes generic LeafInput; pairs map through pairLeafInput.
+const build = (cs: PairCommitment[]) => buildMerkle(cs.map(pairLeafInput));
+
 // A representative multi-pair set (distinct pools / canonical keys).
 const SET: PairCommitment[] = [
   pair({ contractAddress: "0xaaa", canonicalKey: "usd-coin:weth" }),
@@ -35,15 +38,15 @@ const SET: PairCommitment[] = [
 
 describe("buildMerkle determinism + ordering", () => {
   it("produces the same root regardless of input order", () => {
-    const a = buildMerkle(SET);
-    const b = buildMerkle([...SET].reverse());
+    const a = build(SET);
+    const b = build([...SET].reverse());
     expect(a.root).toHaveLength(64);
     expect(a.root).toBe(b.root);
     expect(a.leafCount).toBe(3);
   });
 
   it("commits leaves in the sorted (canonicalKey, chain/dex/contract) order", () => {
-    const r = buildMerkle(SET);
+    const r = build(SET);
     // bitcoin:usd-coin < tether:weth < usd-coin:weth lexically
     expect(r.leaves.map((l) => l.key)).toEqual(["eth/uniswap_v3/0xccc", "eth/sushiswap/0xbbb", "eth/uniswap_v3/0xaaa"]);
   });
@@ -51,14 +54,14 @@ describe("buildMerkle determinism + ordering", () => {
 
 describe("proofs", () => {
   it("every leaf's proof verifies against the root", () => {
-    const r = buildMerkle(SET);
+    const r = build(SET);
     for (const lp of r.leaves) {
       expect(verifyProof(lp.leaf, lp.proof, r.root)).toBe(true);
     }
   });
 
   it("verifies for a single-leaf tree (empty proof)", () => {
-    const r = buildMerkle([pair({ contractAddress: "0xsolo" })]);
+    const r = build([pair({ contractAddress: "0xsolo" })]);
     expect(r.leaves[0].proof).toEqual([]);
     expect(verifyProof(r.leaves[0].leaf, [], r.root)).toBe(true);
   });
@@ -66,7 +69,7 @@ describe("proofs", () => {
   it("verifies for odd leaf counts (last-node duplication)", () => {
     for (const n of [3, 5, 7]) {
       const set = Array.from({ length: n }, (_, i) => pair({ contractAddress: `0x${i}`, canonicalKey: `k${i}:weth` }));
-      const r = buildMerkle(set);
+      const r = build(set);
       expect(r.leafCount).toBe(n);
       for (const lp of r.leaves) {
         expect(verifyProof(lp.leaf, lp.proof, r.root)).toBe(true);
@@ -75,7 +78,7 @@ describe("proofs", () => {
   });
 
   it("findProof returns a pool's proof by key", () => {
-    const r = buildMerkle(SET);
+    const r = build(SET);
     const lp = findProof(r, "eth/sushiswap/0xbbb");
     expect(lp).not.toBeNull();
     expect(verifyProof(lp!.leaf, lp!.proof, r.root)).toBe(true);
@@ -83,7 +86,7 @@ describe("proofs", () => {
   });
 
   it("rejects a tampered leaf and a wrong root", () => {
-    const r = buildMerkle(SET);
+    const r = build(SET);
     const lp = r.leaves[0];
     const otherLeaf = r.leaves[1].leaf;
     expect(verifyProof(otherLeaf, lp.proof, r.root)).toBe(false); // wrong leaf for this proof
@@ -92,11 +95,12 @@ describe("proofs", () => {
 });
 
 describe("leaf canonicalisation", () => {
-  it("commits the durable facts and EXCLUDES volatile market data", () => {
+  it("commits the durable facts (+ kind tag) and EXCLUDES volatile market data", () => {
     const leaf = canonicalLeaf(pair());
     expect(Object.keys(leaf).sort()).toEqual(
-      ["canonicalKey", "chain", "confidenceE4", "contractAddress", "dex", "status", "token0", "token1", "v"].sort(),
+      ["canonicalKey", "chain", "confidenceE4", "contractAddress", "dex", "kind", "status", "token0", "token1", "v"].sort(),
     );
+    expect(leaf.kind).toBe("pair"); // domain-separates the pair tree from the token tree
     // No reserve/volume/txCount ever enters the commitment.
     expect(JSON.stringify(leaf)).not.toMatch(/reserve|volume|txcount/i);
     expect(leaf.v).toBe(MERKLE_LEAF_VERSION);
@@ -122,7 +126,7 @@ describe("empty + golden", () => {
   });
 
   it("matches the golden root (locks the exact hashing + serialisation)", () => {
-    // Recompute with: node -e on buildMerkle(SET).root if the canonicalisation legitimately changes.
-    expect(buildMerkle(SET).root).toBe("7b3dd94ef92db87b6ddb71387a5f54a2fd8d9bbec9aef1a5f02631889c1223de");
+    // Recompute with: node -e on build(SET).root if the canonicalisation legitimately changes.
+    expect(build(SET).root).toBe("7fe11e46eded09c9207e3dd2e04d4011b7ca212664ae5942bbd8be41e46e7827");
   });
 });

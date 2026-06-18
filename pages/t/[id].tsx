@@ -190,7 +190,7 @@ const PublicToken: React.FC<PublicProps> = ({ token: t, pools, web, organicity }
                 </div>
             </div>
 
-            <BeaconNotarised />
+            <BeaconNotarised token={{ chain: t.chain, address: t.contractAddress }} />
 
             <style jsx>{`
                 .tok-main { display: flex; flex-direction: column; gap: var(--sp-5); }
@@ -430,7 +430,7 @@ const OperatorToken: React.FC<OperatorProps> = (props) => {
                 </aside>
             </div>
 
-            <BeaconNotarised />
+            <BeaconNotarised token={{ chain: t.chain, address: t.contractAddress }} />
 
             <style jsx>{`
                 .tok-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--sp-6); align-items: start; }

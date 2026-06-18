@@ -5,7 +5,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { resetDb, seedPair, seedToken, testPrisma } from "./helpers";
-import { _clearAnchorCache, getAnchorLeaf, getAnchorSnapshot } from "../../lib/anchor";
+import { _clearAnchorCache, getAnchorLeaf, getAnchorSnapshot, getTokenAnchorLeaf, getTokenAnchorSnapshot } from "../../lib/anchor";
 import { verifyProof } from "../../lib/merkle";
 
 beforeEach(async () => {
@@ -80,5 +80,41 @@ describe("anchor snapshot (BEACON #130)", () => {
 
     const s4 = await getAnchorSnapshot({ now: 444, force: true }); // force bypasses the memo
     expect(s4.generatedAt).toBe(444);
+  });
+});
+
+describe("token anchor tree (BEACON #130)", () => {
+  it("commits VERIFIED tokens only, with kind=token leaves whose proofs verify", async () => {
+    await seedToken({ symbol: "WETH", coingeckoCoinId: "weth", status: "AutoVerified" });
+    await seedToken({ symbol: "USDC", coingeckoCoinId: "usd-coin", status: "ManualVerified" });
+    await seedToken({ symbol: "SCAM", coingeckoCoinId: "", status: "NeedsReview" }); // excluded
+
+    const snap = await getTokenAnchorSnapshot({ force: true });
+    expect(snap.leafCount).toBe(2);
+    expect(snap.root).toHaveLength(64);
+    for (const lp of snap.leaves) {
+      expect((lp.preimage as { kind: string }).kind).toBe("token");
+      expect(verifyProof(lp.leaf, lp.proof, snap.root)).toBe(true);
+    }
+  });
+
+  it("the pair tree and token tree have DIFFERENT roots (domain-separated)", async () => {
+    const t0 = await seedToken({ symbol: "WETH", coingeckoCoinId: "weth", status: "AutoVerified" });
+    const t1 = await seedToken({ symbol: "USDC", coingeckoCoinId: "usd-coin", status: "AutoVerified" });
+    await seedPair(t0.id, t1.id, { status: "AutoVerified", canonicalKey: "usd-coin:weth" });
+
+    const pairSnap = await getAnchorSnapshot({ force: true });
+    const tokenSnap = await getTokenAnchorSnapshot({ force: true });
+    expect(pairSnap.root).not.toBe(tokenSnap.root);
+    expect(pairSnap.leafCount).toBe(1);
+    expect(tokenSnap.leafCount).toBe(2);
+  });
+
+  it("getTokenAnchorLeaf returns a token's proof; null for an absent token", async () => {
+    const t = await seedToken({ symbol: "WETH", coingeckoCoinId: "weth", status: "AutoVerified" });
+    const got = await getTokenAnchorLeaf(t.chain, t.contractAddress);
+    expect(got).not.toBeNull();
+    expect(verifyProof(got!.leaf.leaf, got!.leaf.proof, got!.root)).toBe(true);
+    expect(await getTokenAnchorLeaf("eth", "0xabsent")).toBeNull();
   });
 });

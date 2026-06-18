@@ -38,6 +38,21 @@ export type PairCommitment = {
   token1: TokenCommitment | null;
 };
 
+// One verified TOKEN's durable identity facts — the leaf of the separate token tree (#130). A token's
+// identity (chain/contract/symbol/name/cg id) + its verdict status; no volatile market data.
+export type TokenLeafCommitment = {
+  chain: string;
+  contractAddress: string;
+  symbol: string;
+  name: string;
+  coingeckoCoinId: string;
+  status: string;
+};
+
+// A generic leaf the tree builder consumes: a stable lookup key, a deterministic sort key, and the
+// canonical preimage that gets hashed. Pairs and tokens both map to this (one tree builder for both).
+export type LeafInput = { key: string; sortKey: string; preimage: Record<string, unknown> };
+
 // A proof step carries the SIBLING hash and which side it sits on, so verification re-hashes in order.
 export type ProofStep = { hash: string; position: "left" | "right" };
 export type MerkleProof = ProofStep[];
@@ -72,11 +87,13 @@ const canonicalToken = (t: TokenCommitment) => ({
   coingeckoCoinId: t.coingeckoCoinId,
 });
 
-// The canonical leaf object — the exact value committed. confidence → 4-dp integer (no floats); addresses
+// The canonical PAIR leaf object — the exact value committed. `kind` domain-separates it from a token
+// leaf (so the two trees can never share a leaf). confidence → 4-dp integer (no floats); addresses
 // committed AS-STORED (lower-cased EVM hex / case-sensitive Cosmos denom both stay stable from the DB).
 export function canonicalLeaf(c: PairCommitment): Record<string, unknown> {
   return {
     v: MERKLE_LEAF_VERSION,
+    kind: "pair",
     chain: c.chain,
     dex: c.dex,
     contractAddress: c.contractAddress,
@@ -88,9 +105,34 @@ export function canonicalLeaf(c: PairCommitment): Record<string, unknown> {
   };
 }
 
+// The canonical TOKEN leaf object — a token's durable identity + verdict (no market data).
+export function canonicalTokenLeaf(t: TokenLeafCommitment): Record<string, unknown> {
+  return {
+    v: MERKLE_LEAF_VERSION,
+    kind: "token",
+    chain: t.chain,
+    contractAddress: t.contractAddress,
+    symbol: t.symbol,
+    name: t.name,
+    coingeckoCoinId: t.coingeckoCoinId,
+    status: t.status,
+  };
+}
+
 // A stable, unique key for a pool (used to look a pair's proof back up for the page badge).
 export const pairCommitmentKey = (c: PairCommitment): string => `${c.chain}/${c.dex}/${c.contractAddress}`;
 
-// The deterministic sort key — canonicalKey first (groups logical pairs), then chain/dex/contract as a
-// stable tie-break. Space-joined; null canonicalKey sorts first ("").
+// A stable, unique key for a token.
+export const tokenCommitmentKey = (t: TokenLeafCommitment): string => `${t.chain}/${t.contractAddress}`;
+
+// The deterministic PAIR sort key — canonicalKey first (groups logical pairs), then chain/dex/contract as
+// a stable tie-break. Space-joined; null canonicalKey sorts first ("").
 export const sortKey = (c: PairCommitment): string => [c.canonicalKey ?? "", c.chain, c.dex, c.contractAddress].join(" ");
+
+// Map a pair / token commitment to the generic LeafInput the tree builder consumes.
+export const pairLeafInput = (c: PairCommitment): LeafInput => ({ key: pairCommitmentKey(c), sortKey: sortKey(c), preimage: canonicalLeaf(c) });
+export const tokenLeafInput = (t: TokenLeafCommitment): LeafInput => ({
+  key: tokenCommitmentKey(t),
+  sortKey: [t.coingeckoCoinId ?? "", t.chain, t.contractAddress].join(" "), // cg id first (groups an asset), then chain/contract
+  preimage: canonicalTokenLeaf(t),
+});

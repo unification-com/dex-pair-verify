@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildMerkle } from "../../lib/merkle";
-import { canonicalLeaf, PairCommitment, pairCommitmentKey } from "../../lib/merkleCore";
+import { canonicalLeaf, pairLeafInput, PairCommitment, pairCommitmentKey } from "../../lib/merkleCore";
 import { verifyLeafPreimage } from "../../lib/merkleVerify";
 
 const tok = (symbol: string, cg: string): PairCommitment["token0"] => ({
@@ -42,7 +42,7 @@ const preimageByKey = new Map(SET.map((c) => [pairCommitmentKey(c), canonicalLea
 
 describe("merkleVerify (browser Web-Crypto) ≡ node builder", () => {
   it("verifies every leaf's proof from its preimage against the node root", async () => {
-    const tree = buildMerkle(SET);
+    const tree = buildMerkle(SET.map(pairLeafInput));
     expect(tree.root).toHaveLength(64);
     for (const lp of tree.leaves) {
       expect(await verifyLeafPreimage(preimageByKey.get(lp.key), lp.proof, tree.root)).toBe(true);
@@ -50,14 +50,14 @@ describe("merkleVerify (browser Web-Crypto) ≡ node builder", () => {
   });
 
   it("rejects a tampered preimage (a verdict field flipped)", async () => {
-    const tree = buildMerkle(SET);
+    const tree = buildMerkle(SET.map(pairLeafInput));
     const lp = tree.leaves[0];
     const tampered = { ...(preimageByKey.get(lp.key) as Record<string, unknown>), status: "Hacked" };
     expect(await verifyLeafPreimage(tampered, lp.proof, tree.root)).toBe(false);
   });
 
   it("rejects a wrong root and a malformed root", async () => {
-    const tree = buildMerkle(SET);
+    const tree = buildMerkle(SET.map(pairLeafInput));
     const lp = tree.leaves[0];
     expect(await verifyLeafPreimage(preimageByKey.get(lp.key), lp.proof, "00".repeat(32))).toBe(false);
     expect(await verifyLeafPreimage(preimageByKey.get(lp.key), lp.proof, "abc")).toBe(false);
