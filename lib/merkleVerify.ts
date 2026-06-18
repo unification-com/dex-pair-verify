@@ -29,19 +29,35 @@ const concat = (...parts: Uint8Array[]): Uint8Array => {
   return out;
 };
 
-// Recompute the root from the leaf preimage + proof and confirm it equals `rootHex`. The preimage is the
-// canonical leaf object the /api/ooo/v1/anchor endpoint publishes; we re-derive the leaf hash from it
-// (not the server's asserted leaf) so this is an independent check.
-export async function verifyLeafPreimage(preimage: unknown, proof: MerkleProof, rootHex: string): Promise<boolean> {
-  if (rootHex.length !== 64) {
-    return false;
-  }
+// One hashing step on the way leaf→root: combine the running hash with the proof's sibling (on the given
+// side) to get the parent hash. Exposed so the UI can SHOW the actual proof walk, not just a yes/no.
+export type TraceStep = { sibling: string; position: "left" | "right"; result: string };
+export type VerifyTrace = {
+  leaf: string; // the leaf hash recomputed from the preimage (independent of the server's asserted leaf)
+  steps: TraceStep[]; // each branch combine up the tree
+  computedRoot: string; // the root this walk arrives at
+  ok: boolean; // computedRoot === the on-chain-recorded root
+};
+
+// Recompute the root from the leaf PREIMAGE + proof and return the full step-by-step trace. The preimage
+// is the canonical leaf object /api/ooo/v1/anchor publishes; we re-derive the leaf from it (not the
+// server's asserted leaf) and walk each branch to a root, so the trace is an independent reconstruction.
+export async function traceLeafPreimage(preimage: unknown, proof: MerkleProof, rootHex: string): Promise<VerifyTrace> {
   const enc = new TextEncoder();
   let h = await sha256(concat(Uint8Array.of(LEAF_PREFIX_BYTE), enc.encode(stableStringify(preimage))));
+  const leaf = bytesToHex(h);
+  const steps: TraceStep[] = [];
   for (const step of proof) {
     const sib = hexToBytes(step.hash);
     const node = step.position === "left" ? concat(Uint8Array.of(NODE_PREFIX_BYTE), sib, h) : concat(Uint8Array.of(NODE_PREFIX_BYTE), h, sib);
     h = await sha256(node);
+    steps.push({ sibling: step.hash, position: step.position, result: bytesToHex(h) });
   }
-  return bytesToHex(h) === rootHex;
+  const computedRoot = bytesToHex(h);
+  return { leaf, steps, computedRoot, ok: computedRoot === rootHex && rootHex.length === 64 };
+}
+
+// Boolean convenience over traceLeafPreimage (kept for callers/tests that only need the verdict).
+export async function verifyLeafPreimage(preimage: unknown, proof: MerkleProof, rootHex: string): Promise<boolean> {
+  return (await traceLeafPreimage(preimage, proof, rootHex)).ok;
 }

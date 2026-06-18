@@ -247,8 +247,6 @@ const PublicPair: React.FC<PublicProps> = ({ pair, similar }) => (
       </span>}
     />
 
-    <BeaconNotarised pair={{ chain: pair.chain, dex: pair.dex, address: pair.contractAddress }} />
-
     <div className="pub-grid">
       <div className="token-cards">
         {[pair.token0, pair.token1].map((t, i) => (
@@ -275,6 +273,8 @@ const PublicPair: React.FC<PublicProps> = ({ pair, similar }) => (
         </details>
       )}
     </div>
+
+    <BeaconNotarised pair={{ chain: pair.chain, dex: pair.dex, address: pair.contractAddress }} />
 
     <style jsx>{`
       .pub-grid { display: flex; flex-direction: column; gap: var(--sp-5); }
@@ -408,8 +408,6 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
           : null}
       />
 
-      <BeaconNotarised pair={{ chain: props.pair.chain, dex: props.pair.dex, address: props.pair.contractAddress }} />
-
       <div className="pair-grid">
         <div className="pair-main">
           <TrustBadgeRow signals={props.signals} />
@@ -523,6 +521,8 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
           </div>
         </aside>
       </div>
+
+      <BeaconNotarised pair={{ chain: props.pair.chain, dex: props.pair.dex, address: props.pair.contractAddress }} />
 
       <style jsx>{`
         .pair-grid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: var(--sp-6); align-items: start; }

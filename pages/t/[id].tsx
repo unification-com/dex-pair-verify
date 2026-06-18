@@ -158,8 +158,6 @@ const PublicToken: React.FC<PublicProps> = ({ token: t, pools, web, organicity }
                 </span>}
             />
 
-            <BeaconNotarised />
-
             <div className="tok-main">
                 <div className="card card-pad">
                     <span className="eyebrow" style={{ display: "block", marginBottom: "var(--sp-1)" }}>Identity</span>
@@ -191,6 +189,8 @@ const PublicToken: React.FC<PublicProps> = ({ token: t, pools, web, organicity }
                     <DataTable columns={publicPairCols} data={pools} rowKey={(p) => p.id} onRowClick={(p) => router.push(`/p/${p.id}`)} sortInit={{ key: "reserveUsd", dir: "desc" }} empty="No verified pairs." />
                 </div>
             </div>
+
+            <BeaconNotarised />
 
             <style jsx>{`
                 .tok-main { display: flex; flex-direction: column; gap: var(--sp-5); }
@@ -300,8 +300,6 @@ const OperatorToken: React.FC<OperatorProps> = (props) => {
                     <CoinGeckoCoinLink coingeckoId={t.coingeckoCoinId} />
                 </span>}
             />
-
-            <BeaconNotarised />
 
             <div className="tok-grid">
                 <div className="tok-main">
@@ -431,6 +429,8 @@ const OperatorToken: React.FC<OperatorProps> = (props) => {
                     </div>
                 </aside>
             </div>
+
+            <BeaconNotarised />
 
             <style jsx>{`
                 .tok-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: var(--sp-6); align-items: start; }
