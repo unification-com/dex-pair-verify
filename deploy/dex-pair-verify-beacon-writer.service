@@ -1,0 +1,23 @@
+[Unit]
+Description=dex-pair-verify BEACON writer (heartbeat + leaf/fulfilment/re-anchor drip)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=500
+StartLimitBurst=5
+
+[Service]
+Type=simple
+# EDIT: the user that owns the checkout and the nvm install.
+User=youruser
+# EDIT: absolute path to deploy/beacon-writer.sh inside your checkout.
+# Launched via bash so nvm can be sourced and a lost +x bit / CRLF shebang / SELinux
+# exec-label can't break startup with status=203/EXEC. The script exec's the worker,
+# so systemd supervises it directly. Run ONE instance only (serial signing nonce).
+ExecStart=/bin/bash /home/youruser/dex-pair-verify/deploy/beacon-writer.sh
+Restart=on-failure
+RestartSec=10s
+KillSignal=SIGINT
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

@@ -22,15 +22,8 @@ if command -v flock >/dev/null 2>&1; then
   flock -n 9 || { echo "another run holds the lock, skipping"; exit 0; }
 fi
 
-export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
-if [ -s "$NVM_DIR/nvm.sh" ]; then
-  # shellcheck source=/dev/null
-  . "$NVM_DIR/nvm.sh"
-else
-  echo "nvm not found at $NVM_DIR/nvm.sh"
-  exit 1
-fi
-nvm use "$NODE_VERSION" >/dev/null
+# shellcheck source=/dev/null
+source "$DIR/nvm-init.sh"
 
 cd "$APP_DIR" || { echo "cannot cd to $APP_DIR"; exit 1; }
 
