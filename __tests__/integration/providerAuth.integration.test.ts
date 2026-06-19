@@ -54,6 +54,11 @@ describe("provider auth DB flow (T8)", () => {
     const principal = await authoriseExport(reqWith(issued!.token), NOW + 30);
     expect(principal?.via).toBe("token");
     expect(principal?.address).toBe(addr.toLowerCase());
+
+    // Regression: authoriseExport's `now` is unix SECONDS (compared against the token's expiresAt). A
+    // millisecond value — what Date.now() returns — makes every live token read as expired, so the export
+    // routes MUST pass Math.floor(Date.now()/1000), not the raw ms.
+    expect(await authoriseExport(reqWith(issued!.token), (NOW + 30) * 1000)).toBeNull();
   });
 
   it("rejects a signature from the wrong key", async () => {

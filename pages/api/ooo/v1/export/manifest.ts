@@ -17,7 +17,9 @@ export default async function handler(
 ) {
     const started = Date.now()
 
-    if (!(await authoriseExport(req, started))) {
+    // authoriseExport's now is unix SECONDS (it's compared against the provider token's expiresAt, in
+    // seconds) — pass started/1000, not the millisecond Date.now(), or every wallet token reads as expired.
+    if (!(await authoriseExport(req, Math.floor(started / 1000)))) {
         return res.status(401).json({ error: "unauthorised" })
     }
 
