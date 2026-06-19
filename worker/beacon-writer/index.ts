@@ -23,6 +23,7 @@ import prisma from "../../lib/prisma";
 
 const log = (msg: string): void => console.log(`[beacon-writer ${new Date().toISOString()}] ${msg}`);
 const nowSeconds = (): number => Math.floor(Date.now() / 1000);
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Last anchored root per tree, so a re-stamp between changes is flagged changed=0.
 type BeatState = { pairs: string; tokens: string };
@@ -150,34 +151,40 @@ async function main(): Promise<void> {
     return;
   }
 
-  log(`heartbeat every ${cfg.intervalSec}s; drip ${cfg.dripEnabled ? `every ${cfg.dripIntervalSec}s` : "off"} on beacon ${cfg.beaconId}`);
+  log(`heartbeat every ${cfg.intervalSec}s; drip ${cfg.dripEnabled ? "on (serial, ~1 tx/block)" : "off"} on beacon ${cfg.beaconId}`);
+  let stopped = false;
+  const stop = (sig: string): void => {
+    stopped = true; // the loop finishes the in-flight tx, then exits cleanly
+    log(`received ${sig} — stopping after the current tx`);
+  };
+  process.on("SIGINT", () => stop("SIGINT"));
+  process.on("SIGTERM", () => stop("SIGTERM"));
+
+  // SERIAL loop: exactly ONE tx is ever in flight. Each record awaits inclusion before the next begins, so
+  // cosmjs always signs with a fresh account sequence — this removes the "account sequence mismatch" races the
+  // previous overlapping setInterval caused (a heartbeat's two txs outran the tick interval, so ticks stacked).
+  // Each signAndBroadcast already blocks ~one block, so the drip self-paces at ~1 tx/block at full throughput.
   let nextHeartbeat = 0; // fire a heartbeat immediately
-  const tickMs = (cfg.dripEnabled ? cfg.dripIntervalSec : cfg.intervalSec) * 1000;
-  const tick = async (): Promise<void> => {
+  while (!stopped) {
     try {
       if (Date.now() >= nextHeartbeat) {
         await ensureMetadata(cfg); // probe for the upgrade once per heartbeat until it latches on
         await heartbeat(s, cfg, state);
         nextHeartbeat = Date.now() + cfg.intervalSec * 1000;
-      } else if (cfg.dripEnabled) {
-        await dripOne(s, cfg);
+      } else if (!cfg.dripEnabled || !(await dripOne(s, cfg))) {
+        // drip off, or the backlog is drained: idle in short hops until the next heartbeat (stays responsive
+        // to SIGTERM + the heartbeat schedule without busy-spinning).
+        await sleep(Math.min(2000, Math.max(250, nextHeartbeat - Date.now())));
       }
     } catch (e) {
-      // Non-fatal: the heartbeat IS the liveness alarm — log + let the next tick retry.
-      log(`tick error (will retry next tick): ${(e as Error).message}`);
+      // Non-fatal (e.g. a transient RPC blip): log + back off ~a block, then retry on the next iteration.
+      log(`record error (will retry): ${(e as Error).message}`);
+      await sleep(cfg.dripIntervalSec * 1000);
     }
-  };
-  await tick(); // immediate first heartbeat
-  const timer = setInterval(() => void tick(), tickMs);
-
-  const stop = (sig: string): void => {
-    clearInterval(timer);
-    disconnect(s);
-    log(`received ${sig} — stopped`);
-    process.exit(0);
-  };
-  process.on("SIGINT", () => stop("SIGINT"));
-  process.on("SIGTERM", () => stop("SIGTERM"));
+  }
+  disconnect(s);
+  log("stopped");
+  process.exit(0);
 }
 
 main().catch((e) => {
