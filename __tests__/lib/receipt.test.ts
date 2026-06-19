@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { utils as web3Utils } from "web3";
 
-import { decodeFulfilment, EvmLog, receiptCommit, REQUEST_FULFILLED_TOPIC } from "../../worker/fulfilment-watcher/receipt";
+import { decodeDataRequested, decodeFulfilment, DATA_REQUESTED_TOPIC, EvmLog, receiptCommit, REQUEST_FULFILLED_TOPIC } from "../../worker/fulfilment-watcher/receipt";
 
 // A RequestFulfilled(address indexed consumer, address indexed provider, bytes32 indexed requestId,
 // uint256 requestedData) log: 4 topics + the uint256 in data.
@@ -60,5 +60,45 @@ describe("receiptCommit", () => {
     const f1 = decodeFulfilment(log(), { chain: "eth", chainId: 1 })!;
     const f2 = decodeFulfilment(log({ data: `0x${"00".repeat(31)}2b` }), { chain: "eth", chainId: 1 })!;
     expect(receiptCommit(f1).hash).not.toBe(receiptCommit(f2).hash);
+  });
+});
+
+// A DataRequested(address indexed consumer, address indexed provider, uint256 fee, bytes32 data,
+// bytes32 indexed requestId) log: 4 topics + abi.encode(uint256 fee, bytes32 endpoint) in data.
+const ENDPOINT_WETH_SHIB = "574554482e534849422e4144"; // asciiToHex("WETH.SHIB.AD")
+const reqLog = (over: Partial<EvmLog> = {}): EvmLog => ({
+  address: "0xf6b5d6eafE402d22609e685DE3394c8b359CaD31",
+  topics: [
+    DATA_REQUESTED_TOPIC,
+    `0x000000000000000000000000${"11".repeat(20)}`, // consumer
+    `0x000000000000000000000000${"22".repeat(20)}`, // provider
+    `0x${"ab".repeat(32)}`, // requestId
+  ],
+  data: `0x${(100000).toString(16).padStart(64, "0")}${ENDPOINT_WETH_SHIB.padEnd(64, "0")}`, // fee=100000, endpoint
+  transactionHash: `0x${"cd".repeat(32)}`,
+  blockNumber: "0x10",
+  ...over,
+});
+
+describe("DataRequested topic", () => {
+  it("matches keccak256 of the event signature", () => {
+    expect(DATA_REQUESTED_TOPIC).toBe(web3Utils.keccak256("DataRequested(address,address,uint256,bytes32,bytes32)"));
+  });
+});
+
+describe("decodeDataRequested", () => {
+  it("decodes the indexed topics + fee + endpoint", () => {
+    const d = decodeDataRequested(reqLog(), { chain: "sepolia", chainId: 11155111 });
+    expect(d).not.toBeNull();
+    expect(d!.consumer).toBe(`0x${"11".repeat(20)}`);
+    expect(d!.requestId).toBe(`0x${"ab".repeat(32)}`);
+    expect(d!.pair).toBe("WETH.SHIB.AD");
+    expect(d!.feePaid).toBe("100000");
+    expect(d!.router).toBe("0xf6b5d6eafe402d22609e685de3394c8b359cad31"); // lower-cased
+    expect(d!.blockNumber).toBe(16);
+  });
+
+  it("returns null for a non-DataRequested log", () => {
+    expect(decodeDataRequested(reqLog({ topics: [REQUEST_FULFILLED_TOPIC] }), { chain: "eth", chainId: 1 })).toBeNull();
   });
 });

@@ -439,16 +439,16 @@ model PriceCache {
 // committed pair count. Powers the per-pair "Notarised on Mainchain" badge (latest anchor whose root the
 // pair's proof verifies against) + the liveness view. Append-only mirror of on-chain state.
 model BeaconAnchor {
-  id          Int      @id @default(autoincrement())
+  id          Int    @id @default(autoincrement())
   beaconId    Int
   timestampId Int
-  tree        String   @default("pairs") // which Merkle tree this root is over: "pairs" | "tokens"
+  tree        String @default("pairs") // which Merkle tree this root is over: "pairs" | "tokens"
   txHash      String
   root        String
-  leafCount   Int      @default(0)
-  metadata    String   @default("")
-  submitTime  Int      @default(0)
-  createdAt   Int      @default(0)
+  leafCount   Int    @default(0)
+  metadata    String @default("")
+  submitTime  Int    @default(0)
+  createdAt   Int    @default(0)
 
   @@unique([beaconId, timestampId])
   @@index([root])
@@ -479,9 +479,9 @@ model BeaconQueue {
 // Per-chain block cursor for the fulfilment watcher (#130 path ii): the last EVM block scanned for a
 // Router's RequestFulfilled events, so a restart resumes without rescanning or missing logs.
 model BeaconWatchCursor {
-  chainId   Int    @id
-  lastBlock Int    @default(0)
-  updatedAt Int    @default(0)
+  chainId   Int @id
+  lastBlock Int @default(0)
+  updatedAt Int @default(0)
 }
 
 // Singleton (id = 1) tracking the #129 metadata roll-out. Pre-vaxildan the writer records hashes WITHOUT
@@ -527,4 +527,36 @@ model ProviderToken {
 
   @@index([address])
   @@index([expiresAt])
+}
+
+// OoO fulfilment history (admin dashboard #1). One row per OoO request, populated by the fulfilment-watcher
+// as it scans each Router's events: the request side (DataRequested → pair + fee) and the fulfil side
+// (RequestFulfilled → provider + result) are upserted independently and keyed by (chainId, router, requestId),
+// so either event can arrive first / in a different batch. The BEACON anchor is NOT denormalised here — it's
+// joined at read time via refKey (`chain/router/requestId`) against BeaconQueue, so it stays consistent.
+model Fulfilment {
+  id            Int     @id @default(autoincrement())
+  chainId       Int
+  chain         String
+  router        String // lowercased
+  consumer      String? // lowercased; from DataRequested
+  provider      String? // lowercased; from RequestFulfilled
+  requestId     String // 0x… (32-byte hex)
+  pair          String? // decoded DataRequested endpoint, e.g. "WETH.SHIB.AD"
+  result        String? // delivered uint256 (the price), stringified; from RequestFulfilled
+  feePaid       String? // xFUND base units (uint256 string); from DataRequested
+  requestTxHash String?
+  fulfilTxHash  String?
+  requestBlock  Int?
+  fulfilBlock   Int?
+  requestedAt   Int? // request block time (unix s)
+  fulfilledAt   Int? // fulfil block time (unix s)
+  createdAt     Int     @default(0)
+  updatedAt     Int     @default(0)
+
+  @@unique([chainId, router, requestId])
+  @@index([provider])
+  @@index([chainId])
+  @@index([fulfilledAt])
+  @@index([pair])
 }

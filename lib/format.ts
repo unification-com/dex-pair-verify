@@ -18,6 +18,10 @@ export const usd = (n: number | null | undefined): string => {
 export const num = (n: number | null | undefined, maxFrac = 0): string =>
   n == null ? "—" : new Intl.NumberFormat("en-GB", { maximumFractionDigits: maxFrac }).format(n);
 
+// Abbreviate a hex string (address / tx hash / requestId): 0x1234…cdef. Null/short → as-is.
+export const shortHex = (h: string | null | undefined, lead = 6, tail = 4): string =>
+  !h ? "—" : h.length <= lead + tail + 1 ? h : `${h.slice(0, lead)}…${h.slice(-tail)}`;
+
 // Readable label for an unmapped chain/dex slug: "aerodrome_slipstream" →
 // "Aerodrome Slipstream", "camelot_v3" → "Camelot V3". Version tokens (v2/v3…)
 // are upper-cased; every other word is title-cased. Used as the fallback in
