@@ -560,3 +560,13 @@ model Fulfilment {
   @@index([fulfilledAt])
   @@index([pair])
 }
+
+// Self-tracked outbound The Graph query count (admin #3, Part B). The Graph exposes usage only in the Studio
+// UI (no API), so dpv counts its own gateway queries — keyed by calendar billing month ("YYYY-MM", UTC) — to
+// project consumption against the 100k/month free tier. firstAt anchors the "tracked since" caveat + the rate.
+model GraphQueryUsage {
+  period    String @id // "YYYY-MM" UTC calendar billing month
+  count     Int    @default(0)
+  firstAt   Int    @default(0) // unix s of the first query tracked this period
+  updatedAt Int    @default(0)
+}

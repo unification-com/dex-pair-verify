@@ -13,6 +13,8 @@
 // without a live subgraph. A failed/ambiguous probe never throws — it returns a
 // result the candidate-review UI surfaces for operator confirmation.
 
+import { bumpGraphQuery } from "./graphQueryCounter";
+
 export type SubgraphProvider = "graph-decentralized" | "graph-studio" | "graph-hosted" | "self-hosted";
 export type SchemaFamily = "univ2" | "univ3" | "univ4" | "messari" | "custom";
 
@@ -145,6 +147,7 @@ const defaultGraphqlFetch: GraphqlFetcher = async (url, query) => {
     // Network-boundary backstop: never let a real fetch reach a private/non-https
     // host, whatever the caller. (Tests inject a fetcher and bypass this path.)
     assertSafeSubgraphUrl(url);
+    bumpGraphQuery(); // count this outbound Graph-gateway query (admin #3 Part B)
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

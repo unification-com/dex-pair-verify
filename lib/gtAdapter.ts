@@ -12,6 +12,7 @@
 import { utils as web3Utils } from "web3";
 
 import { cgKeyedFetch, GECKO_API_KEY } from "./coingecko";
+import { bumpGraphQuery } from "./graphQueryCounter";
 import {
   emptyPoolFacts,
   IngestAdapter,
@@ -253,6 +254,7 @@ async function gtCorroborate(chain: string, dex: string, pools: NormalisedPool[]
   const fields = family === "univ4" ? "id hooks" : "id";
   const query = `{ ${collection}(where: { id_in: [${idList}] }) { ${fields} } }`;
   try {
+    bumpGraphQuery(); // count this outbound Graph-gateway query (admin #3 Part B)
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
