@@ -82,8 +82,9 @@ BEACON — separate from the web server. Skip this whole section if you're not a
 - **`beacon-writer`** — holds a FUNDED `und` signing key; records the pair+token Merkle
   roots each minute and (with drip on) every leaf + OoO fulfilment receipt, one tx per
   block. Run **one** instance only (single account ⇒ serial nonce).
-- **`fulfilment-watcher`** — read-only (no key); watches each OoO Router's
-  `RequestFulfilled` event and queues receipts for the writer.
+- **`fulfilment-watcher`** — read-only (no key); watches each OoO Router's `DataRequested` +
+  `RequestFulfilled` events, populates the `Fulfilment` history table (the `/ooo-fulfilments`
+  admin dashboard) and queues receipts for the writer to anchor.
 
 1. **Config.** Copy the `BEACON_*` / `OOO_ROUTER_*` block from `.env.example` into your
    `.env` and fill it in. Put the signer mnemonic in a file (not inline):
@@ -95,8 +96,8 @@ BEACON — separate from the web server. Skip this whole section if you're not a
    `BEACON_DRIP_ENABLED=true` is **required** — without it only the root heartbeat runs and
    leaves / fulfilments / the re-anchor backlog never reach the chain.
 
-2. **Schema.** `npx prisma db push` (from §2) creates the `BeaconChainState` table the
-   writer needs — re-run it if you haven't since adding the workers.
+2. **Schema.** `npx prisma db push` (from §2) creates the `BeaconChainState` + `Fulfilment`
+   tables the workers need — re-run it if you haven't since adding/upgrading the workers.
 
 3. **Register the beacon** (one-off; funds ~1000 FUND for the register fee):
 
@@ -114,6 +115,16 @@ BEACON — separate from the web server. Skip this whole section if you're not a
 The writer self-detects the vaxildan `x/beacon` upgrade (a `BeaconTimestampsByHash` probe):
 before it, records carry no metadata; after, it switches over and re-anchors the backlog
 WITH metadata automatically (`BEACON_REANCHOR_ENABLED`, default on). No restart needed.
+
+**Backfill (optional).** The watcher only records events from when it starts. To populate the
+`Fulfilment` history table with PAST requests over a block range (e.g. from each Router's deploy
+block), run the one-off backfill — cursor-free + idempotent, safe to run alongside the live watcher:
+
+    yarn fulfilment-watcher backfill <chainId> <fromBlock> [toBlock]
+    # add BACKFILL_ANCHOR=1 to ALSO anchor the historical receipts on BEACON (eFUND spend)
+
+For very old ranges, point `OOO_ROUTER_RPC_<chainId>` at an archive endpoint (public RPCs cap/throttle
+large `getLogs`). A failing range is logged + skipped, not fatal — re-run to fill gaps.
 
 ## 7. Update / redeploy
 
