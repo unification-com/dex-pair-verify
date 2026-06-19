@@ -25,3 +25,25 @@ export const defaultEthCall: EthCaller = async (rpcUrl, to, data) => {
     return null;
   }
 };
+
+// Native-coin balance (wei, hex) for an address — the OoO economics dashboard reads each provider's gas
+// balance per chain. Same transport contract: returns the raw hex result, or null on any failure.
+export const ethGetBalance = async (rpcUrl: string, address: string): Promise<string | null> => {
+  try {
+    const res = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_getBalance", params: [address, "latest"] }),
+    });
+    if (!res.ok) {
+      return null;
+    }
+    const json = await res.json();
+    if (json?.error || typeof json?.result !== "string") {
+      return null;
+    }
+    return json.result;
+  } catch {
+    return null;
+  }
+};

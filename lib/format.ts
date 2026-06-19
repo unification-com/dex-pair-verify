@@ -22,6 +22,18 @@ export const num = (n: number | null | undefined, maxFrac = 0): string =>
 export const shortHex = (h: string | null | undefined, lead = 6, tail = 4): string =>
   !h ? "—" : h.length <= lead + tail + 1 ? h : `${h.slice(0, lead)}…${h.slice(-tail)}`;
 
+// Format an xFUND base-unit amount (9 decimals; the OoO fee/withdrawable unit). Accepts a uint256 string or
+// a number. e.g. "100000" → "0.0001 xFUND".
+export const xfund = (base: string | number | null | undefined, withSymbol = true): string => {
+  if (base == null) return "—";
+  return num(Number(base) / 1e9, 9) + (withSymbol ? " xFUND" : "");
+};
+
+// Format a wei amount (18 decimals) as ETH (display precision; provider gas balances are small). No symbol —
+// callers add the native-currency label.
+export const ethAmt = (wei: string | null | undefined, dp = 4): string =>
+  wei == null ? "—" : (Number(wei) / 1e18).toFixed(dp);
+
 // Readable label for an unmapped chain/dex slug: "aerodrome_slipstream" →
 // "Aerodrome Slipstream", "camelot_v3" → "Camelot V3". Version tokens (v2/v3…)
 // are upper-cased; every other word is title-cased. Used as the fallback in

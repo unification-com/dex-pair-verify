@@ -8,13 +8,10 @@ import Layout from "../components/shell/Layout";
 import DataTable, { Column } from "../components/ui/DataTable";
 import PageHeader from "../components/ui/PageHeader";
 import SearchBox from "../components/ui/SearchBox";
-import { ageStr, num, shortHex } from "../lib/format";
+import { ageStr, shortHex, xfund } from "../lib/format";
 import { fulfilmentFilterOptions, listFulfilments, type FulfilmentRow } from "../lib/fulfilments";
 import { operatorGate } from "../lib/operatorGate";
 import { cleanParam, pageParam } from "../lib/queryParams";
-
-// xFUND has 9 decimals; fees are tiny base-unit integers (e.g. 100000 → 0.0001 xFUND).
-const xfund = (s: string | null): string => (s == null ? "—" : num(Number(s) / 1e9, 9) + " xFUND");
 
 type Props = {
   items: FulfilmentRow[];
