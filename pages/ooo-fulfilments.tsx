@@ -8,10 +8,21 @@ import Layout from "../components/shell/Layout";
 import DataTable, { Column } from "../components/ui/DataTable";
 import PageHeader from "../components/ui/PageHeader";
 import SearchBox from "../components/ui/SearchBox";
-import { ageStr, shortHex, xfund } from "../lib/format";
+import { ageStr, price18, shortHex, xfund } from "../lib/format";
 import { fulfilmentFilterOptions, listFulfilments, type FulfilmentRow } from "../lib/fulfilments";
 import { operatorGate } from "../lib/operatorGate";
 import { cleanParam, pageParam } from "../lib/queryParams";
+
+// A pending request older than this is treated as aged-out (go-ooo gives up around its max_job_age). Shown as
+// "expired" rather than a forever-"pending"; if it ever does fulfil, the watcher updates the row anyway.
+const PENDING_EXPIRY_SEC = 30 * 60;
+
+// The "Fulfilled" cell: a relative age once fulfilled, else pending/expired by how long it's been waiting.
+const fulfilledCell = (r: FulfilmentRow): React.ReactNode => {
+  if (r.fulfilledAt) return `${ageStr(r.fulfilledAt)} ago`;
+  if (r.requestedAt && Date.now() / 1000 - r.requestedAt > PENDING_EXPIRY_SEC) return <span className="muted">expired</span>;
+  return <span className="muted">pending</span>;
+};
 
 type Props = {
   items: FulfilmentRow[];
@@ -101,10 +112,10 @@ const OooFulfilmentsPage: React.FC<Props> = (props) => {
         </div>
       ),
     },
-    { key: "result", label: "Result", render: (r) => <span className="mono" title={r.result || undefined} style={{ display: "inline-block", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "bottom" }}>{r.result ?? "—"}</span> },
+    { key: "result", label: "Result", num: true, render: (r) => <span className="mono" title={r.result ?? undefined}>{price18(r.result)}</span> },
     { key: "feePaid", label: "Fee", num: true, render: (r) => <span className="mono">{xfund(r.feePaid)}</span> },
     { key: "provider", label: "Provider", sortable: true, render: (r) => <span className="mono" title={r.provider || undefined}>{shortHex(r.provider)}</span> },
-    { key: "fulfilledAt", label: "Fulfilled", sortable: true, render: (r) => (r.fulfilledAt ? ageStr(r.fulfilledAt) + " ago" : <span className="muted">pending</span>) },
+    { key: "fulfilledAt", label: "Fulfilled", sortable: true, render: (r) => fulfilledCell(r) },
     { key: "beacon", label: "BEACON", render: (r) => <BeaconCell row={r} /> },
   ];
 

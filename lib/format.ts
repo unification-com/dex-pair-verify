@@ -41,6 +41,17 @@ export const grt = (base: string | number | null | undefined, withSymbol = true)
   return num(Number(base) / 1e18, 2) + (withSymbol ? " GRT" : "");
 };
 
+// Format an OoO price result — a uint256 fixed-point scaled by 10^18 (go-ooo's wei-style price) — as a
+// readable number. Fraction digits adapt to magnitude (more precision for sub-1 prices). The full raw value
+// should be shown on hover (title) by the caller, since this is lossy.
+export const price18 = (raw: string | null | undefined): string => {
+  if (raw == null || raw === "") return "—";
+  const v = Number(raw) / 1e18;
+  if (!Number.isFinite(v)) return "—";
+  const frac = v === 0 ? 0 : v < 1 ? 8 : v < 1000 ? 4 : 2;
+  return num(v, frac);
+};
+
 // Readable label for an unmapped chain/dex slug: "aerodrome_slipstream" →
 // "Aerodrome Slipstream", "camelot_v3" → "Camelot V3". Version tokens (v2/v3…)
 // are upper-cased; every other word is title-cased. Used as the fallback in
@@ -52,11 +63,16 @@ export const humaniseSlug = (slug: string): string =>
     .map((w) => (/^v\d+$/i.test(w) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)))
     .join(" ");
 
-// Human age from a unix-seconds timestamp: "6h", "3d", "2w 1d", "5mo", "1y 2mo".
+// Human age from a unix-seconds timestamp: "8s", "5m", "6h", "3d", "2w 1d", "5mo", "1y 2mo". Sub-hour
+// granularity (s/m) matters for short-lived events (OoO fulfilments) — without it, anything under an hour
+// used to round to "1h".
 export const ageStr = (ts: number | null): string => {
   if (!ts) return "unknown";
-  const days = Math.max(0, Date.now() / 1000 - ts) / 86400;
-  if (days < 1) return Math.max(1, Math.round(days * 24)) + "h"; // < 1 day → hours
+  const secs = Math.max(0, Date.now() / 1000 - ts);
+  if (secs < 60) return Math.round(secs) + "s"; // < 1 min → seconds
+  if (secs < 3600) return Math.round(secs / 60) + "m"; // < 1 hour → minutes
+  const days = secs / 86400;
+  if (days < 1) return Math.round(secs / 3600) + "h"; // < 1 day → hours
   if (days < 7) return Math.round(days) + "d"; // < 1 week → days
   if (days < 30.44) {
     // < 1 month → weeks + days
