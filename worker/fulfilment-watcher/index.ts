@@ -23,6 +23,14 @@ import { builtInOooChainIds, oooRouterForChain } from "../../lib/oooRouters";
 const log = (msg: string): void => console.log(`[fulfilment-watcher ${new Date().toISOString()}] ${msg}`);
 const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 
+// Surface the underlying cause — Node's fetch reports real network failures (ENOTFOUND, ECONNREFUSED, TLS,
+// timeouts) as a bare "fetch failed", with the actionable detail hidden on err.cause.
+const errMsg = (e: unknown): string => {
+  const err = e as { message?: string; cause?: { code?: string; message?: string } };
+  const cause = err.cause?.code || err.cause?.message;
+  return cause ? `${err.message ?? "error"} (${cause})` : (err.message ?? String(e));
+};
+
 type WatchConfig = {
   chainIds: number[];
   intervalSec: number; // poll cadence
@@ -127,7 +135,7 @@ async function scanAll(cfg: WatchConfig): Promise<void> {
     try {
       await scanChain(chainId, cfg);
     } catch (e) {
-      log(`scan chain ${chainId} error (will retry): ${(e as Error).message}`);
+      log(`scan chain ${chainId} error (will retry): ${errMsg(e)}`);
     }
   }
 }
@@ -157,7 +165,7 @@ async function backfillChain(chainId: number, fromBlock: number, toBlock: number
     try {
       logs = await getLogs(router.rpc, router.router, from, to);
     } catch (e) {
-      log(`backfill[${router.name}] ${from}-${to} getLogs error (skipped — re-run to fill): ${(e as Error).message}`);
+      log(`backfill[${router.name}] ${from}-${to} getLogs error (skipped — re-run to fill): ${errMsg(e)}`);
       continue;
     }
     if (logs.length === 0) continue;

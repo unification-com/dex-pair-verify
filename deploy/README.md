@@ -87,11 +87,20 @@ BEACON — separate from the web server. Skip this whole section if you're not a
   admin dashboard) and queues receipts for the writer to anchor.
 
 1. **Config.** Copy the `BEACON_*` / `OOO_ROUTER_*` block from `.env.example` into your
-   `.env` and fill it in. Put the signer mnemonic in a file (not inline):
+   `.env` and fill it in. Put the signer mnemonic in a file (not inline), owned by the
+   **service user** — the `User=` set in the unit (e.g. `centos`). The DIR *and* the file must
+   be owned by it, else the service can't traverse `/etc/dpv` to read the file (`EACCES`):
 
-       sudo install -d -m 700 /etc/dpv
+       SVC=centos    # match User= in the .service unit
+       sudo install -d -m 700 -o "$SVC" -g "$SVC" /etc/dpv
        printf '%s\n' "<24-word mnemonic>" | sudo tee /etc/dpv/beacon-writer.mnemonic >/dev/null
-       sudo chown youruser /etc/dpv/beacon-writer.mnemonic && sudo chmod 600 /etc/dpv/beacon-writer.mnemonic
+       sudo chown "$SVC":"$SVC" /etc/dpv/beacon-writer.mnemonic && sudo chmod 600 /etc/dpv/beacon-writer.mnemonic
+
+   **Per-chain RPCs.** The default public RPCs for some networks time out on `eth_getLogs`
+   (polygon) or are unreachable (shibarium/qom/puppynet). Override them with the SAME endpoints
+   go-ooo uses — `OOO_ROUTER_RPC_<chainId>=<url>` — and scope the watch set to the chains you
+   actually anchor with `BEACON_WATCH_CHAINS=1,137,109,766,11155111`. Polygon especially wants
+   an archive/paid RPC.
 
    `BEACON_DRIP_ENABLED=true` is **required** — without it only the root heartbeat runs and
    leaves / fulfilments / the re-anchor backlog never reach the chain.
