@@ -34,6 +34,13 @@ export const xfund = (base: string | number | null | undefined, withSymbol = tru
 export const ethAmt = (wei: string | null | undefined, dp = 4): string =>
   wei == null ? "—" : (Number(wei) / 1e18).toFixed(dp);
 
+// Format a GRT base-unit amount (18 decimals; The Graph billing/query unit). e.g. "1000000000000000000000"
+// → "1,000.00 GRT".
+export const grt = (base: string | number | null | undefined, withSymbol = true): string => {
+  if (base == null) return "—";
+  return num(Number(base) / 1e18, 2) + (withSymbol ? " GRT" : "");
+};
+
 // Readable label for an unmapped chain/dex slug: "aerodrome_slipstream" →
 // "Aerodrome Slipstream", "camelot_v3" → "Camelot V3". Version tokens (v2/v3…)
 // are upper-cased; every other word is title-cased. Used as the fallback in
