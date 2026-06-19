@@ -9,6 +9,10 @@
 //
 //   tsx worker/fulfilment-watcher/index.ts once   # one scan pass over every chain, then exit (testing)
 //   tsx worker/fulfilment-watcher/index.ts        # the continuous watch loop
+//   tsx worker/fulfilment-watcher/index.ts backfill <chainId> <fromBlock> [toBlock]
+//                                                 # populate the Fulfilment history table over a past range.
+//                                                 # Idempotent (re-runnable) and does NOT touch the live watch
+//                                                 # cursor. Set BACKFILL_ANCHOR=1 to ALSO anchor old receipts.
 import "../../lib/env";
 
 import { decodeDataRequested, decodeFulfilment, EvmLog, receiptCommit, DATA_REQUESTED_TOPIC, REQUEST_FULFILLED_TOPIC } from "./receipt";
@@ -128,10 +132,69 @@ async function scanAll(cfg: WatchConfig): Promise<void> {
   }
 }
 
+// One-off historical backfill of the Fulfilment table over [fromBlock, toBlock]. Cursor-free (doesn't disturb
+// the live watcher's anchoring resume point) and idempotent on both the Fulfilment upserts and — when
+// anchor=true — the BEACON queue. A failing getLogs range is skipped (logged), not fatal, so a flaky public
+// RPC over a long range doesn't abort the whole run; re-run to fill any gaps. For very old ranges, point
+// OOO_ROUTER_RPC_<chainId> at an archive endpoint.
+async function backfillChain(chainId: number, fromBlock: number, toBlock: number | null, anchor: boolean, cfg: WatchConfig): Promise<void> {
+  const router = oooRouterForChain(chainId);
+  if (!router) {
+    log(`backfill chain ${chainId}: no Router config (set OOO_ROUTER_RPC_${chainId} + OOO_ROUTER_ADDRESS_${chainId}) — skipping`);
+    return;
+  }
+  const head = await getBlockNumber(router.rpc);
+  const end = toBlock ?? head - cfg.confirmations;
+  const ctx = { chain: router.name, chainId };
+  log(`backfill[${router.name}] blocks ${fromBlock}-${end} (anchor=${anchor})`);
+
+  let totalReq = 0;
+  let totalFul = 0;
+  let totalEnq = 0;
+  for (let from = fromBlock; from <= end; from += cfg.batchBlocks) {
+    const to = Math.min(end, from + cfg.batchBlocks - 1);
+    let logs: EvmLog[];
+    try {
+      logs = await getLogs(router.rpc, router.router, from, to);
+    } catch (e) {
+      log(`backfill[${router.name}] ${from}-${to} getLogs error (skipped — re-run to fill): ${(e as Error).message}`);
+      continue;
+    }
+    if (logs.length === 0) continue;
+    const now = nowSeconds();
+    const blockTimes = new Map<number, number | null>();
+    for (const l of logs) {
+      const bn = parseInt(l.blockNumber, 16);
+      if (!blockTimes.has(bn)) blockTimes.set(bn, await getBlockTime(router.rpc, bn));
+    }
+    const requests = logs.map((l) => decodeDataRequested(l, ctx)).filter((d): d is NonNullable<typeof d> => d !== null);
+    const fulfilments = logs.map((l) => decodeFulfilment(l, ctx)).filter((f): f is NonNullable<typeof f> => f !== null);
+    for (const r of requests) await upsertRequest(r, blockTimes.get(r.blockNumber) ?? null, now);
+    for (const f of fulfilments) await upsertFulfilment(f, blockTimes.get(f.blockNumber) ?? null, now);
+    if (anchor) totalEnq += await enqueueFulfilments(fulfilments.map(receiptCommit), now);
+    totalReq += requests.length;
+    totalFul += fulfilments.length;
+    log(`backfill[${router.name}] ${from}-${to}: +${requests.length} req +${fulfilments.length} ful (running ${totalReq}/${totalFul}/${end})`);
+  }
+  log(`backfill[${router.name}] done: ${totalReq} requests, ${totalFul} fulfilments${anchor ? `, ${totalEnq} enqueued for anchoring` : " (history only — not anchored)"}`);
+}
+
 async function main(): Promise<void> {
   const cfg = loadWatchConfig();
   const mode = process.argv[2] ?? "";
   log(`watching chains [${cfg.chainIds.join(", ")}] every ${cfg.intervalSec}s (batch ${cfg.batchBlocks}, ${cfg.confirmations} confs)`);
+
+  if (mode === "backfill") {
+    const chainId = parseInt(process.argv[3] ?? "", 10);
+    const fromBlock = parseInt(process.argv[4] ?? "", 10);
+    const toBlock = process.argv[5] ? parseInt(process.argv[5], 10) : null;
+    if (!Number.isFinite(chainId) || !Number.isFinite(fromBlock)) {
+      log("usage: backfill <chainId> <fromBlock> [toBlock]   (set BACKFILL_ANCHOR=1 to also anchor on BEACON)");
+      process.exit(1);
+    }
+    await backfillChain(chainId, fromBlock, toBlock, process.env.BACKFILL_ANCHOR === "1", cfg);
+    return;
+  }
 
   if (mode === "once") {
     await scanAll(cfg);
