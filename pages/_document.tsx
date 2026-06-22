@@ -1,11 +1,12 @@
 import { Html, Head, Main, NextScript } from "next/document";
 
-// Loads the design-system fonts (IBM Plex Sans + Mono) once, app-wide. The body
+// Loads the favicon + the design-system fonts (IBM Plex Sans + Mono) once, app-wide. The body
 // background/colour come from globals.css (imported in _app.tsx).
 export default function Document() {
   return (
     <Html lang="en">
       <Head>
+        <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
