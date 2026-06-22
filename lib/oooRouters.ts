@@ -14,10 +14,13 @@ export type OooRouter = { chainId: number; name: string; router: string; rpc: st
 const ROUTERS: Record<number, { name: string; router: string; defaultRpc: string }> = {
   1: { name: "eth", router: "0x9ac9AE20a17779c17b069b48A8788e3455fC6121", defaultRpc: "https://ethereum-rpc.publicnode.com" },
   137: { name: "polygon", router: "0x5E9405888255C142207Ab692C72A8cd6fc85C3A2", defaultRpc: "https://polygon-bor-rpc.publicnode.com" },
-  109: { name: "shibarium", router: "0x2E9ade949900e19735689686E61BF6338a65B881", defaultRpc: "https://rpc.shibrpc.com" },
+  // Shibarium + Puppynet: the *.shibrpc.com public nodes are unreliable/offline, so default to the
+  // Blockscout explorer eth-rpc proxies. The provider check is a single light eth_call (not getLogs),
+  // so the proxies' getLogs range/rate limits don't apply. Override per chain via OOO_ROUTER_RPC_<id>.
+  109: { name: "shibarium", router: "0x2E9ade949900e19735689686E61BF6338a65B881", defaultRpc: "https://shibariumscan.io/api/eth-rpc" },
   766: { name: "qom", router: "0x2E9ade949900e19735689686E61BF6338a65B881", defaultRpc: "https://rpc.qom.one" },
   11155111: { name: "sepolia", router: "0xf6b5d6eafE402d22609e685DE3394c8b359CaD31", defaultRpc: "https://ethereum-sepolia-rpc.publicnode.com" },
-  157: { name: "puppynet", router: "0x7a99f98EfC7C1313E3a8FA4Be36aE2b100a1622F", defaultRpc: "https://puppynet.shibrpc.com" },
+  157: { name: "puppynet", router: "0x7a99f98EfC7C1313E3a8FA4Be36aE2b100a1622F", defaultRpc: "https://puppyscan.shib.io/api/eth-rpc" },
 };
 
 const envRpc = (chainId: number): string | undefined => process.env[`OOO_ROUTER_RPC_${chainId}`];
