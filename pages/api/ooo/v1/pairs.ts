@@ -38,7 +38,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     }
 
-    const catalogue = await buildPublicPairsCatalogue();
+    // ?priceable=true → only the pairs go-ooo will likely fulfil (the liveliness
+    // requester filters on this); default returns the full set WITH the priceable
+    // flag, so "verified but not yet priceable" stays visible. The query string is
+    // part of the cache key, so the two variants cache independently.
+    const priceableOnly = req.query.priceable === "true";
+    const catalogue = await buildPublicPairsCatalogue({ priceableOnly });
     return res.status(200).json(catalogue);
   } catch (err) {
     // Keep details server-side; don't reflect internals to an anonymous caller.

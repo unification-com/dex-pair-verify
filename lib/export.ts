@@ -266,8 +266,41 @@ export async function exportLastModified(chain: string, dex: string): Promise<nu
 // addresses, the curation floor) — only what's queryable, deduped by canonical
 // key across chains/DEXs. Safe to expose; cacheable.
 
-export const PUBLIC_CATALOGUE_SCHEMA_VERSION = 1;
+// Bumped to 2: adds the priceability signal (priceable + priceableChains/Sources)
+// so a consumer (e.g. the Sepolia liveliness requester) can pick only pairs go-ooo
+// will likely fulfil, instead of the full verified superset. Additive — a v1 reader
+// ignores the new fields.
+export const PUBLIC_CATALOGUE_SCHEMA_VERSION = 2;
 const CATALOGUE_QUERY_FORMAT = "BASE.TARGET.AD";
+
+// The subgraph schema families go-ooo can price today. Mirrors go-ooo's recognised
+// set in ooo_api/dex/manifest.go (schemaFamilyFor: univ2/univ3/univ4/messari). A
+// SupportedSource outside this set — currently the "custom"-family Cosmos sources
+// (osmosis_sqs, astroport_neutron) — is catalogued but NOT yet priceable by go-ooo,
+// so its pairs are flagged priceable:false until a go-ooo build prices that family.
+export const GOOOO_PRICEABLE_FAMILIES: ReadonlySet<string> = new Set([
+  "univ2",
+  "univ3",
+  "univ4",
+  "messari",
+]);
+
+// The set of "<chain>/<dex>" sources go-ooo will actually price: a SupportedSource
+// whose schema family is in GOOOO_PRICEABLE_FAMILIES. The catalogue priceability
+// signal derives from this — one definition of go-ooo priceability, reusable by the
+// public catalogue builder and the /pairs UI.
+export async function priceableSourceKeys(): Promise<Set<string>> {
+  const sources = await prisma.supportedSource.findMany({
+    select: { chain: true, dex: true, subgraphSchemaFamily: true },
+  });
+  const keys = new Set<string>();
+  for (const s of sources) {
+    if (GOOOO_PRICEABLE_FAMILIES.has(s.subgraphSchemaFamily)) {
+      keys.add(`${s.chain}/${s.dex}`);
+    }
+  }
+  return keys;
+}
 
 export type PublicPairEntry = {
   base: string; // symbols a user queries with (canonical order; queryable either way)
@@ -276,6 +309,13 @@ export type PublicPairEntry = {
   sources: number; // number of verified pools backing it
   chains: string[]; // distinct chains it's available on
   totalLiquidityUsd: number; // aggregate backing depth (a public reliability hint)
+  // Whether go-ooo will LIKELY return a price for this pair: ≥1 backing pool is on a
+  // source go-ooo prices (a SupportedSource with a recognised schema family). Best-
+  // effort — go-ooo applies a final per-pool min_reserve_usd at query time, so a
+  // priceable:true pair can rarely still miss.
+  priceable: boolean;
+  priceableChains: string[]; // distinct chains where it's priceable (coverage, not just a bool)
+  priceableSources: string[]; // "<chain>/<dex>" of the backing pools go-ooo prices
 };
 
 export type PublicCatalogue = {
@@ -292,17 +332,23 @@ const cgNorm = (id: string | null | undefined): string => (id ?? "").trim().toLo
 // chains/DEXs collapses to one row); unkeyable verified pairs (no cgId) fall back
 // to grouping by their symbol pair so they still appear (no silent drop). Deepest
 // liquidity first.
-export async function buildPublicPairsCatalogue(opts: { now?: number } = {}): Promise<PublicCatalogue> {
-  const rows = await prisma.pair.findMany({
-    where: { status: { in: VERIFIED } },
-    select: {
-      chain: true,
-      reserveUsd: true,
-      canonicalKey: true,
-      token0: { select: { symbol: true, coingeckoCoinId: true } },
-      token1: { select: { symbol: true, coingeckoCoinId: true } },
-    },
-  });
+export async function buildPublicPairsCatalogue(
+  opts: { now?: number; priceableOnly?: boolean } = {},
+): Promise<PublicCatalogue> {
+  const [rows, priceableKeys] = await Promise.all([
+    prisma.pair.findMany({
+      where: { status: { in: VERIFIED } },
+      select: {
+        chain: true,
+        dex: true,
+        reserveUsd: true,
+        canonicalKey: true,
+        token0: { select: { symbol: true, coingeckoCoinId: true } },
+        token1: { select: { symbol: true, coingeckoCoinId: true } },
+      },
+    }),
+    priceableSourceKeys(),
+  ]);
 
   type Group = {
     base: string;
@@ -311,6 +357,7 @@ export async function buildPublicPairsCatalogue(opts: { now?: number } = {}): Pr
     chains: Set<string>;
     sources: number;
     totalLiquidityUsd: number;
+    priceableSources: Set<string>; // "<chain>/<dex>" of backing pools go-ooo prices
   };
   const groups = new Map<string, Group>();
 
@@ -336,23 +383,36 @@ export async function buildPublicPairsCatalogue(opts: { now?: number } = {}): Pr
 
     let g = groups.get(groupKey);
     if (!g) {
-      g = { base, target, canonicalKey: r.canonicalKey, chains: new Set(), sources: 0, totalLiquidityUsd: 0 };
+      g = { base, target, canonicalKey: r.canonicalKey, chains: new Set(), sources: 0, totalLiquidityUsd: 0, priceableSources: new Set() };
       groups.set(groupKey, g);
     }
     g.chains.add(r.chain);
     g.sources += 1;
     g.totalLiquidityUsd += r.reserveUsd;
+    const sourceKey = `${r.chain}/${r.dex}`;
+    if (priceableKeys.has(sourceKey)) {
+      g.priceableSources.add(sourceKey);
+    }
   }
 
   const pairs: PublicPairEntry[] = Array.from(groups.values())
-    .map((g) => ({
-      base: g.base,
-      target: g.target,
-      canonicalKey: g.canonicalKey,
-      sources: g.sources,
-      chains: Array.from(g.chains).sort(),
-      totalLiquidityUsd: Math.round(g.totalLiquidityUsd),
-    }))
+    .map((g) => {
+      const priceableSources = Array.from(g.priceableSources).sort();
+      const priceableChains = Array.from(new Set(priceableSources.map((k) => k.split("/")[0]))).sort();
+      return {
+        base: g.base,
+        target: g.target,
+        canonicalKey: g.canonicalKey,
+        sources: g.sources,
+        chains: Array.from(g.chains).sort(),
+        totalLiquidityUsd: Math.round(g.totalLiquidityUsd),
+        priceable: priceableSources.length > 0,
+        priceableChains,
+        priceableSources,
+      };
+    })
+    // ?priceable=true → fulfil-ready set only; default returns everything WITH the flag.
+    .filter((p) => !opts.priceableOnly || p.priceable)
     .sort((a, b) => b.totalLiquidityUsd - a.totalLiquidityUsd);
 
   return {

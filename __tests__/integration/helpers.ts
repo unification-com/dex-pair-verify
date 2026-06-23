@@ -70,6 +70,21 @@ export async function seedPair(token0Id: string, token1Id: string, over: PairOve
   });
 }
 
+export type SourceOver = Partial<Prisma.SupportedSourceUncheckedCreateInput>;
+export async function seedSource(over: SourceOver = {}) {
+  return testPrisma.supportedSource.create({
+    data: {
+      chain: "eth",
+      dex: "uniswap_v3",
+      subgraphUrlTemplate: "https://example.test/{API_KEY}/subgraph",
+      subgraphSchemaFamily: "univ3",
+      subgraphProvider: "graph-decentralized",
+      factoryAddress: nextAddr(),
+      ...over,
+    },
+  });
+}
+
 // Tables in FK-safe truncation order (children first). CASCADE handles the
 // rest, but listing them keeps the intent explicit.
 const TABLES = [
@@ -86,6 +101,11 @@ const TABLES = [
   "ProviderToken",
   "BeaconAnchor",
   "BeaconQueue",
+  // Beacon-writer state tables — must be truncated too, or a cursor / chain-state row
+  // leaks across tests AND across runs, making the suite non-deterministic (e.g. a
+  // BeaconWatchCursor row from one run fails the next run's "unset → 0" assertion).
+  "BeaconWatchCursor",
+  "BeaconChainState",
 ];
 
 export async function resetDb(): Promise<void> {

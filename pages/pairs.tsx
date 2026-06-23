@@ -14,6 +14,7 @@ import Icon from "../components/ui/Icon";
 import PageHeader from "../components/ui/PageHeader";
 import SearchBox from "../components/ui/SearchBox";
 import StatusBadge from "../components/ui/StatusBadge";
+import { priceableSourceKeys } from "../lib/export";
 import { usd, num } from "../lib/format";
 import { isOperatorCtx } from "../lib/operatorGate";
 import prisma from '../lib/prisma';
@@ -76,7 +77,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
       ...(dex ? { dex } : {}),
       ...search,
     }
-    const [pairs, totalCount, sourceGroups] = await Promise.all([
+    const [pairs, totalCount, sourceGroups, priceableKeys] = await Promise.all([
       prisma.pair.findMany({
         where,
         // Public list: explicit select (no verdict drivers / token internals).
@@ -87,6 +88,10 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
       }),
       prisma.pair.count({ where }),
       prisma.pair.groupBy({ by: ['chain', 'dex'], where: { status: { in: [...VERIFIED_STATUSES] } }, _count: { _all: true } }),
+      // The "<chain>/<dex>" sources go-ooo will actually price (recognised schema
+      // family) — drives the per-row "OoO pricing" badge. Same helper the public
+      // /api/ooo/v1/pairs catalogue derives its priceable flag from.
+      priceableSourceKeys(),
     ])
     const chains = Array.from(new Set(sourceGroups.map((g) => g.chain))).sort()
     const sources: Source[] = sourceGroups.map((g) => ({ chain: g.chain, dex: g.dex }))
@@ -102,6 +107,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
         totalCount,
         chains,
         sources,
+        priceableSourceKeys: Array.from(priceableKeys),
         sort: sortKey,
         dir: sortDir,
       },
@@ -200,6 +206,7 @@ type PublicProps = {
     totalCount: number,
     chains: string[],
     sources: Source[],
+    priceableSourceKeys: string[], // "<chain>/<dex>" sources go-ooo will price
     sort: string,
     dir: string,
 }
@@ -230,6 +237,11 @@ const PublicPairs: React.FC<PublicProps> = (props) => {
         return s ? `/pairs?${s}` : "/pairs"
     }
 
+    // Sources go-ooo will actually price (recognised schema family); a pair on one of
+    // these is flagged "Priceable" so a user can tell apart "verified" from "go-ooo
+    // will likely return a price". Best-effort — go-ooo applies a final per-pool floor.
+    const priceableSet = new Set(props.priceableSourceKeys)
+
     const cols: Column<PairProps>[] = [
         {
             key: "pair", label: "Pair", sortable: true, render: (p) => (
@@ -242,6 +254,11 @@ const PublicPairs: React.FC<PublicProps> = (props) => {
         { key: "reserveUsd", label: "Liquidity", num: true, sortable: true, render: (p) => usd(p.reserveUsd) },
         { key: "txCount", label: "Tx", num: true, sortable: true, render: (p) => num(p.txCount) },
         { key: "status", label: "Status", render: (p) => <StatusBadge status={p.status} size="sm" /> },
+        {
+            key: "priceable", label: "OoO pricing", render: (p) => priceableSet.has(`${p.chain}/${p.dex}`)
+                ? <span className="badge badge-pass badge-sm">Priceable</span>
+                : <span className="badge badge-neutral badge-sm">Not priced</span>,
+        },
     ]
 
     return (
