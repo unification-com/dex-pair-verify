@@ -85,6 +85,19 @@ export async function seedSource(over: SourceOver = {}) {
   });
 }
 
+export type ThresholdOver = Partial<Prisma.ThresholdUncheckedCreateInput>;
+export async function seedThreshold(over: ThresholdOver = {}) {
+  return testPrisma.threshold.create({
+    data: {
+      chain: "eth",
+      dex: "uniswap_v3",
+      minLiquidityUsd: 30000,
+      minTxCount: 250,
+      ...over,
+    },
+  });
+}
+
 // Tables in FK-safe truncation order (children first). CASCADE handles the
 // rest, but listing them keeps the intent explicit.
 const TABLES = [

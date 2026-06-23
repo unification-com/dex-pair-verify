@@ -14,7 +14,7 @@ import Icon from "../components/ui/Icon";
 import PageHeader from "../components/ui/PageHeader";
 import SearchBox from "../components/ui/SearchBox";
 import StatusBadge from "../components/ui/StatusBadge";
-import { priceableSourceKeys } from "../lib/export";
+import { priceableSourceMeta, poolIsPriceable } from "../lib/export";
 import { usd, num } from "../lib/format";
 import { isOperatorCtx } from "../lib/operatorGate";
 import prisma from '../lib/prisma';
@@ -77,7 +77,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
       ...(dex ? { dex } : {}),
       ...search,
     }
-    const [pairs, totalCount, sourceGroups, priceableKeys] = await Promise.all([
+    const [pairs, totalCount, sourceGroups, priceableMeta] = await Promise.all([
       prisma.pair.findMany({
         where,
         // Public list: explicit select (no verdict drivers / token internals).
@@ -88,13 +88,15 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
       }),
       prisma.pair.count({ where }),
       prisma.pair.groupBy({ by: ['chain', 'dex'], where: { status: { in: [...VERIFIED_STATUSES] } }, _count: { _all: true } }),
-      // The "<chain>/<dex>" sources go-ooo will actually price (recognised schema
-      // family) — drives the per-row "OoO pricing" badge. Same helper the public
-      // /api/ooo/v1/pairs catalogue derives its priceable flag from.
-      priceableSourceKeys(),
+      // go-ooo's recognised price sources + their per-pool liquidity floor — drives the
+      // per-row "OoO pricing" badge. Same helper the public /api/ooo/v1/pairs catalogue
+      // derives its priceable flag from (one definition of go-ooo priceability).
+      priceableSourceMeta(),
     ])
     const chains = Array.from(new Set(sourceGroups.map((g) => g.chain))).sort()
     const sources: Source[] = sourceGroups.map((g) => ({ chain: g.chain, dex: g.dex }))
+    // A pair is priceable if go-ooo prices its source AND this pool clears that source's floor.
+    const priceablePairIds = pairs.filter((p) => poolIsPriceable(priceableMeta, p.chain, p.dex, p.reserveUsd)).map((p) => p.id)
     return {
       props: {
         isOperator: false,
@@ -107,7 +109,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
         totalCount,
         chains,
         sources,
-        priceableSourceKeys: Array.from(priceableKeys),
+        priceablePairIds,
         sort: sortKey,
         dir: sortDir,
       },
@@ -206,7 +208,7 @@ type PublicProps = {
     totalCount: number,
     chains: string[],
     sources: Source[],
-    priceableSourceKeys: string[], // "<chain>/<dex>" sources go-ooo will price
+    priceablePairIds: string[], // ids of this page's pairs go-ooo will price (source + per-pool floor)
     sort: string,
     dir: string,
 }
@@ -237,10 +239,10 @@ const PublicPairs: React.FC<PublicProps> = (props) => {
         return s ? `/pairs?${s}` : "/pairs"
     }
 
-    // Sources go-ooo will actually price (recognised schema family); a pair on one of
-    // these is flagged "Priceable" so a user can tell apart "verified" from "go-ooo
-    // will likely return a price". Best-effort — go-ooo applies a final per-pool floor.
-    const priceableSet = new Set(props.priceableSourceKeys)
+    // Pairs go-ooo will likely price (computed server-side: recognised source + the pool
+    // clears its liquidity floor). Flagged "Priceable" so a user can tell apart "verified"
+    // from "go-ooo will likely return a price". Best-effort — go-ooo re-checks live liquidity.
+    const priceableIds = new Set(props.priceablePairIds)
 
     const cols: Column<PairProps>[] = [
         {
@@ -255,7 +257,7 @@ const PublicPairs: React.FC<PublicProps> = (props) => {
         { key: "txCount", label: "Tx", num: true, sortable: true, render: (p) => num(p.txCount) },
         { key: "status", label: "Status", render: (p) => <StatusBadge status={p.status} size="sm" /> },
         {
-            key: "priceable", label: "OoO pricing", render: (p) => priceableSet.has(`${p.chain}/${p.dex}`)
+            key: "priceable", label: "OoO pricing", render: (p) => priceableIds.has(p.id)
                 ? <span className="badge badge-pass badge-sm">Priceable</span>
                 : <span className="badge badge-neutral badge-sm">Not priced</span>,
         },

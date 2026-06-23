@@ -5,7 +5,7 @@
 
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { resetDb, seedPair, seedSource, seedToken, testPrisma } from "./helpers";
+import { resetDb, seedPair, seedSource, seedThreshold, seedToken, testPrisma } from "./helpers";
 import { buildPublicPairsCatalogue } from "../../lib/export";
 import { __resetRateLimit } from "../../lib/rateLimit";
 import pairsHandler from "../../pages/api/ooo/v1/pairs";
@@ -78,11 +78,11 @@ describe("buildPublicPairsCatalogue", () => {
 });
 
 describe("buildPublicPairsCatalogue — priceability signal", () => {
-  it("flags priceable when a backing pool is on a go-ooo-priceable source", async () => {
+  it("flags priceable for a recognised subgraph family with a healthy pool", async () => {
     await seedSource({ chain: "eth", dex: "uniswap_v3", subgraphSchemaFamily: "univ3" });
     const weth = await seedToken({ symbol: "WETH", coingeckoCoinId: "weth" });
     const usdc = await seedToken({ symbol: "USDC", coingeckoCoinId: "usd-coin", decimals: 6 });
-    await seedPair(weth.id, usdc.id, { status: TokenPairStatus.AutoVerified, dex: "uniswap_v3", canonicalKey: "usd-coin:weth" });
+    await seedPair(weth.id, usdc.id, { status: TokenPairStatus.AutoVerified, dex: "uniswap_v3", canonicalKey: "usd-coin:weth", reserveUsd: 1_000_000 });
 
     const cat = await buildPublicPairsCatalogue({ now: NOW });
     expect(cat.pairs).toHaveLength(1);
@@ -91,17 +91,45 @@ describe("buildPublicPairsCatalogue — priceability signal", () => {
     expect(cat.pairs[0].priceableChains).toEqual(["eth"]);
   });
 
-  it("flags NOT priceable when the only backing source is a custom (Cosmos) family", async () => {
+  it("flags priceable for a Cosmos rest-sqs source (go-ooo prices it via buildCosmosSources)", async () => {
     await seedSource({ chain: "osmosis", dex: "osmosis_sqs", subgraphSchemaFamily: "custom", sourceType: "rest-sqs" });
     const osmo = await seedToken({ symbol: "OSMO", coingeckoCoinId: "osmosis", chain: "osmosis" });
     const usdc = await seedToken({ symbol: "USDC", coingeckoCoinId: "usd-coin", chain: "osmosis" });
-    await seedPair(osmo.id, usdc.id, { status: TokenPairStatus.AutoVerified, chain: "osmosis", dex: "osmosis_sqs", canonicalKey: "osmosis:usd-coin" });
+    await seedPair(osmo.id, usdc.id, { status: TokenPairStatus.AutoVerified, chain: "osmosis", dex: "osmosis_sqs", canonicalKey: "osmosis:usd-coin", reserveUsd: 1_000_000 });
 
     const cat = await buildPublicPairsCatalogue({ now: NOW });
     expect(cat.pairs).toHaveLength(1);
-    expect(cat.pairs[0].priceable).toBe(false);
-    expect(cat.pairs[0].priceableSources).toEqual([]);
-    expect(cat.pairs[0].priceableChains).toEqual([]);
+    expect(cat.pairs[0].priceable).toBe(true);
+    expect(cat.pairs[0].priceableSources).toEqual(["osmosis/osmosis_sqs"]);
+  });
+
+  it("flags NOT priceable for a source family go-ooo does not recognise", async () => {
+    await seedSource({ chain: "eth", dex: "futureswap", subgraphSchemaFamily: "infinity" });
+    const weth = await seedToken({ symbol: "WETH", coingeckoCoinId: "weth" });
+    const usdc = await seedToken({ symbol: "USDC", coingeckoCoinId: "usd-coin", decimals: 6 });
+    await seedPair(weth.id, usdc.id, { status: TokenPairStatus.AutoVerified, dex: "futureswap", canonicalKey: "usd-coin:weth", reserveUsd: 1_000_000 });
+
+    expect((await buildPublicPairsCatalogue({ now: NOW })).pairs[0].priceable).toBe(false);
+  });
+
+  it("flags NOT priceable when the pool is below go-ooo's default liquidity floor", async () => {
+    await seedSource({ chain: "eth", dex: "uniswap_v3", subgraphSchemaFamily: "univ3" }); // no threshold → default 30000
+    const weth = await seedToken({ symbol: "WETH", coingeckoCoinId: "weth" });
+    const usdc = await seedToken({ symbol: "USDC", coingeckoCoinId: "usd-coin", decimals: 6 });
+    await seedPair(weth.id, usdc.id, { status: TokenPairStatus.AutoVerified, dex: "uniswap_v3", canonicalKey: "usd-coin:weth", reserveUsd: 1_000 }); // < 30000
+
+    expect((await buildPublicPairsCatalogue({ now: NOW })).pairs[0].priceable).toBe(false);
+  });
+
+  it("honours a per-(chain,dex) Threshold floor above the default", async () => {
+    await seedSource({ chain: "eth", dex: "uniswap_v3", subgraphSchemaFamily: "univ3" });
+    await seedThreshold({ chain: "eth", dex: "uniswap_v3", minLiquidityUsd: 2_000_000 });
+    const weth = await seedToken({ symbol: "WETH", coingeckoCoinId: "weth" });
+    const usdc = await seedToken({ symbol: "USDC", coingeckoCoinId: "usd-coin", decimals: 6 });
+    // 1M clears the 30000 default but is below this source's 2M curation floor.
+    await seedPair(weth.id, usdc.id, { status: TokenPairStatus.AutoVerified, dex: "uniswap_v3", canonicalKey: "usd-coin:weth", reserveUsd: 1_000_000 });
+
+    expect((await buildPublicPairsCatalogue({ now: NOW })).pairs[0].priceable).toBe(false);
   });
 
   it("flags NOT priceable when no SupportedSource backs the pool's (chain,dex)", async () => {
@@ -112,31 +140,31 @@ describe("buildPublicPairsCatalogue — priceability signal", () => {
     expect((await buildPublicPairsCatalogue({ now: NOW })).pairs[0].priceable).toBe(false);
   });
 
-  it("reports coverage from only the priceable pools when a pair spans priceable + custom sources", async () => {
+  it("reports coverage from only the priceable pools when a pair spans priceable + unpriceable sources", async () => {
     await seedSource({ chain: "eth", dex: "uniswap_v3", subgraphSchemaFamily: "univ3" });
-    await seedSource({ chain: "osmosis", dex: "osmosis_sqs", subgraphSchemaFamily: "custom", sourceType: "rest-sqs" });
+    await seedSource({ chain: "eth", dex: "futureswap", subgraphSchemaFamily: "infinity" }); // unrecognised → not priceable
     const weth = await seedToken({ symbol: "WETH", coingeckoCoinId: "weth" });
     const usdc = await seedToken({ symbol: "USDC", coingeckoCoinId: "usd-coin", decimals: 6 });
     await seedPair(weth.id, usdc.id, { status: TokenPairStatus.AutoVerified, chain: "eth", dex: "uniswap_v3", canonicalKey: "usd-coin:weth", reserveUsd: 1_000_000 });
-    await seedPair(weth.id, usdc.id, { status: TokenPairStatus.AutoVerified, chain: "osmosis", dex: "osmosis_sqs", canonicalKey: "usd-coin:weth", reserveUsd: 500_000 });
+    await seedPair(weth.id, usdc.id, { status: TokenPairStatus.AutoVerified, chain: "eth", dex: "futureswap", canonicalKey: "usd-coin:weth", reserveUsd: 1_000_000 });
 
     const cat = await buildPublicPairsCatalogue({ now: NOW });
     expect(cat.pairs).toHaveLength(1);
-    expect(cat.pairs[0].sources).toBe(2); // both pools still count toward the public source tally
-    expect(cat.pairs[0].chains).toEqual(["eth", "osmosis"]);
+    expect(cat.pairs[0].sources).toBe(2); // both pools count toward the public source tally
     expect(cat.pairs[0].priceable).toBe(true);
-    expect(cat.pairs[0].priceableSources).toEqual(["eth/uniswap_v3"]); // only the recognised-family pool
+    expect(cat.pairs[0].priceableSources).toEqual(["eth/uniswap_v3"]); // only the recognised pool
     expect(cat.pairs[0].priceableChains).toEqual(["eth"]);
   });
 
   it("priceableOnly drops the verified-but-not-priceable pairs", async () => {
     await seedSource({ chain: "eth", dex: "uniswap_v3", subgraphSchemaFamily: "univ3" });
+    await seedSource({ chain: "eth", dex: "futureswap", subgraphSchemaFamily: "infinity" });
     const weth = await seedToken({ symbol: "WETH", coingeckoCoinId: "weth" });
     const usdc = await seedToken({ symbol: "USDC", coingeckoCoinId: "usd-coin", decimals: 6 });
     const shib = await seedToken({ symbol: "SHIB", coingeckoCoinId: "shiba-inu" });
     const pepe = await seedToken({ symbol: "PEPE", coingeckoCoinId: "pepe" });
     await seedPair(weth.id, usdc.id, { status: TokenPairStatus.AutoVerified, dex: "uniswap_v3", canonicalKey: "usd-coin:weth" });
-    await seedPair(shib.id, pepe.id, { status: TokenPairStatus.AutoVerified, dex: "shibaswap", canonicalKey: "pepe:shiba-inu" });
+    await seedPair(shib.id, pepe.id, { status: TokenPairStatus.AutoVerified, dex: "futureswap", canonicalKey: "pepe:shiba-inu" });
 
     expect((await buildPublicPairsCatalogue({ now: NOW })).pairs).toHaveLength(2); // default: both, with the flag
     const only = (await buildPublicPairsCatalogue({ now: NOW, priceableOnly: true })).pairs;

@@ -273,33 +273,65 @@ export async function exportLastModified(chain: string, dex: string): Promise<nu
 export const PUBLIC_CATALOGUE_SCHEMA_VERSION = 2;
 const CATALOGUE_QUERY_FORMAT = "BASE.TARGET.AD";
 
-// The subgraph schema families go-ooo can price today. Mirrors go-ooo's recognised
-// set in ooo_api/dex/manifest.go (schemaFamilyFor: univ2/univ3/univ4/messari). A
-// SupportedSource outside this set — currently the "custom"-family Cosmos sources
-// (osmosis_sqs, astroport_neutron) — is catalogued but NOT yet priceable by go-ooo,
-// so its pairs are flagged priceable:false until a go-ooo build prices that family.
+// The go-ooo subgraph families + Cosmos REST transports that get a price source today.
+// Mirrors go-ooo's ApplyManifest: BuildModulesFromManifest recognises these subgraph
+// families (ooo_api/dex/manifest.go schemaFamilyFor), and buildCosmosSources prices these
+// Cosmos transports (ooo_api/dex/cosmos_source.go). A source outside BOTH (e.g. a future
+// DEX family go-ooo can't price yet) is catalogued but its pairs are priceable:false.
 export const GOOOO_PRICEABLE_FAMILIES: ReadonlySet<string> = new Set([
   "univ2",
   "univ3",
   "univ4",
   "messari",
 ]);
+export const GOOOO_PRICEABLE_COSMOS_SOURCE_TYPES: ReadonlySet<string> = new Set([
+  "rest-sqs", // Osmosis Sidecar Query Server
+  "rest-astroport", // Astroport on Neutron
+]);
 
-// The set of "<chain>/<dex>" sources go-ooo will actually price: a SupportedSource
-// whose schema family is in GOOOO_PRICEABLE_FAMILIES. The catalogue priceability
-// signal derives from this — one definition of go-ooo priceability, reusable by the
-// public catalogue builder and the /pairs UI.
-export async function priceableSourceKeys(): Promise<Set<string>> {
-  const sources = await prisma.supportedSource.findMany({
-    select: { chain: true, dex: true, subgraphSchemaFamily: true },
-  });
-  const keys = new Set<string>();
-  for (const s of sources) {
-    if (GOOOO_PRICEABLE_FAMILIES.has(s.subgraphSchemaFamily)) {
-      keys.add(`${s.chain}/${s.dex}`);
-    }
+// go-ooo's per-pool liquidity floor when a source carries no curation threshold of its own
+// (ooo_api/dex/types.DefaultMinLiquidity). go-ooo skips any pool whose reserveUsd is below
+// its source's MinLiquidity at query time (prices.go gatherSamples), so a pair backed only by
+// sub-floor pools is NOT priceable even on a recognised source. (go-ooo's MinTxCount is NOT
+// applied in the AdHoc price path, so it is deliberately not mirrored here.)
+export const GOOOO_DEFAULT_MIN_LIQUIDITY_USD = 30000;
+
+// The per-pool go-ooo pricing fact the priceability check needs: the liquidity floor go-ooo
+// applies to a pool on this source.
+export type PriceableSourceMeta = { minLiquidityUsd: number };
+
+// The recognised go-ooo price sources + their per-pool liquidity floor, keyed by "<chain>/<dex>".
+// A source is included only if go-ooo can price it (a known subgraph family OR a known Cosmos
+// transport); its floor is the per-(chain,dex) curation threshold when set, else the go-ooo default.
+// One definition of go-ooo priceability, reused by the public catalogue builder and the /pairs UI.
+export async function priceableSourceMeta(): Promise<Map<string, PriceableSourceMeta>> {
+  const [sources, thresholds] = await Promise.all([
+    prisma.supportedSource.findMany({ select: { chain: true, dex: true, subgraphSchemaFamily: true, sourceType: true } }),
+    prisma.threshold.findMany({ select: { chain: true, dex: true, minLiquidityUsd: true } }),
+  ]);
+  const floorByKey = new Map<string, number>();
+  for (const t of thresholds) {
+    floorByKey.set(`${t.chain}/${t.dex}`, t.minLiquidityUsd);
   }
-  return keys;
+  const meta = new Map<string, PriceableSourceMeta>();
+  for (const s of sources) {
+    const recognised =
+      GOOOO_PRICEABLE_FAMILIES.has(s.subgraphSchemaFamily) || GOOOO_PRICEABLE_COSMOS_SOURCE_TYPES.has(s.sourceType);
+    if (!recognised) {
+      continue;
+    }
+    const floor = floorByKey.get(`${s.chain}/${s.dex}`);
+    meta.set(`${s.chain}/${s.dex}`, { minLiquidityUsd: floor && floor > 0 ? floor : GOOOO_DEFAULT_MIN_LIQUIDITY_USD });
+  }
+  return meta;
+}
+
+// Whether go-ooo would price a specific pool: its (chain,dex) must be a recognised price source
+// AND the pool's liquidity must clear that source's floor (go-ooo skips sub-floor pools at query
+// time). Shared by the catalogue builder + the /pairs UI so both agree.
+export function poolIsPriceable(meta: Map<string, PriceableSourceMeta>, chain: string, dex: string, reserveUsd: number): boolean {
+  const m = meta.get(`${chain}/${dex}`);
+  return m !== undefined && reserveUsd >= m.minLiquidityUsd;
 }
 
 export type PublicPairEntry = {
@@ -310,9 +342,10 @@ export type PublicPairEntry = {
   chains: string[]; // distinct chains it's available on
   totalLiquidityUsd: number; // aggregate backing depth (a public reliability hint)
   // Whether go-ooo will LIKELY return a price for this pair: ≥1 backing pool is on a
-  // source go-ooo prices (a SupportedSource with a recognised schema family). Best-
-  // effort — go-ooo applies a final per-pool min_reserve_usd at query time, so a
-  // priceable:true pair can rarely still miss.
+  // source go-ooo prices (recognised subgraph family OR Cosmos transport) AND clears that
+  // source's per-pool liquidity floor. Best-effort — based on the last-ingested reserveUsd;
+  // go-ooo re-checks live liquidity at query time, so a priceable:true pair can rarely still
+  // miss if its pools have since thinned.
   priceable: boolean;
   priceableChains: string[]; // distinct chains where it's priceable (coverage, not just a bool)
   priceableSources: string[]; // "<chain>/<dex>" of the backing pools go-ooo prices
@@ -335,7 +368,7 @@ const cgNorm = (id: string | null | undefined): string => (id ?? "").trim().toLo
 export async function buildPublicPairsCatalogue(
   opts: { now?: number; priceableOnly?: boolean } = {},
 ): Promise<PublicCatalogue> {
-  const [rows, priceableKeys] = await Promise.all([
+  const [rows, priceableMeta] = await Promise.all([
     prisma.pair.findMany({
       where: { status: { in: VERIFIED } },
       select: {
@@ -347,7 +380,7 @@ export async function buildPublicPairsCatalogue(
         token1: { select: { symbol: true, coingeckoCoinId: true } },
       },
     }),
-    priceableSourceKeys(),
+    priceableSourceMeta(),
   ]);
 
   type Group = {
@@ -389,9 +422,8 @@ export async function buildPublicPairsCatalogue(
     g.chains.add(r.chain);
     g.sources += 1;
     g.totalLiquidityUsd += r.reserveUsd;
-    const sourceKey = `${r.chain}/${r.dex}`;
-    if (priceableKeys.has(sourceKey)) {
-      g.priceableSources.add(sourceKey);
+    if (poolIsPriceable(priceableMeta, r.chain, r.dex, r.reserveUsd)) {
+      g.priceableSources.add(`${r.chain}/${r.dex}`);
     }
   }
 
