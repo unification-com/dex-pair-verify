@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 
 import { aliasPairLabel, targetSideSymbol } from "../../lib/aliasGroups";
 import { usd, num as fmtNum, ageStr } from "../../lib/format";
+import { PoolPriceRow } from "../../lib/priceFetch";
 import {
     aggregatePrices,
     getStats,
@@ -34,6 +35,10 @@ type PoolPrice = {
 };
 
 type ContractMap = Record<string, Record<string, string[]>>;
+
+// One (chain,dex) fetch result, normalised. A failed or non-JSON group becomes { success:false }
+// with an error string so one timed-out venue can't sink the whole price test.
+type GroupResult = { success: boolean; chain: string; dex: string; prices: PoolPriceRow[]; error?: string; fetchedAt?: number };
 
 const METHODS: { key: OutlierMethod; label: string; robust?: boolean }[] = [
     { key: "none", label: "Naive mean" },
@@ -67,6 +72,9 @@ const PriceData: React.FC<{
     // subgraph). Non-fatal: the rest still aggregate. Important for alias queries, whose member pools
     // can span Cosmos chains the live oracle prices but this preview does not.
     const [skipped, setSkipped] = useState<{ chain: string; dex: string; error: string }[]>([])
+    // Bumped by the "Try again" buttons to re-run the fetch effect in place (re-showing the spinner)
+    // without a full page reload — useful for the transient gateway-timeout case on big alias queries.
+    const [reloadNonce, setReloadNonce] = useState(0)
 
     // An asset-class query (both sides are curated alias classes, e.g. ETH/USD) — orient each pool by
     // cg-id class membership rather than by matching the literal "USD"/"ETH" against a real symbol.
@@ -93,13 +101,13 @@ const PriceData: React.FC<{
         // uses the live admin endpoint with the chosen minutes of history.
         const pricesBase = isPublic ? "/api/ooo/v1/prices" : "/api/admin/getprices"
         const minsParam = isPublic ? "" : `&mins=${minsOfData}`
-        const endpoints = []
+        const endpoints: { url: string; chain: string; dex: string }[] = []
         for (const chain in contractList) {
             const chainDexs = contractList[chain];
             for (const dex in chainDexs) {
                 const contracts = chainDexs[dex]
                 const url = `${pricesBase}?chain=${chain}&dex=${dex}&addresses=${contracts.join(",")}${minsParam}`
-                endpoints.push(url)
+                endpoints.push({ url, chain, dex })
             }
         }
 
@@ -125,10 +133,37 @@ const PriceData: React.FC<{
             return { pId, t0Id, t1Id, pairName, reserveUsd, targetSymbol }
         }
 
-        const fetchPromises = endpoints.map(endpoint => fetch(endpoint, { signal: controller.signal }));
+        // Fetch one (chain,dex) group, tolerant of failure. A proxy/gateway timeout returns an HTML
+        // error page, not JSON, and calling .json() on it throws "Unexpected token '<'". Under the old
+        // blanket Promise.all(.json()) that single bad response rejected the whole batch and failed the
+        // entire test (this is the ETH.USD production error). Parse each group defensively instead and
+        // turn any non-OK / non-JSON group into a non-fatal skip — the same treatment an explicit
+        // { success:false } group already gets — so the venues that did respond still aggregate.
+        async function fetchGroup({ url, chain, dex }: { url: string; chain: string; dex: string }): Promise<GroupResult> {
+            try {
+                const resp = await fetch(url, { signal: controller.signal })
+                const text = await resp.text()
+                let body = null
+                try { body = JSON.parse(text) } catch { /* not JSON — e.g. an HTML gateway-timeout page */ }
+                if (!resp.ok || !body || typeof body !== "object") {
+                    const error = !resp.ok ? `request failed (HTTP ${resp.status})` : "the server returned an unexpected response (it may have timed out)"
+                    return { success: false, chain, dex, prices: [], error }
+                }
+                return {
+                    success: body.success === true,
+                    chain: body.chain || chain,
+                    dex: body.dex || dex,
+                    prices: Array.isArray(body.prices) ? body.prices : [],
+                    error: body.error,
+                    fetchedAt: body.fetchedAt,
+                }
+            } catch (e) {
+                if ((e as { name?: string })?.name === "AbortError") throw e
+                return { success: false, chain, dex, prices: [], error: (e as Error)?.message || "request failed" }
+            }
+        }
 
-        Promise.all(fetchPromises)
-            .then(responses => Promise.all(responses.map(response => response.json())))
+        Promise.all(endpoints.map(fetchGroup))
             .then(data => {
                 const pd: PoolPrice[] = []
                 // A failed (chain,dex) group is NON-fatal — skip it and keep aggregating the rest, so
@@ -171,7 +206,7 @@ const PriceData: React.FC<{
             });
 
         return () => controller.abort()
-    }, [pairs, contractList, minsOfData, isPublic, target, isAlias]);
+    }, [pairs, contractList, minsOfData, isPublic, target, isAlias, reloadNonce]);
 
     // THE single aggregation, computed in render: per-pool samples (price + pool
     // liquidity) → outlier removal by each method → (liquidity-weighted) mean of
@@ -201,18 +236,56 @@ const PriceData: React.FC<{
         { key: "used", label: "In calc", render: (p) => rejectedSet.has(targetPrice(p)) ? <span className="badge badge-fail badge-sm">rejected</span> : <span className="badge badge-pass badge-sm">used</span> },
     ]
 
-    if (isFetching) return <div className="card card-pad"><h2 className="muted">Fetching prices…</h2></div>
-    if (errorMsg !== null) return <div className="card card-pad"><h3 style={{ color: "var(--fail)" }}>Error fetching data</h3><p className="muted">{errorMsg}</p></div>
-    // Nothing priceable in this preview (e.g. an all-Cosmos class/pair) — say so plainly rather than
-    // rendering a misleading "= 0" headline from an empty sample set.
+    // Shared by the error / empty states below — re-runs the fetch effect in place (re-shows the spinner).
+    const tryAgainBtn = (
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setReloadNonce((n) => n + 1)}>Try again</button>
+    )
+
+    if (isFetching) return (
+        <div className="card card-pad loading-card">
+            <span className="spinner" aria-hidden="true" />
+            <div>
+                <h2 className="loading-title">Processing — please wait…</h2>
+                <p className="muted loading-sub">Pricing every backing pool across chains and DEXs. Large asset-class queries (like <span className="mono">ETH→USD</span>) can take a few seconds the first time.</p>
+            </div>
+            <style jsx>{`
+                .loading-card { display: flex; align-items: center; gap: var(--sp-4); }
+                .loading-title { margin: 0; font-size: var(--fs-lg); }
+                .loading-sub { margin: var(--sp-1) 0 0; font-size: var(--fs-sm); max-width: 56ch; }
+                .spinner { width: 22px; height: 22px; flex: none; border-radius: 50%; border: 3px solid var(--border); border-top-color: var(--accent-text, var(--brand-2)); animation: spin .8s linear infinite; }
+                @keyframes spin { to { transform: rotate(360deg); } }
+                @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+            `}</style>
+        </div>
+    )
+    if (errorMsg !== null) return (
+        <div className="card card-pad">
+            <h3 style={{ color: "var(--fail)" }}>Error fetching data</h3>
+            <p className="muted">{errorMsg}</p>
+            <div style={{ marginTop: "var(--sp-4)" }}>{tryAgainBtn}</div>
+        </div>
+    )
+    // No priceable pools — say so plainly rather than rendering a misleading "1 ETH = 0" headline from an
+    // empty sample set. Two sub-cases: some venues were skipped (timed out / unreachable / non-EVM), or
+    // every venue responded but with no price data.
     if (priceTableData.length === 0 && skipped.length > 0) return (
         <div className="card card-pad" style={{ maxWidth: 640 }}>
-            <h3 style={{ marginTop: 0 }}>Not priceable in this preview</h3>
+            <h3 style={{ marginTop: 0 }}>No prices available right now</h3>
             <p className="muted">
-                None of the backing venues can be priced by the public simulator, which prices EVM
-                subgraph pools only: <span className="mono">{skipped.map((s) => `${s.chain}/${s.dex}`).join(", ")}</span>.
-                Cosmos pools (and any temporarily-unavailable subgraph) are priced by the live oracle, not here.
+                None of the backing venues could be priced just now:{" "}
+                <span className="mono">{skipped.map((s) => `${s.chain}/${s.dex}`).join(", ")}</span>. This is often
+                temporary — a subgraph being slow or briefly unavailable — so it&apos;s worth trying again in a
+                moment. (The public simulator also prices EVM subgraph pools only; Cosmos pools are priced by the
+                live oracle, not here.)
             </p>
+            <div style={{ marginTop: "var(--sp-4)" }}>{tryAgainBtn}</div>
+        </div>
+    )
+    if (priceTableData.length === 0) return (
+        <div className="card card-pad" style={{ maxWidth: 640 }}>
+            <h3 style={{ marginTop: 0 }}>No pool prices returned</h3>
+            <p className="muted">The backing pools returned no price data this time. This is usually temporary — please try again shortly.</p>
+            <div style={{ marginTop: "var(--sp-4)" }}>{tryAgainBtn}</div>
         </div>
     )
 
