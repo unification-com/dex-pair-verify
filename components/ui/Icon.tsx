@@ -31,6 +31,7 @@ const ICONS: Record<string, string[]> = {
   help: ["M10 4a6 6 0 1 0 0 12A6 6 0 0 0 10 4z", "M8.5 8.2a1.5 1.5 0 0 1 2.9.4c0 1-1.4 1.3-1.4 2.2", "M10 13.4v.4"],
   layers: ["M10 3l7 4-7 4-7-4z", "M3 11l7 4 7-4"],
   plus: ["M10 4v12M4 10h12"],
+  menu: ["M3 6h14M3 10h14M3 14h14"],
 };
 
 export type IconName = keyof typeof ICONS;

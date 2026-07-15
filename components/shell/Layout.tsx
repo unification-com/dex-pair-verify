@@ -11,23 +11,43 @@
 //
 // `crumb` is optional page chrome; pages also render their own <PageHeader/>.
 import { useSession } from "next-auth/react";
-import React, { ReactNode } from "react";
+import React, { ReactNode, useEffect, useState } from "react";
 import { NotificationContainer } from "react-notifications";
 
 import NavBar from "./NavBar";
+import Icon from "../ui/Icon";
 
 type Props = { children: ReactNode; crumb?: ReactNode };
 
 const Layout: React.FC<Props> = ({ children, crumb }) => {
   const { status } = useSession();
+  const [navOpen, setNavOpen] = useState(false);
+
+  // Close the mobile nav drawer on Escape (backdrop tap + link tap close it too).
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setNavOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
 
   if (status === "loading") return <div className="auth-screen"><p className="muted">Loading…</p></div>;
 
   return (
-    <div className="app">
-      <NavBar />
+    <div className={`app${navOpen ? " nav-open" : ""}`}>
+      <NavBar onNavigate={() => setNavOpen(false)} />
+      {navOpen ? <button type="button" className="nav-backdrop" aria-label="Close navigation" onClick={() => setNavOpen(false)} /> : null}
       <div className="main">
         <header className="topbar">
+          <button
+            type="button"
+            className="nav-toggle"
+            aria-label="Open navigation"
+            aria-expanded={navOpen}
+            onClick={() => setNavOpen((o) => !o)}
+          >
+            <Icon name="menu" size={20} />
+          </button>
           <div className="crumb">{crumb}</div>
           <span className="grow" />
         </header>
