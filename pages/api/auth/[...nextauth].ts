@@ -14,6 +14,10 @@ export const authOptions = {
         GitHubProvider({
             clientId: process.env.GITHUB_ID,
             clientSecret: process.env.GITHUB_SECRET,
+            // GitHub's OAuth callback has carried an RFC 9207 `iss` parameter since April 2026, and
+            // openid-client rejects it unless the provider declares that issuer. next-auth 4.24.14
+            // sets this default; until we're on it, sign-in fails without it.
+            issuer: "https://github.com/login/oauth",
         }),
     ],
     adapter: PrismaAdapter(prisma),
