@@ -15,3 +15,13 @@ export const pageParam = (v: unknown): number => {
   const n = Math.floor(Number(Array.isArray(v) ? v[0] : v));
   return Number.isFinite(n) && n >= 1 ? n : 1;
 };
+
+// A list page's href: the non-empty filters in the given order, then the page when
+// it's past the first. The inverse of the parsing above.
+export const listHref = (path: string, params: Record<string, string | null | undefined>, page = 1): string => {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v) qs.set(k, v);
+  if (page > 1) qs.set("page", String(page));
+  const s = qs.toString();
+  return s ? `${path}?${s}` : path;
+};

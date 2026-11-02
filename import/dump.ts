@@ -13,6 +13,7 @@
 //   delete-pairs <chain> <dex>   Delete pairs (+ duplicate links + staging) for one (chain, dex).
 //   delete-tokens <chain>        Delete tokens (+ duplicate-symbol links) for one chain.
 //   set-created-at               Backfill createdAt for legacy rows where it is 0.
+//   set-status-changed-at        Backfill statusChangedAt from createdAt where it is 0.
 
 import * as readline from "readline";
 
@@ -103,6 +104,13 @@ const setCreatedAt = async (): Promise<void> => {
   console.log(`Backfilled createdAt on ${tokens.count} tokens, ${pairs.count} pairs`);
 };
 
+// Rows from before statusChangedAt existed: their last known status change is their creation.
+const setStatusChangedAt = async (): Promise<void> => {
+  const tokens = await prisma.$executeRaw`UPDATE "Token" SET "statusChangedAt" = "createdAt" WHERE "statusChangedAt" = 0`;
+  const pairs = await prisma.$executeRaw`UPDATE "Pair" SET "statusChangedAt" = "createdAt" WHERE "statusChangedAt" = 0`;
+  console.log(`Backfilled statusChangedAt on ${tokens} tokens, ${pairs} pairs`);
+};
+
 const usage = (): void => {
   console.log(`Usage: yarn dump <command> [args]
 
@@ -112,7 +120,8 @@ Commands:
   truncate-staging             Truncate only PairStaging.
   delete-pairs <chain> <dex>   Delete pairs for one (chain, dex).
   delete-tokens <chain>        Delete tokens for one chain.
-  set-created-at               Backfill createdAt for legacy rows (createdAt = 0).`);
+  set-created-at               Backfill createdAt for legacy rows (createdAt = 0).
+  set-status-changed-at        Backfill statusChangedAt from createdAt (statusChangedAt = 0).`);
 };
 
 const main = async (): Promise<void> => {
@@ -179,6 +188,10 @@ const main = async (): Promise<void> => {
     }
     case "set-created-at": {
       await setCreatedAt();
+      break;
+    }
+    case "set-status-changed-at": {
+      await setStatusChangedAt();
       break;
     }
     default:

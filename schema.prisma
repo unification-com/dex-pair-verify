@@ -143,6 +143,11 @@ model Pair {
   verificationComment      String             @default("")
   lastChecked              Int                @default(0)
   createdAt                Int                @default(0)
+  // Last real status transition (unix seconds): set at creation and whenever a write
+  // moves the status to a different value, never by a re-write of the same one. Drives
+  // /latest's "status changed" view; writes go through lib/status.ts (statusData) or
+  // lib/statusWrite.ts (setStatusWhere).
+  statusChangedAt          Int                @default(0)
   // Verdict-engine fields (A.2). canonicalKey caches min/max of the two
   // tokens' CoinGecko coin IDs for fast cross-DEX/cross-chain sibling lookup;
   // confidence is the weighted fence score; verdictAt is the last engine run.
@@ -183,6 +188,8 @@ model Pair {
   @@index([token0Id])
   @@index([token1Id])
   @@index([canonicalKey])
+  @@index([createdAt])
+  @@index([statusChangedAt])
 }
 
 model Token {
@@ -206,6 +213,8 @@ model Token {
   lastChecked           Int                     @default(0)
   verificationComment   String                  @default("")
   createdAt             Int                     @default(0)
+  // Last real status transition, as Pair.statusChangedAt.
+  statusChangedAt       Int                     @default(0)
   // Cheap-proxy token age for the verdict engine's meetsAge fence (A.2/D7):
   // unix seconds, seeded from the oldest pool's pool_created_at. Nullable
   // until first populated.
@@ -255,6 +264,8 @@ model Token {
   @@index([chain])
   @@index([symbol])
   @@index([chain, symbol])
+  @@index([createdAt])
+  @@index([statusChangedAt])
 }
 
 model PairStaging {

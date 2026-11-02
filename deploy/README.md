@@ -34,6 +34,11 @@ in `.env`, then apply it (there are no migration files — the project uses `db 
 
     npx prisma db push
 
+The first push that adds `statusChangedAt` (the `/latest` page's "status changed" order) leaves
+existing pairs and tokens at 0, so run this once afterwards to date them from their creation:
+
+    yarn dump set-status-changed-at
+
 To reset data: `yarn dump truncate-dex` (keeps auth/login) or `yarn dump truncate-all`.
 
 ## 3. Build

@@ -248,6 +248,8 @@ select.input { appearance: none; cursor: pointer;
 .input-prefix { display: flex; align-items: center; }
 .input-prefix > .pfx { padding: 0 var(--sp-4); height: 32px; display: flex; align-items: center; background: var(--bg-2); border: 1px solid var(--border-strong); border-right: none; border-radius: var(--r-md) 0 0 var(--r-md); color: var(--text-2); font-family: var(--font-mono); }
 .input-prefix > .input { border-radius: 0 var(--r-md) var(--r-md) 0; }
+/* list-page filter bar: search box + chain / DEX / other selects */
+.filters { display: flex; gap: var(--sp-4); align-items: center; margin-bottom: var(--sp-4); flex-wrap: wrap; }
 
 /* ---- TABS ----------------------------------------------------------------- */
 .tabs { display: flex; gap: var(--sp-2); flex-wrap: wrap; }

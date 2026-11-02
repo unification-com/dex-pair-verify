@@ -11,7 +11,7 @@ import SearchBox from "../components/ui/SearchBox";
 import { ageStr, price18, shortHex, xfund } from "../lib/format";
 import { fulfilmentFilterOptions, listFulfilments, type FulfilmentRow } from "../lib/fulfilments";
 import { operatorGate } from "../lib/operatorGate";
-import { cleanParam, pageParam } from "../lib/queryParams";
+import { cleanParam, listHref, pageParam } from "../lib/queryParams";
 
 // A pending request older than this is treated as aged-out (go-ooo gives up around its max_job_age). Shown as
 // "expired" rather than a forever-"pending"; if it ever does fulfil, the watcher updates the row anyway.
@@ -88,19 +88,14 @@ const OooFulfilmentsPage: React.FC<Props> = (props) => {
   const router = useRouter();
 
   const hrefWith = (over: Partial<{ provider: string; chainId: string; pair: string; page: number; sort: string; dir: string }>): string => {
-    const qs = new URLSearchParams();
-    const provider = over.provider ?? props.provider;
-    const chainId = over.chainId ?? props.chainId;
-    const pair = over.pair ?? props.pair;
     const sort = over.sort ?? props.sort;
-    const dir = over.dir ?? props.dir;
-    if (provider) qs.set("provider", provider);
-    if (chainId) qs.set("chainId", chainId);
-    if (pair) qs.set("pair", pair);
-    if (sort) { qs.set("sort", sort); if (dir) qs.set("dir", dir); }
-    if (over.page && over.page > 1) qs.set("page", String(over.page));
-    const s = qs.toString();
-    return s ? `/ooo-fulfilments?${s}` : "/ooo-fulfilments";
+    return listHref("/ooo-fulfilments", {
+      provider: over.provider ?? props.provider,
+      chainId: over.chainId ?? props.chainId,
+      pair: over.pair ?? props.pair,
+      sort,
+      dir: sort ? over.dir ?? props.dir : null,
+    }, over.page);
   };
 
   const cols: Column<FulfilmentRow>[] = [
@@ -149,9 +144,6 @@ const OooFulfilmentsPage: React.FC<Props> = (props) => {
 
       <Pagination page={props.page} totalPages={props.totalPages} makeHref={(p) => hrefWith({ page: p })} />
 
-      <style jsx>{`
-        .filters { display: flex; gap: var(--sp-4); align-items: center; margin-bottom: var(--sp-4); flex-wrap: wrap; }
-      `}</style>
     </Layout>
   );
 };

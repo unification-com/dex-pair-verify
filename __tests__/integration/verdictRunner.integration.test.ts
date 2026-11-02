@@ -56,6 +56,27 @@ describe("runVerdictForPair", () => {
     expect((await testPrisma.token.findUnique({ where: { id: t1.id } }))?.status).toBe(TokenPairStatus.AutoVerified);
   });
 
+  it("stamps statusChangedAt only when the verdict changes the status", async () => {
+    const t0 = await seedToken({ contractAddress: WETH, coingeckoCoinId: "weth", decimals: 18 });
+    const t1 = await seedToken({ contractAddress: USDC, coingeckoCoinId: "usd-coin", decimals: 6 });
+    await seedCanonical("weth", "eth", WETH);
+    await seedCanonical("usd-coin", "eth", USDC);
+    const pair = await seedPair(t0.id, t1.id);
+
+    await runVerdictForPair(pair.id, { now: NOW });
+    const first = await testPrisma.pair.findUnique({ where: { id: pair.id } });
+    expect(first?.status).toBe(TokenPairStatus.AutoVerified);
+    expect(first?.statusChangedAt).toBe(NOW);
+    expect((await testPrisma.token.findUnique({ where: { id: t0.id } }))?.statusChangedAt).toBe(NOW);
+
+    // The same verdict on a later pass moves verdictAt but not statusChangedAt.
+    await runVerdictForPair(pair.id, { now: NOW + 100 });
+    const again = await testPrisma.pair.findUnique({ where: { id: pair.id } });
+    expect(again?.verdictAt).toBe(NOW + 100);
+    expect(again?.statusChangedAt).toBe(NOW);
+    expect((await testPrisma.token.findUnique({ where: { id: t0.id } }))?.statusChangedAt).toBe(NOW);
+  });
+
   it("does not promote tokens when the pair isn't verified", async () => {
     const t0 = await seedToken({ contractAddress: WETH, coingeckoCoinId: "weth" });
     const t1 = await seedToken({ contractAddress: USDC, coingeckoCoinId: "usd-coin", decimals: 6 });

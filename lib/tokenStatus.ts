@@ -9,21 +9,25 @@
 // promoted, and one that was auto-verified BEFORE a later scam pass flagged it
 // is demoted out of AutoVerified by demoteScamFlaggedTokens.
 
-import prisma from "./prisma";
+import { setStatusWhere } from "./statusWrite";
+import { nowSeconds } from "./time";
 import { TokenPairStatus, VerificationMethod } from "../types/types";
 
-export async function promoteTokensToVerified(tokenIds: string[]): Promise<void> {
+export async function promoteTokensToVerified(tokenIds: string[], now = nowSeconds()): Promise<void> {
   if (tokenIds.length === 0) {
     return;
   }
-  await prisma.token.updateMany({
-    where: {
+  await setStatusWhere(
+    "token",
+    {
       id: { in: tokenIds },
       status: { notIn: [TokenPairStatus.ManualVerified, TokenPairStatus.ManualRejected] },
       isScamFlagged: false, // never promote a scam-flagged token (a honeypot is token-intrinsic)
     },
-    data: { status: TokenPairStatus.AutoVerified, verificationMethod: VerificationMethod.Auto },
-  });
+    TokenPairStatus.AutoVerified,
+    { verificationMethod: VerificationMethod.Auto },
+    now,
+  );
 }
 
 // Demote scam-flagged tokens that are still sitting in AutoVerified down to NeedsReview — mirroring how
@@ -33,14 +37,16 @@ export async function promoteTokensToVerified(tokenIds: string[]): Promise<void>
 // R6-safe (only AutoVerified is touched; operator Manual* statuses are left alone). Scope to tokenIds
 // when given (the live scam pass demotes the token it just flagged), else sweep all (revalidate's
 // catch-up). Idempotent. Returns the number demoted.
-export async function demoteScamFlaggedTokens(tokenIds?: string[]): Promise<number> {
-  const res = await prisma.token.updateMany({
-    where: {
+export async function demoteScamFlaggedTokens(tokenIds?: string[], now = nowSeconds()): Promise<number> {
+  return setStatusWhere(
+    "token",
+    {
       isScamFlagged: true,
       status: TokenPairStatus.AutoVerified,
       ...(tokenIds ? { id: { in: tokenIds } } : {}),
     },
-    data: { status: TokenPairStatus.NeedsReview, verificationMethod: VerificationMethod.Auto },
-  });
-  return res.count;
+    TokenPairStatus.NeedsReview,
+    { verificationMethod: VerificationMethod.Auto },
+    now,
+  );
 }

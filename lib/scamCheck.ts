@@ -222,7 +222,7 @@ export async function runScamCheckForToken(
       }
     }
     // Demote the token itself out of AutoVerified — the forward-only promotion never would.
-    await demoteScamFlaggedTokens([token.id]);
+    await demoteScamFlaggedTokens([token.id], now);
   }
 
   return { checked: true, flagged, reasons, demotedPairs, honeypot };
@@ -289,7 +289,7 @@ export async function rescoreScamForToken(
   // A newly-flagged token is demoted out of AutoVerified; a cleared one re-promotes via the re-verify
   // above (promoteTokensToVerified now skips a still-flagged token, so only a genuinely cleared one does).
   if (flagged) {
-    await demoteScamFlaggedTokens([token.id]);
+    await demoteScamFlaggedTokens([token.id], now);
   }
 
   return { changed: true, flagged, affectedPairs: pairs.length };

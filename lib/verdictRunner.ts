@@ -12,7 +12,8 @@ import { isFirstParty } from "./firstParty";
 import prisma from "./prisma";
 import { computeReviewTier } from "./reviewTier";
 import { getCanonicalFactoryAddress } from "./sourceConfig";
-import { isVerifiedStatus, VERIFIED_STATUSES } from "./status";
+import { isVerifiedStatus, statusData, VERIFIED_STATUSES } from "./status";
+import { nowSeconds } from "./time";
 import { promoteTokensToVerified } from "./tokenStatus";
 import { isHookedPool } from "./univ4";
 import {
@@ -53,8 +54,6 @@ export type PairWithTokens = {
   token0: PairTokenRow;
   token1: PairTokenRow;
 };
-
-const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 
 const addrEq = (a: string | null | undefined, b: string | null | undefined): boolean =>
   !!a && !!b && a.toLowerCase() === b.toLowerCase();
@@ -254,7 +253,7 @@ export async function runVerdictForPair(
     await prisma.pair.update({
       where: { id: pairId },
       data: {
-        status: result.verdict,
+        ...statusData(pair.status, result.verdict, now),
         confidence: result.confidence,
         canonicalKey: result.canonicalKey,
         verdictAt: now,
@@ -268,7 +267,7 @@ export async function runVerdictForPair(
     // A verified pair implies its tokens are legit — promote them so the token
     // views reflect it (shared with the manual + bulk verify paths).
     if (isVerifiedStatus(result.verdict)) {
-      await promoteTokensToVerified([pair.token0Id, pair.token1Id]);
+      await promoteTokensToVerified([pair.token0Id, pair.token1Id], now);
     }
   }
 

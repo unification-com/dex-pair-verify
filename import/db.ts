@@ -7,11 +7,11 @@ import { DuplicatePairs, DuplicateTokenSymbols, Pair, PairStaging, PrismaClient,
 import { utils as web3Utils } from "web3";
 
 import { thresholdSeedData } from "../lib/sourceConfig";
+import { createdStamps } from "../lib/status";
+import { nowSeconds } from "../lib/time";
 import { TokenPairStatus, VerificationMethod } from "../types/types";
 
 const prisma = new PrismaClient();
-
-const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 
 export const getOrAddStagingPair = async (
   chain: string,
@@ -72,7 +72,7 @@ export const getOrAddToken = async (
         lastChecked: 0,
         decimals: 0,
         verificationComment: "",
-        createdAt: nowSeconds(),
+        ...createdStamps(nowSeconds()),
       },
     });
     created = true;
@@ -130,7 +130,7 @@ export const getOrAddPair = async (
         token1PriceCg: 0,
         token1PriceDex: 0,
         verificationComment: "",
-        createdAt: nowSeconds(),
+        ...createdStamps(nowSeconds()),
         token0: { connect: { id: t0Id } },
         token1: { connect: { id: t1Id } },
       },

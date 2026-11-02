@@ -2,7 +2,9 @@ import formidable from "formidable";
 
 import {requireAdminApi} from "../../../lib/apiAuth";
 import prisma from '../../../lib/prisma';
-import {isStatus} from "../../../lib/status";
+import {isStatus, statusData} from "../../../lib/status";
+import {setStatusWhere} from "../../../lib/statusWrite";
+import {nowSeconds} from "../../../lib/time";
 import {TokenPairStatus, VerificationMethod} from "../../../types/types";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -41,10 +43,13 @@ export default async function handler(
     const updatedTokenCount = 1;
 
     try {
+        // The current status, so statusChangedAt only moves on a real change.
+        const prev = await prisma.token.findUniqueOrThrow({ where: { id: tokenId }, select: { status: true } })
+        const now = nowSeconds()
         const token = await prisma.token.update({
             where: { id: tokenId },
             data: {
-                status: newStatus,
+                ...statusData(prev.status, newStatus, now),
                 verificationMethod: VerificationMethod.Manual,
                 verificationComment: comment,
             },
@@ -52,24 +57,13 @@ export default async function handler(
 
         if(newStatus !== TokenPairStatus.ManualVerified) {
             // cascade update associated pairs
-            const updatedPairCountRes = await prisma.pair.updateMany({
-                where: {
-                    OR: [
-                        {
-                            token0Id: tokenId
-                        },
-                        {
-                            token1Id: tokenId
-                        },
-                    ],
-                },
-                data: {
-                    status: newStatus,
-                    verificationMethod: VerificationMethod.Cascade
-                },
-            })
-
-            updatedPairCount = updatedPairCountRes.count
+            updatedPairCount = await setStatusWhere(
+                "pair",
+                { OR: [{ token0Id: tokenId }, { token1Id: tokenId }] },
+                newStatus,
+                { verificationMethod: VerificationMethod.Cascade },
+                now,
+            )
         }
 
         return res.status(200).json({ success: true, data: {new_status: token.status, id: token.id, affected_pairs: updatedPairCount, affected_tokens: updatedTokenCount } })

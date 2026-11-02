@@ -1,5 +1,7 @@
 import {requireAdminApi} from "../../../lib/apiAuth";
 import prisma from "../../../lib/prisma";
+import {setStatusWhere} from "../../../lib/statusWrite";
+import {nowSeconds} from "../../../lib/time";
 import {promoteTokensToVerified} from "../../../lib/tokenStatus";
 import {runVerdictForPair} from "../../../lib/verdictRunner";
 import {TokenPairStatus, VerificationMethod} from "../../../types/types";
@@ -26,14 +28,14 @@ export default async function handler(
     try {
         if (action === "approve" || action === "reject") {
             const status = action === "approve" ? TokenPairStatus.ManualVerified : TokenPairStatus.ManualRejected
-            const result = await prisma.pair.updateMany({
-                where: { id: { in: ids } },
-                data: {
-                    status,
-                    verificationMethod: VerificationMethod.Manual,
-                    verificationComment: `bulk ${action} by operator`,
-                },
-            })
+            const now = nowSeconds()
+            const count = await setStatusWhere(
+                "pair",
+                { id: { in: ids } },
+                status,
+                { verificationMethod: VerificationMethod.Manual, verificationComment: `bulk ${action} by operator` },
+                now,
+            )
 
             // Approving pairs promotes their tokens too (same as the auto path).
             if (action === "approve") {
@@ -43,10 +45,10 @@ export default async function handler(
                     tokenIds.add(p.token0Id)
                     tokenIds.add(p.token1Id)
                 }
-                await promoteTokensToVerified(Array.from(tokenIds))
+                await promoteTokensToVerified(Array.from(tokenIds), now)
             }
 
-            return res.status(200).json({ success: true, count: result.count })
+            return res.status(200).json({ success: true, count })
         }
 
         if (action === "rescan") {

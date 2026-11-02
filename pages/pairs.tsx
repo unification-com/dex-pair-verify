@@ -8,6 +8,8 @@ import ChainName from "../components/ChainName";
 import DexName from "../components/DexName";
 import Pagination from "../components/Pagination";
 import Layout from "../components/shell/Layout"
+import SourceFilter from "../components/SourceFilter";
+import Ago from "../components/ui/Ago";
 import ConfidenceMeter from "../components/ui/ConfidenceMeter";
 import DataTable, { Column } from "../components/ui/DataTable";
 import Icon from "../components/ui/Icon";
@@ -19,7 +21,8 @@ import { usd, num } from "../lib/format";
 import { isOperatorCtx } from "../lib/operatorGate";
 import prisma from '../lib/prisma';
 import { publicPairListSelect } from "../lib/publicSelect";
-import { cleanParam, pageParam } from "../lib/queryParams";
+import { cleanParam, listHref, pageParam } from "../lib/queryParams";
+import { sourceOptions, SourceOption } from "../lib/sourceOptions";
 import { coerceStatus, VERIFIED_STATUSES } from "../lib/status";
 import { PairProps } from "../types/props";
 import { TokenPairStatus } from "../types/types";
@@ -38,8 +41,6 @@ const PAIR_TABS: { status: TokenPairStatus; label: string }[] = [
     { status: TokenPairStatus.NotCurrentlyUsable, label: "Not Usable" },
 ]
 
-type Source = { chain: string; dex: string };
-
 // Whitelisted sortable columns → a prisma orderBy (so the ?sort= param can't inject
 // a field) + the normalised key/dir that drives the header indicator. Sorting runs
 // in the DB across the WHOLE result set, then we paginate — not just this page.
@@ -51,6 +52,7 @@ function pairSort(sort: string | null, dir: string | null) {
     case "txCount": return { orderBy: [{ txCount: d }], sortKey: "txCount", sortDir: d };
     case "confidence": return { orderBy: [{ confidence: d }], sortKey: "confidence", sortDir: d };
     case "reviewTier": return { orderBy: [{ reviewTier: d }], sortKey: "reviewTier", sortDir: d };
+    case "createdAt": return { orderBy: [{ createdAt: d }], sortKey: "createdAt", sortDir: d };
     default: return { orderBy: [{ reserveNativeCurrency: "desc" as const }], sortKey: "", sortDir: "" };
   }
 }
@@ -77,7 +79,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
       ...(dex ? { dex } : {}),
       ...search,
     }
-    const [pairs, totalCount, sourceGroups, priceableMeta] = await Promise.all([
+    const [pairs, totalCount, options, priceableMeta] = await Promise.all([
       prisma.pair.findMany({
         where,
         // Public list: explicit select (no verdict drivers / token internals).
@@ -87,14 +89,12 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
         take: PAGE_SIZE,
       }),
       prisma.pair.count({ where }),
-      prisma.pair.groupBy({ by: ['chain', 'dex'], where: { status: { in: [...VERIFIED_STATUSES] } }, _count: { _all: true } }),
+      sourceOptions({ status: { in: [...VERIFIED_STATUSES] } }),
       // go-ooo's recognised price sources + their per-pool liquidity floor — drives the
       // per-row "OoO pricing" badge. Same helper the public /api/ooo/v1/pairs catalogue
       // derives its priceable flag from (one definition of go-ooo priceability).
       priceableSourceMeta(),
     ])
-    const chains = Array.from(new Set(sourceGroups.map((g) => g.chain))).sort()
-    const sources: Source[] = sourceGroups.map((g) => ({ chain: g.chain, dex: g.dex }))
     // A pair is priceable if go-ooo prices its source AND this pool clears that source's floor.
     const priceablePairIds = pairs.filter((p) => poolIsPriceable(priceableMeta, p.chain, p.dex, p.reserveUsd)).map((p) => p.id)
     return {
@@ -107,8 +107,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
         page,
         totalPages: Math.max(1, Math.ceil(totalCount / PAGE_SIZE)),
         totalCount,
-        chains,
-        sources,
+        ...options,
         priceablePairIds,
         sort: sortKey,
         dir: sortDir,
@@ -124,7 +123,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     if (dex) scope.dex = dex
     const where = { ...scope, status: qStatus, ...(tier ? { reviewTier: tier } : {}), ...search }
 
-    const [pairs, totalCount, statusGroups, tierGroups, thresholdRows, sourceGroups] = await Promise.all([
+    const [pairs, totalCount, statusGroups, tierGroups, thresholdRows, options] = await Promise.all([
         prisma.pair.findMany({
             where,
             include: {
@@ -140,7 +139,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
         prisma.pair.groupBy({ by: ['status'], where: scope, _count: { _all: true } }),
         prisma.pair.groupBy({ by: ['reviewTier'], where: { ...scope, status: TokenPairStatus.NeedsReview }, _count: { _all: true } }),
         prisma.threshold.findMany({ select: { chain: true, dex: true, minLiquidityUsd: true } }),
-        prisma.pair.groupBy({ by: ['chain', 'dex'], _count: { _all: true } }),
+        sourceOptions(),
     ]);
 
     const statusCounts: Record<string, number> = {}
@@ -151,9 +150,6 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
 
     const floorMap: Record<string, Record<string, number>> = {}
     for (const t of thresholdRows) (floorMap[t.chain] ||= {})[t.dex] = t.minLiquidityUsd
-
-    const chains = Array.from(new Set(sourceGroups.map((g) => g.chain))).sort()
-    const sources: Source[] = sourceGroups.map((g) => ({ chain: g.chain, dex: g.dex }))
 
     return {
         props: {
@@ -170,8 +166,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
             statusCounts,
             tierCounts,
             floorMap,
-            chains,
-            sources,
+            ...options,
             sort: sortKey,
             dir: sortDir,
         },
@@ -193,7 +188,7 @@ type OperatorProps = {
     tierCounts: Record<string, number>,
     floorMap: Record<string, Record<string, number>>,
     chains: string[],
-    sources: Source[],
+    sources: SourceOption[],
     sort: string,
     dir: string,
 }
@@ -207,7 +202,7 @@ type PublicProps = {
     totalPages: number,
     totalCount: number,
     chains: string[],
-    sources: Source[],
+    sources: SourceOption[],
     priceablePairIds: string[], // ids of this page's pairs go-ooo will price (source + per-pool floor)
     sort: string,
     dir: string,
@@ -224,19 +219,14 @@ const PublicPairs: React.FC<PublicProps> = (props) => {
     const router = useRouter()
 
     const hrefWith = (over: Partial<{ chain: string; dex: string; q: string; page: number; sort: string; dir: string }>): string => {
-        const qs = new URLSearchParams()
-        const chain = over.chain ?? props.chain
-        const dex = over.dex ?? props.dex
-        const q = over.q ?? props.q
         const sort = over.sort ?? props.sort
-        const dir = over.dir ?? props.dir
-        if (chain) qs.set("chain", chain)
-        if (dex) qs.set("dex", dex)
-        if (q) qs.set("q", q)
-        if (sort) { qs.set("sort", sort); if (dir) qs.set("dir", dir) }
-        if (over.page && over.page > 1) qs.set("page", String(over.page))
-        const s = qs.toString()
-        return s ? `/pairs?${s}` : "/pairs"
+        return listHref("/pairs", {
+            chain: over.chain ?? props.chain,
+            dex: over.dex ?? props.dex,
+            q: over.q ?? props.q,
+            sort,
+            dir: sort ? over.dir ?? props.dir : null,
+        }, over.page)
     }
 
     // Pairs go-ooo will likely price (computed server-side: recognised source + the pool
@@ -255,6 +245,7 @@ const PublicPairs: React.FC<PublicProps> = (props) => {
         },
         { key: "reserveUsd", label: "Liquidity", num: true, sortable: true, render: (p) => usd(p.reserveUsd) },
         { key: "txCount", label: "Tx", num: true, sortable: true, render: (p) => num(p.txCount) },
+        { key: "createdAt", label: "Added", sortable: true, render: (p) => <Ago ts={p.createdAt} /> },
         { key: "status", label: "Status", render: (p) => <StatusBadge status={p.status} size="sm" /> },
         {
             key: "priceable", label: "OoO pricing", render: (p) => priceableIds.has(p.id)
@@ -272,14 +263,7 @@ const PublicPairs: React.FC<PublicProps> = (props) => {
 
             <div className="filters card card-pad">
                 <SearchBox value={props.q} placeholder="Search pairs by name…" onSearch={(q) => router.push(hrefWith({ q, page: 1 }))} />
-                <select className="input" value={props.chain} onChange={(e) => router.push(hrefWith({ chain: e.target.value, dex: "", page: 1 }))}>
-                    <option value="">All chains</option>
-                    {props.chains.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <select className="input" value={props.dex} onChange={(e) => router.push(hrefWith({ dex: e.target.value, page: 1 }))}>
-                    <option value="">All DEXs</option>
-                    {props.sources.filter((s) => !props.chain || s.chain === props.chain).map((s) => <option key={`${s.chain}_${s.dex}`} value={s.dex}>{s.dex}{props.chain ? "" : ` (${s.chain})`}</option>)}
-                </select>
+                <SourceFilter chains={props.chains} chain={props.chain} sources={props.sources} dex={props.dex} onChange={(over) => router.push(hrefWith({ ...over, page: 1 }))} />
             </div>
 
             <DataTable
@@ -294,12 +278,6 @@ const PublicPairs: React.FC<PublicProps> = (props) => {
 
             <Pagination page={props.page} totalPages={props.totalPages} makeHref={(p) => hrefWith({ page: p })} />
 
-            <style jsx>{`
-                .filters { display: flex; gap: var(--sp-4); align-items: center; margin-bottom: var(--sp-4); flex-wrap: wrap; }
-                .ico-input { position: relative; display: inline-flex; align-items: center; flex: 1; min-width: 220px; }
-                .ico-input :global(.ico) { position: absolute; left: 10px; color: var(--text-2); }
-                .ico-input .input { width: 100%; padding-left: 30px; }
-            `}</style>
         </Layout>
     )
 }
@@ -313,22 +291,16 @@ const OperatorPairs: React.FC<OperatorProps> = (props) => {
 
     // Build a /pairs href, carrying the active filter and overriding parts.
     const hrefWith = (over: Partial<{ status: string; chain: string; dex: string; q: string; tier: string; page: number; sort: string; dir: string }>): string => {
-        const qs = new URLSearchParams()
-        const status = over.status ?? props.status
-        const chain = over.chain ?? props.chain
-        const dex = over.dex ?? props.dex
-        const q = over.q ?? props.q
-        const tier = over.tier ?? (over.status && over.status !== props.status ? "" : props.tier)
         const sort = over.sort ?? props.sort
-        const dir = over.dir ?? props.dir
-        qs.set("status", status)
-        if (chain) qs.set("chain", chain)
-        if (dex) qs.set("dex", dex)
-        if (q) qs.set("q", q)
-        if (tier) qs.set("tier", tier)
-        if (sort) { qs.set("sort", sort); if (dir) qs.set("dir", dir) }
-        if (over.page && over.page > 1) qs.set("page", String(over.page))
-        return `/pairs?${qs.toString()}`
+        return listHref("/pairs", {
+            status: over.status ?? props.status,
+            chain: over.chain ?? props.chain,
+            dex: over.dex ?? props.dex,
+            q: over.q ?? props.q,
+            tier: over.tier ?? (over.status && over.status !== props.status ? "" : props.tier),
+            sort,
+            dir: sort ? over.dir ?? props.dir : null,
+        }, over.page)
     }
     // Filter the pair-detail link carries (so QueueNav can walk this same queue).
     const detailQs = (() => {
@@ -388,6 +360,7 @@ const OperatorPairs: React.FC<OperatorProps> = (props) => {
         },
         { key: "txCount", label: "Tx", num: true, sortable: true, render: (p) => num(p.txCount) },
         { key: "confidence", label: "Conf", sortable: true, sortVal: (p) => p.confidence ?? -1, render: (p) => <ConfidenceMeter value={p.confidence} compact /> },
+        { key: "createdAt", label: "Added", sortable: true, render: (p) => <Ago ts={p.createdAt} /> },
         { key: "status", label: "Status", render: (p) => <StatusBadge status={p.status} size="sm" /> },
     ]
     if (props.status === TokenPairStatus.NeedsReview) {
@@ -417,14 +390,7 @@ const OperatorPairs: React.FC<OperatorProps> = (props) => {
             {/* Filters */}
             <div className="filters card card-pad">
                 <SearchBox value={props.q} placeholder="Search pairs by name…" onSearch={(q) => router.push(hrefWith({ q, page: 1 }))} />
-                <select className="input" value={props.chain} onChange={(e) => router.push(hrefWith({ chain: e.target.value, dex: "", page: 1 }))}>
-                    <option value="">All chains</option>
-                    {props.chains.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <select className="input" value={props.dex} onChange={(e) => router.push(hrefWith({ dex: e.target.value, page: 1 }))}>
-                    <option value="">All DEXs</option>
-                    {props.sources.filter((s) => !props.chain || s.chain === props.chain).map((s) => <option key={`${s.chain}_${s.dex}`} value={s.dex}>{s.dex}{props.chain ? "" : ` (${s.chain})`}</option>)}
-                </select>
+                <SourceFilter chains={props.chains} chain={props.chain} sources={props.sources} dex={props.dex} onChange={(over) => router.push(hrefWith({ ...over, page: 1 }))} />
             </div>
 
             {/* Triage sub-filter (NeedsReview only) */}
@@ -471,10 +437,6 @@ const OperatorPairs: React.FC<OperatorProps> = (props) => {
                 .tab.active { color: var(--accent-text); border-bottom-color: var(--accent); font-weight: 600; }
                 .tab-count { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-2); background: var(--bg-3); padding: 0 6px; border-radius: var(--r-pill); }
                 .tab.active .tab-count { color: var(--accent-text); background: var(--accent-dim); }
-                .filters { display: flex; gap: var(--sp-4); align-items: center; margin-bottom: var(--sp-4); flex-wrap: wrap; }
-                .ico-input { position: relative; display: inline-flex; align-items: center; flex: 1; min-width: 220px; }
-                .ico-input :global(.ico) { position: absolute; left: 10px; color: var(--text-2); }
-                .ico-input .input { width: 100%; padding-left: 30px; }
                 .triage { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-4); flex-wrap: wrap; }
                 .chip { font-size: var(--fs-xs); padding: 3px 10px; border-radius: var(--r-pill); border: 1px solid var(--border-strong); color: var(--text-1); }
                 .chip.on { border-color: var(--accent-line); background: var(--accent-dim); color: var(--accent-text); }

@@ -28,3 +28,13 @@ export const isStatus = (v: unknown): v is TokenPairStatus =>
 // absent or not a recognised enum value.
 export const coerceStatus = (v: unknown, fallback: TokenPairStatus): TokenPairStatus =>
   isStatus(v) ? v : fallback;
+
+// The status fields for a single-row write when the row's current status is known:
+// statusChangedAt only moves on a real transition, so a pass that re-writes the same
+// verdict doesn't make the row look recently changed on /latest. Multi-row writes use
+// setStatusWhere (lib/statusWrite.ts).
+export const statusData = (prev: string, next: TokenPairStatus, now: number) =>
+  prev === next ? { status: next } : { status: next, statusChangedAt: now };
+
+// The timestamps for a newly created pair/token: its status is set at creation.
+export const createdStamps = (now: number) => ({ createdAt: now, statusChangedAt: now });

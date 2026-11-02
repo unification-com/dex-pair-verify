@@ -6,6 +6,8 @@ import React from "react"
 import ChainName from "../components/ChainName";
 import Pagination from "../components/Pagination";
 import Layout from "../components/shell/Layout"
+import SourceFilter from "../components/SourceFilter";
+import Ago from "../components/ui/Ago";
 import DataTable, { Column } from "../components/ui/DataTable";
 import PageHeader from "../components/ui/PageHeader";
 import SearchBox from "../components/ui/SearchBox";
@@ -14,7 +16,7 @@ import { usd, num } from "../lib/format";
 import { isOperatorCtx } from "../lib/operatorGate";
 import prisma from '../lib/prisma';
 import { publicTokenListSelect } from "../lib/publicSelect";
-import { cleanParam, pageParam } from "../lib/queryParams";
+import { cleanParam, listHref, pageParam } from "../lib/queryParams";
 import { coerceStatus, VERIFIED_STATUSES } from "../lib/status";
 import { TokenPairStatus } from "../types/types";
 
@@ -36,14 +38,14 @@ type ListToken = {
     id: string; symbol: string; name: string; chain: string;
     coingeckoCoinId: string | null; status: TokenPairStatus;
     isScamFlagged: boolean; scamReason: string | null;
-    liquidityUsd: number; poolCount: number;
+    liquidityUsd: number; poolCount: number; createdAt: number;
 }
-const tokenSelect = { id: true, symbol: true, name: true, chain: true, coingeckoCoinId: true, status: true, isScamFlagged: true, scamReason: true }
+const tokenSelect = { id: true, symbol: true, name: true, chain: true, coingeckoCoinId: true, status: true, isScamFlagged: true, scamReason: true, createdAt: true }
 
 // Sortable columns + the normalised key/dir that drives the header indicator. The
 // sort runs in-memory across the WHOLE filtered set (the aggregates are computed,
 // not DB columns), then we paginate — so it spans the dataset, not just the page.
-const TOKEN_SORT_KEYS = ["symbol", "liquidityUsd", "poolCount"]
+const TOKEN_SORT_KEYS = ["symbol", "liquidityUsd", "poolCount", "createdAt"]
 function normalizeTokenSort(sort: string | null, dir: string | null): { sortKey: string; sortDir: "asc" | "desc" } {
     const sortKey = sort && TOKEN_SORT_KEYS.includes(sort) ? sort : "liquidityUsd"
     const sortDir: "asc" | "desc" = dir === "asc" ? "asc" : dir === "desc" ? "desc" : sortKey === "symbol" ? "asc" : "desc"
@@ -53,6 +55,7 @@ function compareTokens(a: ListToken, b: ListToken, key: string, dir: "asc" | "de
     let r = 0
     if (key === "symbol") r = a.symbol.localeCompare(b.symbol)
     else if (key === "poolCount") r = a.poolCount - b.poolCount
+    else if (key === "createdAt") r = a.createdAt - b.createdAt
     else r = a.liquidityUsd - b.liquidityUsd
     return dir === "asc" ? r : -r
 }
@@ -204,6 +207,7 @@ const baseTokenCols = (): Column<ListToken>[] => [
     },
     { key: "liquidityUsd", label: "Liquidity", num: true, sortable: true, render: (t) => usd(t.liquidityUsd) },
     { key: "poolCount", label: "Pools", num: true, sortable: true, render: (t) => num(t.poolCount) },
+    { key: "createdAt", label: "Added", sortable: true, render: (t) => <Ago ts={t.createdAt} /> },
     { key: "status", label: "Status", render: (t) => <TokenStatusBadge status={t.status} scamFlagged={t.isScamFlagged} scamReason={t.scamReason} size="sm" /> },
 ];
 
@@ -211,17 +215,13 @@ const PublicTokens: React.FC<PublicProps> = (props) => {
     const router = useRouter()
 
     const hrefWith = (over: Partial<{ chain: string; q: string; page: number; sort: string; dir: string }>): string => {
-        const qs = new URLSearchParams()
-        const chain = over.chain ?? props.chain
-        const q = over.q ?? props.q
         const sort = over.sort ?? props.sort
-        const dir = over.dir ?? props.dir
-        if (chain) qs.set("chain", chain)
-        if (q) qs.set("q", q)
-        if (sort) { qs.set("sort", sort); if (dir) qs.set("dir", dir) }
-        if (over.page && over.page > 1) qs.set("page", String(over.page))
-        const s = qs.toString()
-        return s ? `/tokens?${s}` : "/tokens"
+        return listHref("/tokens", {
+            chain: over.chain ?? props.chain,
+            q: over.q ?? props.q,
+            sort,
+            dir: sort ? over.dir ?? props.dir : null,
+        }, over.page)
     }
 
     return (
@@ -230,10 +230,7 @@ const PublicTokens: React.FC<PublicProps> = (props) => {
 
             <div className="filters card card-pad">
                 <SearchBox value={props.q} placeholder="Search symbol / name / address…" onSearch={(q) => router.push(hrefWith({ q, page: 1 }))} />
-                <select className="input" value={props.chain} onChange={(e) => router.push(hrefWith({ chain: e.target.value, page: 1 }))}>
-                    <option value="">All chains</option>
-                    {props.chains.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <SourceFilter chains={props.chains} chain={props.chain} onChange={({ chain }) => router.push(hrefWith({ chain, page: 1 }))} />
             </div>
 
             <DataTable
@@ -248,12 +245,6 @@ const PublicTokens: React.FC<PublicProps> = (props) => {
 
             <Pagination page={props.page} totalPages={props.totalPages} makeHref={(p) => hrefWith({ page: p })} />
 
-            <style jsx>{`
-                .filters { display: flex; gap: var(--sp-4); align-items: center; margin-bottom: var(--sp-4); flex-wrap: wrap; }
-                .ico-input { position: relative; display: inline-flex; align-items: center; flex: 1; min-width: 220px; }
-                .ico-input :global(.ico) { position: absolute; left: 10px; color: var(--text-2); }
-                .ico-input .input { width: 100%; padding-left: 30px; }
-            `}</style>
         </Layout>
     )
 }
@@ -262,17 +253,14 @@ const OperatorTokens: React.FC<OperatorProps> = (props) => {
     const router = useRouter()
 
     const hrefWith = (over: Partial<{ status: string; chain: string; q: string; page: number; sort: string; dir: string }>): string => {
-        const qs = new URLSearchParams()
-        qs.set("status", over.status ?? props.status)
-        const chain = over.chain ?? props.chain
-        const q = over.q ?? props.q
         const sort = over.sort ?? props.sort
-        const dir = over.dir ?? props.dir
-        if (chain) qs.set("chain", chain)
-        if (q) qs.set("q", q)
-        if (sort) { qs.set("sort", sort); if (dir) qs.set("dir", dir) }
-        if (over.page && over.page > 1) qs.set("page", String(over.page))
-        return `/tokens?${qs.toString()}`
+        return listHref("/tokens", {
+            status: over.status ?? props.status,
+            chain: over.chain ?? props.chain,
+            q: over.q ?? props.q,
+            sort,
+            dir: sort ? over.dir ?? props.dir : null,
+        }, over.page)
     }
 
     // The operator view inserts a Scam column before the aggregate columns.
@@ -298,10 +286,7 @@ const OperatorTokens: React.FC<OperatorProps> = (props) => {
 
             <div className="filters card card-pad">
                 <SearchBox value={props.q} placeholder="Search symbol / name / address…" onSearch={(q) => router.push(hrefWith({ q, page: 1 }))} />
-                <select className="input" value={props.chain} onChange={(e) => router.push(hrefWith({ chain: e.target.value, page: 1 }))}>
-                    <option value="">All chains</option>
-                    {props.chains.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <SourceFilter chains={props.chains} chain={props.chain} onChange={({ chain }) => router.push(hrefWith({ chain, page: 1 }))} />
             </div>
 
             <DataTable
@@ -323,10 +308,6 @@ const OperatorTokens: React.FC<OperatorProps> = (props) => {
                 .tab.active { color: var(--accent-text); border-bottom-color: var(--accent); font-weight: 600; }
                 .tab-count { font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-2); background: var(--bg-3); padding: 0 6px; border-radius: var(--r-pill); }
                 .tab.active .tab-count { color: var(--accent-text); background: var(--accent-dim); }
-                .filters { display: flex; gap: var(--sp-4); align-items: center; margin-bottom: var(--sp-4); flex-wrap: wrap; }
-                .ico-input { position: relative; display: inline-flex; align-items: center; flex: 1; min-width: 220px; }
-                .ico-input :global(.ico) { position: absolute; left: 10px; color: var(--text-2); }
-                .ico-input .input { width: 100%; padding-left: 30px; }
             `}</style>
         </Layout>
     )

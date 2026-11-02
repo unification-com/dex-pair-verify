@@ -17,6 +17,7 @@ import { IngestAdapter, NormalisedPool, NormalisedToken, PoolFacts } from "./ing
 import prisma from "./prisma";
 import { getSource, getSources, gtDexFor, gtNetworkFor, thresholdSeedData } from "./sourceConfig";
 import { sqsAdapter } from "./sqsAdapter";
+import { createdStamps } from "./status";
 import { poolAddressFromGt } from "./univ4";
 import { runVerdictForPair } from "./verdictRunner";
 
@@ -72,7 +73,7 @@ async function upsertToken(
       contractAddress: address,
       txCount: 0,
       deploymentTimestamp: poolCreatedAt,
-      createdAt: now,
+      ...createdStamps(now),
       ...common,
     },
   });
@@ -131,7 +132,7 @@ async function upsertPair(
       contractAddress: address,
       token0Id,
       token1Id,
-      createdAt: now,
+      ...createdStamps(now),
       ...common,
     },
   });

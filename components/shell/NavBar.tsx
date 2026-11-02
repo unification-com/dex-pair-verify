@@ -58,6 +58,7 @@ const NavBar: React.FC<{ needsReviewCount?: number; onNavigate?: () => void }> =
         <Item href="/" icon="home" label="Dashboard" active={router.asPath === "/"} />
         <Item href="/pairs" icon="queue" label="Pairs" star={isOperator} pill={isOperator ? (needsReviewCount ?? null) : null} active={active("/pairs")} />
         <Item href="/tokens" icon="token" label="Tokens" active={active("/tokens")} />
+        <Item href="/latest" icon="clock" label="Latest" active={active("/latest")} />
         <Item href="/sources" icon="layers" label="Sources" active={active("/sources")} />
         <Item href="/price-test" icon="price" label="OoO price-test" active={active("/price-test")} />
 

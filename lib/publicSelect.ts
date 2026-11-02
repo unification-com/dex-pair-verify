@@ -45,8 +45,9 @@ export const publicPairDetailSelect = Prisma.validator<Prisma.PairSelect>()({
   token1: { select: { symbol: true, id: true, contractAddress: true, txCount: true, status: true, coingeckoCoinId: true } },
 });
 
-// Pair list (/pairs) — name + the two headline market facts the table renders.
-// The list never renders the token sub-rows, so they're not selected.
+// Pair list (/pairs, /latest): name + the two headline market facts the table
+// renders, and when it was added (/latest adds statusChangedAt). The list never
+// renders the token sub-rows, so they're not selected.
 export const publicPairListSelect = Prisma.validator<Prisma.PairSelect>()({
   id: true,
   chain: true,
@@ -55,6 +56,7 @@ export const publicPairListSelect = Prisma.validator<Prisma.PairSelect>()({
   reserveUsd: true,
   txCount: true,
   status: true,
+  createdAt: true,
 });
 
 // A pool row UNDER a token (/t/[id]) — drives the verified-pools table and the
@@ -93,9 +95,9 @@ export const publicTokenDetailSelect = Prisma.validator<Prisma.TokenSelect>()({
   webPresenceCheckedAt: true,
 });
 
-// Token list (/tokens) — identity columns only. The pool-derived aggregates
-// (liquidity / pool count) are computed separately; the scam columns are
-// operator-only and deliberately absent here.
+// Token list (/tokens, /latest): identity columns and when the token was added
+// (/latest adds statusChangedAt). The pool-derived aggregates (liquidity / pool count) are computed separately;
+// the scam columns are operator-only and deliberately absent here.
 export const publicTokenListSelect = Prisma.validator<Prisma.TokenSelect>()({
   id: true,
   symbol: true,
@@ -103,6 +105,7 @@ export const publicTokenListSelect = Prisma.validator<Prisma.TokenSelect>()({
   chain: true,
   coingeckoCoinId: true,
   status: true,
+  createdAt: true,
 });
 
 // Pools for the OoO price-test (/price-test/*). Applied to BOTH the operator and

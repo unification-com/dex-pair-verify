@@ -2,7 +2,8 @@ import formidable from "formidable";
 
 import {requireAdminApi} from "../../../lib/apiAuth";
 import prisma from '../../../lib/prisma';
-import {isStatus, isVerifiedStatus} from "../../../lib/status";
+import {isStatus, isVerifiedStatus, statusData} from "../../../lib/status";
+import {nowSeconds} from "../../../lib/time";
 import {promoteTokensToVerified} from "../../../lib/tokenStatus";
 import {TokenPairStatus, VerificationMethod} from "../../../types/types";
 
@@ -41,10 +42,13 @@ export default async function handler(
     }
 
     try {
+        // The current status, so statusChangedAt only moves on a real change.
+        const prev = await prisma.pair.findUniqueOrThrow({ where: { id: pairid }, select: { status: true } })
+        const now = nowSeconds()
         const pair = await prisma.pair.update({
             where: { id: pairid },
             data: {
-                status,
+                ...statusData(prev.status, status, now),
                 verificationMethod: VerificationMethod.Manual,
                 verificationComment: comment,
             },
@@ -52,7 +56,7 @@ export default async function handler(
 
         // A manually-verified pair promotes its tokens too (same as the auto path).
         if (isVerifiedStatus(pair.status as TokenPairStatus)) {
-            await promoteTokensToVerified([pair.token0Id, pair.token1Id])
+            await promoteTokensToVerified([pair.token0Id, pair.token1Id], now)
         }
 
         return res.status(200).json({ success: true, data: {new_status: pair.status, id: pair.id } })

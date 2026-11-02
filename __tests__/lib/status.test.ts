@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { isVerifiedStatus, VERIFIED_STATUSES } from "../../lib/status";
+import { createdStamps, isVerifiedStatus, statusData, VERIFIED_STATUSES } from "../../lib/status";
 import { TokenPairStatus } from "../../types/types";
 
 describe("isVerifiedStatus", () => {
@@ -28,5 +28,26 @@ describe("isVerifiedStatus", () => {
     expect([...VERIFIED_STATUSES].sort()).toEqual(
       [TokenPairStatus.AutoVerified, TokenPairStatus.ManualVerified].sort(),
     );
+  });
+});
+
+describe("statusData", () => {
+  it("stamps statusChangedAt when the status changes", () => {
+    expect(statusData(TokenPairStatus.Unverified, TokenPairStatus.AutoVerified, 100)).toEqual({
+      status: TokenPairStatus.AutoVerified,
+      statusChangedAt: 100,
+    });
+  });
+
+  it("leaves statusChangedAt alone when the same status is re-written", () => {
+    expect(statusData(TokenPairStatus.NeedsReview, TokenPairStatus.NeedsReview, 100)).toEqual({
+      status: TokenPairStatus.NeedsReview,
+    });
+  });
+});
+
+describe("createdStamps", () => {
+  it("dates a new row's status from its creation", () => {
+    expect(createdStamps(100)).toEqual({ createdAt: 100, statusChangedAt: 100 });
   });
 });
