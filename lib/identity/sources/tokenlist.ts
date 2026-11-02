@@ -6,7 +6,10 @@
 // address, … }] }`), so one parser handles every list. Lists are fetched once
 // per process and cached (they change slowly); a failed fetch degrades to "no
 // membership", never an error — the ≥2-category rule means a missing list just
-// means GoPlus must also vouch.
+// means GoPlus must also vouch. A failure is remembered too (FAILED_RETRY_MS), so
+// a dead or rate-limited list costs one fetch per hour rather than one per token:
+// uncached, the ipfs.io gateway's 429s (each a 65s back-off) once stretched a
+// half-day pipeline run to a week.
 
 import { fetchWithBackoff } from "../../httpBackoff";
 import { IdentitySignal } from "../types";
@@ -19,9 +22,11 @@ type TokenListDoc = { tokens?: TokenListEntry[] };
 // CG, so they can vouch for a token GeckoTerminal never gave a cgId) + CoinGecko
 // per-network lists (comprehensive coverage). Tune/extend freely — a dead or
 // non-JSON URL just yields no membership for that list (never crashes the pass).
-// NB: `tokens.uniswap.org` 302-redirects to HTML; the real JSON is the IPNS URL.
+// NB: `tokens.uniswap.org` serves HTML, and the public ipfs.io gateway for its IPNS
+// name rate-limits (429) every request, so the Uniswap list comes from its npm
+// package (verified reachable + tokens[]-shaped 2026-11-02).
 export const TOKEN_LISTS: { name: string; url: string }[] = [
-  { name: "uniswap-default", url: "https://ipfs.io/ipns/tokens.uniswap.org" },
+  { name: "uniswap-default", url: "https://unpkg.com/@uniswap/default-token-list/build/uniswap-default.tokenlist.json" },
   { name: "1inch", url: "https://tokens.1inch.eth.link" },
   { name: "coingecko-eth", url: "https://tokens.coingecko.com/ethereum/all.json" },
   { name: "coingecko-bsc", url: "https://tokens.coingecko.com/binance-smart-chain/all.json" },
@@ -46,6 +51,7 @@ export const TOKEN_LISTS: { name: string; url: string }[] = [
 ];
 
 const LIST_TTL_MS = 24 * 60 * 60 * 1000;
+const FAILED_RETRY_MS = 60 * 60 * 1000;
 const memberKey = (chainId: number, address: string): string => `${chainId}:${address.toLowerCase()}`;
 
 export type ListFetcher = (url: string) => Promise<TokenListDoc | null>;
@@ -65,18 +71,20 @@ const defaultListFetcher: ListFetcher = async (url) => {
   }
 };
 
-type CachedList = { keys: Set<string>; fetchedAt: number };
+type CachedList = { keys: Set<string>; fetchedAt: number; failed: boolean };
 const cache = new Map<string, CachedList>();
 
 async function listKeys(url: string, fetcher: ListFetcher, now: number): Promise<Set<string>> {
   const cached = cache.get(url);
-  if (cached && now - cached.fetchedAt < LIST_TTL_MS) {
+  if (cached && now - cached.fetchedAt < (cached.failed ? FAILED_RETRY_MS : LIST_TTL_MS)) {
     return cached.keys;
   }
   const doc = await fetcher(url);
   if (!doc) {
-    // Keep any prior cache on a transient failure; otherwise an empty set.
-    return cached?.keys ?? new Set<string>();
+    // Keep any prior copy (otherwise an empty set) and don't retry until FAILED_RETRY_MS.
+    const keys = cached?.keys ?? new Set<string>();
+    cache.set(url, { keys, fetchedAt: now, failed: true });
+    return keys;
   }
   const keys = new Set<string>();
   for (const t of doc.tokens ?? []) {
@@ -84,7 +92,7 @@ async function listKeys(url: string, fetcher: ListFetcher, now: number): Promise
       keys.add(memberKey(t.chainId, t.address));
     }
   }
-  cache.set(url, { keys, fetchedAt: now });
+  cache.set(url, { keys, fetchedAt: now, failed: false });
   return keys;
 }
 

@@ -68,6 +68,28 @@ describe("tokenListMembership", () => {
     const fetcher = vi.fn(async () => ({ tokens: [{ chainId: 1, address: ADDR }] }));
     expect(await tokenListMembership(137, ADDR, { fetcher, now: NOW })).toEqual([]);
   });
+
+  it("does not re-fetch a failed list for every token, only after the retry window", async () => {
+    const fetcher = vi.fn(async (url: string) => (url.includes("uniswap") ? null : { tokens: [] }));
+    const uniswapCalls = () => fetcher.mock.calls.filter(([url]) => url.includes("uniswap")).length;
+
+    await tokenListMembership(1, ADDR, { fetcher, now: NOW });
+    await tokenListMembership(1, ADDR, { fetcher, now: NOW + 59 * 60 * 1000 });
+    expect(uniswapCalls()).toBe(1);
+
+    await tokenListMembership(1, ADDR, { fetcher, now: NOW + 61 * 60 * 1000 });
+    expect(uniswapCalls()).toBe(2);
+  });
+
+  it("keeps the last good copy of a list when a refresh fails", async () => {
+    let up = true;
+    const fetcher = vi.fn(async () => (up ? { tokens: [{ chainId: 1, address: ADDR }] } : null));
+    expect(await tokenListMembership(1, ADDR, { fetcher, now: NOW })).toContain("uniswap-default");
+
+    up = false;
+    const dayLater = NOW + 25 * 60 * 60 * 1000;
+    expect(await tokenListMembership(1, ADDR, { fetcher, now: dayLater })).toContain("uniswap-default");
+  });
 });
 
 describe("resolveTokenIdentity", () => {
