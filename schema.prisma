@@ -240,6 +240,11 @@ model Token {
   identityData          Json?
   identityConfirmed     Boolean                 @default(false)
   identityCheckedAt     Int                     @default(0)
+  // When the pipeline's identity pass next looks at this token (unix seconds; 0 =
+  // due). Unconfirmed tokens back off (7, 14, 28, 56, then 90 days) since a token
+  // nobody lists this week rarely is next week; confirmed ones are re-checked
+  // monthly. See nextIdentityCheckAt in lib/identityCheck.ts.
+  identityNextCheckAt   Int                     @default(0)
   // Tracks the proactive canonical-address resolution pass (T3): when this
   // token's (coingeckoCoinId, chain) canonical contract was last resolved into
   // the CanonicalAddress cache, so the impostor fence can run on every pair.

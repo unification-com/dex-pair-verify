@@ -5,7 +5,7 @@
 
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { resetDb, seedPair, seedToken, testPrisma } from "./helpers";
+import { resetDb, seedPair, seedThreshold, seedToken, testPrisma } from "./helpers";
 import { runIdentityCheckForToken, tokensToIdentityCheck } from "../../lib/identityCheck";
 import { TokenPairStatus } from "../../types/types";
 
@@ -115,5 +115,53 @@ describe("tokensToIdentityCheck", () => {
     // t0, t1, and `partner` (no cgId, in a pair, unchecked) qualify; `checked`
     // and the cgId/qom tokens do not.
     expect(ids.sort()).toEqual([t0.id, t1.id, partner.id].sort());
+  });
+});
+
+describe("tokensToIdentityCheck scope", () => {
+  // A token paired with a cgId-bearing partner, so only `token` is identity-eligible.
+  async function soloToken(pair: { reserveUsd: number; status: TokenPairStatus; dex?: string }, over = {}) {
+    const token = await seedToken(over);
+    const partner = await seedToken({ coingeckoCoinId: "weth" });
+    await seedPair(token.id, partner.id, pair);
+    return token;
+  }
+
+  it("skips tokens whose pools are all below their source's soft liquidity floor", async () => {
+    await seedThreshold({ chain: "eth", dex: "uniswap_v3", minLiquidityUsd: 25_000 });
+    const deep = await soloToken({ reserveUsd: 50_000, status: TokenPairStatus.AutoRejected });
+    await soloToken({ reserveUsd: 5_000, status: TokenPairStatus.AutoRejected });
+    const inReview = await soloToken({ reserveUsd: 5_000, status: TokenPairStatus.NeedsReview });
+    // A source with no Threshold row has a floor of 0, so its pools count.
+    const unfloored = await soloToken({ reserveUsd: 100, status: TokenPairStatus.AutoRejected, dex: "sushiswap" });
+
+    expect((await tokensToIdentityCheck(NOW, 50)).sort()).toEqual([deep.id, inReview.id, unfloored.id].sort());
+  });
+
+  it("with a due date, skips tokens whose back-off hasn't expired", async () => {
+    const due = await soloToken({ reserveUsd: 50_000, status: TokenPairStatus.NeedsReview }, { identityNextCheckAt: NOW - 1 });
+    const later = await soloToken({ reserveUsd: 50_000, status: TokenPairStatus.NeedsReview }, { identityNextCheckAt: NOW + 86_400 });
+
+    expect(await tokensToIdentityCheck(NOW, 50, { dueBy: NOW })).toEqual([due.id]);
+    // The on-demand runner (no due date) still checks both.
+    expect((await tokensToIdentityCheck(NOW, 50)).sort()).toEqual([due.id, later.id].sort());
+  });
+});
+
+describe("runIdentityCheckForToken back-off", () => {
+  const DAY = 86_400;
+
+  it("schedules a miss after the base window, then doubles; a confirmation in a month", async () => {
+    const token = await seedToken();
+    const next = async () => (await testPrisma.token.findUniqueOrThrow({ where: { id: token.id } })).identityNextCheckAt;
+
+    await runIdentityCheckForToken(token.id, { now: NOW, deps: oneCategoryDeps });
+    expect(await next()).toBe(NOW + 7 * DAY);
+
+    await runIdentityCheckForToken(token.id, { now: NOW + 7 * DAY, deps: oneCategoryDeps });
+    expect(await next()).toBe(NOW + 21 * DAY);
+
+    await runIdentityCheckForToken(token.id, { now: NOW + 21 * DAY, deps: confirmingDeps });
+    expect(await next()).toBe(NOW + 51 * DAY);
   });
 });

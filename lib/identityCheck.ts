@@ -13,34 +13,77 @@ import { Prisma } from "@prisma/client";
 import { evmChainId, EVM_SUPPORTED_CHAINS } from "./chains";
 import { ResolveDeps, resolveTokenIdentity } from "./identity/resolve";
 import prisma from "./prisma";
+import { RECHECK_TTL_S } from "./recheck";
 import { TokenSecurity } from "./scamCheck";
 import { isVerifiedStatus } from "./status";
 import { nowSeconds } from "./time";
 import { runVerdictForPair } from "./verdictRunner";
 import { TokenPairStatus } from "../types/types";
 
-// Tokens worth identity-checking: no CoinGecko coin id (cgId-bearing tokens are
-// already "identified"), on an EVM chain we map, belonging to ≥1 pair, and not
-// yet checked this job (identityCheckedAt < jobStartedAt). Mirrors scamCheck's
-// resumable batch contract.
-const identityCheckWhere = (jobStartedAt: number): Prisma.TokenWhereInput => ({
-  coingeckoCoinId: "",
-  chain: { in: EVM_SUPPORTED_CHAINS },
-  identityCheckedAt: { lt: jobStartedAt },
-  OR: [{ pairsToken0: { some: {} } }, { pairsToken1: { some: {} } }],
-});
+// Pairs whose verdict an identity result can change: those in review, and those
+// at or above their source's soft liquidity floor. Below it, an unidentified token's
+// pool is auto-rejected (AV-2) and an identified one still can't auto-verify
+// (liquidity is a core gate), so checking those tokens only spends API quota. A
+// source without a Threshold row has a floor of 0, so all its pools count. A pool
+// that later deepens comes back into scope on the next ingest.
+async function identityRelevantPairs(): Promise<Prisma.PairWhereInput> {
+  const floors = await prisma.threshold.findMany({ select: { chain: true, dex: true, minLiquidityUsd: true } });
+  return {
+    OR: [
+      { status: TokenPairStatus.NeedsReview },
+      ...floors.map((t) => ({ chain: t.chain, dex: t.dex, reserveUsd: { gte: t.minLiquidityUsd } })),
+      { NOT: { OR: floors.map((t) => ({ chain: t.chain, dex: t.dex })) } },
+    ],
+  };
+}
 
-export async function tokensToIdentityCheck(jobStartedAt: number, batch: number): Promise<string[]> {
+// Tokens worth identity-checking: no CoinGecko coin id (cgId-bearing tokens are
+// already "identified"), on an EVM chain we map, in ≥1 pair the result can affect,
+// and not yet checked this job (identityCheckedAt < jobStartedAt). With `dueBy`
+// (the pipeline) only tokens whose back-off has expired are due; without it (the
+// on-demand UI runner) every such token is. Mirrors scamCheck's resumable batch
+// contract.
+async function identityCheckWhere(jobStartedAt: number, dueBy?: number): Promise<Prisma.TokenWhereInput> {
+  const relevant = await identityRelevantPairs();
+  return {
+    coingeckoCoinId: "",
+    chain: { in: EVM_SUPPORTED_CHAINS },
+    identityCheckedAt: { lt: jobStartedAt },
+    ...(dueBy === undefined ? {} : { identityNextCheckAt: { lte: dueBy } }),
+    OR: [{ pairsToken0: { some: relevant } }, { pairsToken1: { some: relevant } }],
+  };
+}
+
+const CONFIRMED_RECHECK_S = 30 * 86_400;
+const MAX_BACKOFF_S = 90 * 86_400;
+
+// When the identity pass should next look at a token. Confirmed: in a month.
+// Unconfirmed: back off, doubling the previous gap from the base (the pipeline's
+// recheck window) up to 90 days, restarting at the base after a confirmed result.
+export function nextIdentityCheckAt(
+  prev: { checkedAt: number; nextCheckAt: number; confirmed: boolean },
+  confirmed: boolean,
+  now: number,
+  baseS = RECHECK_TTL_S,
+): number {
+  if (confirmed) {
+    return now + CONFIRMED_RECHECK_S;
+  }
+  const prevGap = !prev.confirmed && prev.checkedAt > 0 ? Math.max(0, prev.nextCheckAt - prev.checkedAt) : 0;
+  return now + Math.min(MAX_BACKOFF_S, Math.max(baseS, prevGap * 2));
+}
+
+export async function tokensToIdentityCheck(jobStartedAt: number, batch: number, opts: { dueBy?: number } = {}): Promise<string[]> {
   const rows = await prisma.token.findMany({
-    where: identityCheckWhere(jobStartedAt),
+    where: await identityCheckWhere(jobStartedAt, opts.dueBy),
     select: { id: true },
     take: batch,
   });
   return rows.map((r) => r.id);
 }
 
-export async function countTokensToIdentityCheck(jobStartedAt: number): Promise<number> {
-  return prisma.token.count({ where: identityCheckWhere(jobStartedAt) });
+export async function countTokensToIdentityCheck(jobStartedAt: number, opts: { dueBy?: number } = {}): Promise<number> {
+  return prisma.token.count({ where: await identityCheckWhere(jobStartedAt, opts.dueBy) });
 }
 
 export type IdentityCheckOutcome = {
@@ -95,6 +138,11 @@ export async function runIdentityCheckForToken(
       identityData: result.signals as unknown as Prisma.InputJsonValue,
       identityConfirmed: result.confirmed,
       identityCheckedAt: now,
+      identityNextCheckAt: nextIdentityCheckAt(
+        { checkedAt: token.identityCheckedAt, nextCheckAt: token.identityNextCheckAt, confirmed: token.identityConfirmed },
+        result.confirmed,
+        now,
+      ),
       // Backfill the CoinGecko id when the reverse lookup found one — the token is
       // now properly CG-listed (identity via cgId + the canonical check can run).
       ...(coingeckoCoinId ? { coingeckoCoinId } : {}),

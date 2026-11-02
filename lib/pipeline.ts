@@ -9,6 +9,7 @@ import { ingestableFirstParty } from "./firstParty";
 import { countTokensToIdentityCheck, runIdentityCheckForToken, tokensToIdentityCheck } from "./identityCheck";
 import { ingestPoolPage, ingestTokenPools } from "./ingest";
 import prisma from "./prisma";
+import { ENRICH_RECHECK_TTL_S, RECHECK_TTL_S } from "./recheck";
 import { countTokensToReviewEnrich, tokensToReviewEnrich } from "./reviewEnrich";
 import {
   countTokensToScamCheck,
@@ -33,17 +34,17 @@ export const targetDb = (): string => {
   return match ? match[1] : "(unknown)";
 };
 
-// Re-check TTL lever (env PIPELINE_RECHECK_DAYS, default 7). The slow-moving
-// batch passes (identity / canonical / factory / scam / review-enrich) skip
-// tokens already checked within this window, instead of re-checking the whole
-// fleet every run — so a FREQUENT pipeline doesn't keep re-spending CoinGecko /
-// GoPlus quota on data that rarely changes. Passing `now - TTL` as the selection
+// Re-check TTL lever (lib/recheck.ts). The slow-moving batch passes skip tokens
+// already checked within their window, instead of re-checking the whole fleet
+// every run, so a FREQUENT pipeline doesn't keep re-spending CoinGecko / GoPlus
+// quota on data that rarely changes: canonical / factory / scam use
+// PIPELINE_RECHECK_DAYS, review-enrich its own longer window, and identity a
+// per-token back-off (identityNextCheckAt). Passing `now - TTL` as the selection
 // cutoff while still stamping with `now` preserves the drain-to-empty contract
 // (a token stamped this run is > cutoff, so it drops out). Ingest (fresh market
 // data) + revalidate (pure DB) always run in full. The on-demand UI pass-runners
-// still force a full check (they pass `now`, not the cutoff). 0 = re-check all.
-const RECHECK_TTL_S = Math.max(0, Number(process.env.PIPELINE_RECHECK_DAYS ?? 7)) * 86_400;
-const recheckCutoff = (now: number): number => now - RECHECK_TTL_S;
+// still force a full check (they pass `now`, not the cutoff).
+const recheckCutoff = (now: number, ttlS = RECHECK_TTL_S): number => now - ttlS;
 
 // Drain a jobStartedAt-based batched pass: keep fetching ids and running
 // `processOne` until empty. The helpers stamp each id as it's processed, so the
@@ -145,12 +146,12 @@ export type IdentitySummary = { total: number; confirmed: number; promoted: numb
 export async function identityPass(opts: { log?: Logger } = {}): Promise<IdentitySummary> {
   const log = opts.log ?? noop;
   const now = nowSeconds();
-  const cutoff = recheckCutoff(now);
-  const total = await countTokensToIdentityCheck(cutoff);
+  // Each token's own back-off decides when it's due; `now` as jobStartedAt drains this run.
+  const total = await countTokensToIdentityCheck(now, { dueBy: now });
   let confirmed = 0;
   let promoted = 0;
   await drainBatches(
-    (b) => tokensToIdentityCheck(cutoff, b),
+    (b) => tokensToIdentityCheck(now, b, { dueBy: now }),
     async (id) => {
       const out = await runIdentityCheckForToken(id, { now });
       if (out.confirmed) confirmed += 1;
@@ -257,13 +258,13 @@ export async function rescoreScamPass(opts: { log?: Logger } = {}): Promise<Resc
 // Review-queue enrichment (B5). Pre-runs the on-demand enrichers (GoPlus +
 // Honeypot.is + source-verified + web presence) over the tokens in NeedsReview
 // pairs so the queue arrives pre-scanned. Heavier per token (≈4 external calls,
-// GoPlus-paced), so it's a DELIBERATE pass — not part of the default orchestrator
-// — kept bounded by being manually invoked + resumable via securityCheckedAt.
+// GoPlus-paced), so it runs last in the pipeline (`--no-enrich` skips it) with its
+// own longer re-scan window (ENRICH_RECHECK_TTL_S), resumable via securityCheckedAt.
 export type ReviewEnrichSummary = { total: number; scanned: number; flagged: number };
 export async function reviewEnrichPass(opts: { log?: Logger } = {}): Promise<ReviewEnrichSummary> {
   const log = opts.log ?? noop;
   const now = nowSeconds();
-  const cutoff = recheckCutoff(now);
+  const cutoff = recheckCutoff(now, ENRICH_RECHECK_TTL_S);
   const total = await countTokensToReviewEnrich(cutoff);
   let scanned = 0;
   let flagged = 0;
