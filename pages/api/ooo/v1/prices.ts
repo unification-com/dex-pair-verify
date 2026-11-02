@@ -5,6 +5,7 @@ import { fetchPoolPrices } from "../../../../lib/priceFetch";
 import prisma from "../../../../lib/prisma";
 import { rateLimit } from "../../../../lib/rateLimit";
 import { VERIFIED_STATUSES } from "../../../../lib/status";
+import { nowSeconds } from "../../../../lib/time";
 
 import type { NextApiRequest, NextApiResponse } from "next";
 
@@ -50,7 +51,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const cacheKey = `${chain}|${dex}|${safeAddresses.map((a) => a.toLowerCase()).sort().join(",")}`;
-  const now = Math.floor(Date.now() / 1000);
+  const now = nowSeconds();
 
   const cached = await prisma.priceCache.findUnique({ where: { cacheKey } });
   if (cached && now - cached.fetchedAt < CACHE_TTL_S) {

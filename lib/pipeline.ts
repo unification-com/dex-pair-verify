@@ -19,6 +19,7 @@ import {
 } from "./scamCheck";
 import { runSecurityScanForToken } from "./securitySignals";
 import { getSources, gtDexFor, gtNetworkFor, isIngestableSource } from "./sourceConfig";
+import { nowSeconds } from "./time";
 import { demoteScamFlaggedTokens } from "./tokenStatus";
 import { runVerdictForPair } from "./verdictRunner";
 
@@ -31,7 +32,6 @@ export const targetDb = (): string => {
   const match = url.match(/\/([^/?]+)(\?|$)/);
   return match ? match[1] : "(unknown)";
 };
-const nowS = (): number => Math.floor(Date.now() / 1000);
 
 // Re-check TTL lever (env PIPELINE_RECHECK_DAYS, default 7). The slow-moving
 // batch passes (identity / canonical / factory / scam / review-enrich) skip
@@ -144,7 +144,7 @@ const BATCH = 25;
 export type IdentitySummary = { total: number; confirmed: number; promoted: number };
 export async function identityPass(opts: { log?: Logger } = {}): Promise<IdentitySummary> {
   const log = opts.log ?? noop;
-  const now = nowS();
+  const now = nowSeconds();
   const cutoff = recheckCutoff(now);
   const total = await countTokensToIdentityCheck(cutoff);
   let confirmed = 0;
@@ -165,7 +165,7 @@ export async function identityPass(opts: { log?: Logger } = {}): Promise<Identit
 export type CanonicalSummary = { total: number; resolved: number; impostorPairs: number };
 export async function canonicalPass(opts: { log?: Logger } = {}): Promise<CanonicalSummary> {
   const log = opts.log ?? noop;
-  const now = nowS();
+  const now = nowSeconds();
   const cutoff = recheckCutoff(now);
   const total = await countTokensToCanonicalCheck(cutoff);
   let resolved = 0;
@@ -186,7 +186,7 @@ export async function canonicalPass(opts: { log?: Logger } = {}): Promise<Canoni
 export type FactorySummary = { total: number; read: number; mismatches: number };
 export async function factoryPass(opts: { log?: Logger } = {}): Promise<FactorySummary> {
   const log = opts.log ?? noop;
-  const now = nowS();
+  const now = nowSeconds();
   const cutoff = recheckCutoff(now);
   const total = await countPairsToFactoryCheck(cutoff);
   let read = 0;
@@ -207,7 +207,7 @@ export async function factoryPass(opts: { log?: Logger } = {}): Promise<FactoryS
 export type ScamSummary = { total: number; flagged: number; demoted: number };
 export async function scamPass(opts: { log?: Logger } = {}): Promise<ScamSummary> {
   const log = opts.log ?? noop;
-  const now = nowS();
+  const now = nowSeconds();
   const cutoff = recheckCutoff(now);
   const total = await countTokensToScamCheck(cutoff);
   let flagged = 0;
@@ -232,7 +232,7 @@ export type RescoreScamSummary = { total: number; changed: number; nowFlagged: n
 // scamPass, which re-fetches GoPlus.
 export async function rescoreScamPass(opts: { log?: Logger } = {}): Promise<RescoreScamSummary> {
   const log = opts.log ?? noop;
-  const now = nowS();
+  const now = nowSeconds();
   const ids = await tokensToRescore();
   let changed = 0;
   let nowFlagged = 0;
@@ -262,7 +262,7 @@ export async function rescoreScamPass(opts: { log?: Logger } = {}): Promise<Resc
 export type ReviewEnrichSummary = { total: number; scanned: number; flagged: number };
 export async function reviewEnrichPass(opts: { log?: Logger } = {}): Promise<ReviewEnrichSummary> {
   const log = opts.log ?? noop;
-  const now = nowS();
+  const now = nowSeconds();
   const cutoff = recheckCutoff(now);
   const total = await countTokensToReviewEnrich(cutoff);
   let scanned = 0;
@@ -283,7 +283,7 @@ export async function reviewEnrichPass(opts: { log?: Logger } = {}): Promise<Rev
 export type RevalidateSummary = { count: number; tallies: Record<string, number>; scamTokensDemoted: number };
 export async function revalidatePass(opts: { log?: Logger } = {}): Promise<RevalidateSummary> {
   const log = opts.log ?? noop;
-  const now = nowS();
+  const now = nowSeconds();
   const pairs = await prisma.pair.findMany({ select: { id: true } });
   const tallies: Record<string, number> = {};
   let done = 0;

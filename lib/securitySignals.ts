@@ -15,6 +15,7 @@ import { HoneypotResult } from "./honeypot";
 import prisma from "./prisma";
 import { runScamCheckForToken, ScamCheckOutcome } from "./scamCheck";
 import { fetchSourceVerified, SourceVerifiedResult } from "./sourceVerified";
+import { nowSeconds } from "./time";
 import { getTokenWebPresence } from "./tokenWebPresence";
 
 export type SecuritySignals = {
@@ -31,7 +32,7 @@ export type SecurityScanOutcome = {
 };
 
 export async function runSecurityScanForToken(tokenId: string, opts: { now?: number } = {}): Promise<SecurityScanOutcome> {
-  const now = opts.now ?? Math.floor(Date.now() / 1000);
+  const now = opts.now ?? nowSeconds();
   const token = await prisma.token.findUnique({ where: { id: tokenId } });
   if (!token) {
     return { ok: false, scam: null, signals: null, error: "token not found" };

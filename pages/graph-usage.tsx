@@ -8,6 +8,7 @@ import { ageStr, ethAmt, grt, num, shortHex } from "../lib/format";
 import { graphQueryUsage } from "../lib/graphQueryCounter";
 import { graphUsage, type GraphUsage } from "../lib/graphUsage";
 import { operatorGate } from "../lib/operatorGate";
+import { nowSeconds } from "../lib/time";
 
 const arbiscan = (addr: string): string => `https://arbiscan.io/address/${addr}`;
 
@@ -21,7 +22,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const [usage, q] = await Promise.all([graphUsage(), graphQueryUsage()]);
   let queryUsage: QueryUsageView | null = null;
   if (q && q.count > 0) {
-    const now = Math.floor(Date.now() / 1000);
+    const now = nowSeconds();
     const daysTracked = Math.max((now - q.firstAt) / 86400, 1 / 24); // ≥ 1h, so a fresh counter doesn't divide by ~0
     const ratePerDay = q.count / daysTracked;
     const d = new Date();

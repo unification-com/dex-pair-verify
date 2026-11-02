@@ -15,6 +15,7 @@ import { ResolveDeps, resolveTokenIdentity } from "./identity/resolve";
 import prisma from "./prisma";
 import { TokenSecurity } from "./scamCheck";
 import { isVerifiedStatus } from "./status";
+import { nowSeconds } from "./time";
 import { runVerdictForPair } from "./verdictRunner";
 import { TokenPairStatus } from "../types/types";
 
@@ -56,7 +57,7 @@ export async function runIdentityCheckForToken(
   tokenId: string,
   opts: { now?: number; deps?: ResolveDeps } = {},
 ): Promise<IdentityCheckOutcome> {
-  const now = opts.now ?? Math.floor(Date.now() / 1000);
+  const now = opts.now ?? nowSeconds();
 
   const token = await prisma.token.findUnique({ where: { id: tokenId } });
   if (!token) {

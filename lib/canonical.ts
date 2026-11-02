@@ -16,6 +16,7 @@ import { utils as web3Utils } from "web3";
 
 import { cgKeyedFetch } from "./coingecko";
 import prisma from "./prisma";
+import { nowSeconds } from "./time";
 
 // Minimal structural input — deliberately not PairProps/Prisma-shaped so the
 // function stays pure and testable from any caller (ingest, cron, UI rescan).
@@ -126,7 +127,7 @@ export async function fetchCanonicalContract(
     return null;
   }
 
-  const now = opts.now ?? Math.floor(Date.now() / 1000);
+  const now = opts.now ?? nowSeconds();
   const fetcher = opts.fetcher ?? defaultPlatformsFetcher;
 
   const cached = await prisma.canonicalAddress.findUnique({

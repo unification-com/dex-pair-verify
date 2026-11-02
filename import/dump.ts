@@ -19,6 +19,8 @@ import * as readline from "readline";
 
 import { PrismaClient } from "@prisma/client";
 
+import { nowSeconds } from "../lib/time";
+
 const prisma = new PrismaClient();
 
 const targetDb = (): string => {
@@ -98,7 +100,7 @@ const deleteTokens = async (chain: string): Promise<void> => {
 };
 
 const setCreatedAt = async (): Promise<void> => {
-  const now = Math.floor(Date.now() / 1000);
+  const now = nowSeconds();
   const tokens = await prisma.token.updateMany({ where: { createdAt: 0 }, data: { createdAt: now } });
   const pairs = await prisma.pair.updateMany({ where: { createdAt: 0 }, data: { createdAt: now } });
   console.log(`Backfilled createdAt on ${tokens.count} tokens, ${pairs.count} pairs`);

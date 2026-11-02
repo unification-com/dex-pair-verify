@@ -1,5 +1,6 @@
 import {requireAdminApi} from "../../../lib/apiAuth";
 import {countPairsToFactoryCheck, pairsToFactoryCheck, runFactoryCheckForPair} from "../../../lib/factoryCheck";
+import { nowSeconds } from "../../../lib/time";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 
@@ -17,7 +18,7 @@ export default async function handler(
 ) {
     if (!(await requireAdminApi(req, res, { methods: ["POST"] }))) return;
 
-    const now = Math.floor(Date.now() / 1000)
+    const now = nowSeconds()
     const jobStartedAt = Number(req.body?.jobStartedAt) || now
     const batch = Math.min(MAX_BATCH, Math.max(1, Number(req.body?.batch) || DEFAULT_BATCH))
 

@@ -11,6 +11,7 @@ import { Prisma } from "@prisma/client";
 
 import { CG_SUPPORTED_CHAINS, cgPlatformForChain, fetchCanonicalContract, PlatformsFetcher } from "./canonical";
 import prisma from "./prisma";
+import { nowSeconds } from "./time";
 import { VERDICT_REASON } from "./verdict";
 import { runVerdictForPair } from "./verdictRunner";
 
@@ -49,7 +50,7 @@ export async function runCanonicalCheckForToken(
   tokenId: string,
   opts: { now?: number; fetcher?: PlatformsFetcher } = {},
 ): Promise<CanonicalCheckOutcome> {
-  const now = opts.now ?? Math.floor(Date.now() / 1000);
+  const now = opts.now ?? nowSeconds();
 
   const token = await prisma.token.findUnique({ where: { id: tokenId } });
   if (!token) {

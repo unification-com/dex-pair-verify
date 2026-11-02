@@ -13,6 +13,7 @@ import { EVM_SUPPORTED_CHAINS } from "./chains";
 import { EthCaller, readPoolFactory } from "./onchain/factory";
 import prisma from "./prisma";
 import { getCanonicalFactoryAddress } from "./sourceConfig";
+import { nowSeconds } from "./time";
 import { runVerdictForPair } from "./verdictRunner";
 import { TokenPairStatus } from "../types/types";
 
@@ -54,7 +55,7 @@ export async function runFactoryCheckForPair(
   pairId: string,
   opts: { now?: number; ethCall?: EthCaller } = {},
 ): Promise<FactoryCheckOutcome> {
-  const now = opts.now ?? Math.floor(Date.now() / 1000);
+  const now = opts.now ?? nowSeconds();
 
   const pair = await prisma.pair.findUnique({ where: { id: pairId } });
   if (!pair) {

@@ -8,8 +8,8 @@
 import { defaultEthCall, ethGetBalance } from "./onchain/ethCall";
 import { oooRouterForChain } from "./oooRouters";
 import prisma from "./prisma";
+import { nowSeconds } from "./time";
 
-const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 const hexToBigStr = (hex: string | null): string | null => (hex && hex !== "0x" ? BigInt(hex).toString() : null);
 
 // --- DB aggregates -----------------------------------------------------------------------------------

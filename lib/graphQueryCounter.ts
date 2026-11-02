@@ -5,6 +5,7 @@
 // subgraphVerify). Fire-and-forget: it never throws and never blocks the query — a counter failure must not
 // break ingestion. Volume is low (hundreds/day), so a per-query upsert is cheap; no batching needed.
 import prisma from "./prisma";
+import { nowSeconds } from "./time";
 
 // The Graph bills per calendar month; key the counter the same way (UTC).
 export function currentPeriod(d: Date = new Date()): string {
@@ -13,7 +14,7 @@ export function currentPeriod(d: Date = new Date()): string {
 
 async function recordOne(): Promise<void> {
   const period = currentPeriod();
-  const now = Math.floor(Date.now() / 1000);
+  const now = nowSeconds();
   // Atomic upsert-increment — concurrent fire-and-forget bumps on a not-yet-existing period row would race
   // prisma.upsert's create path; Postgres ON CONFLICT resolves it in one statement.
   await prisma.$executeRaw`

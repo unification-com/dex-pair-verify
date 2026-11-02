@@ -17,6 +17,7 @@ import { Prisma } from "@prisma/client";
 import { evmChainId } from "./chains";
 import { BLOCKSCOUT_BASE, DEXSCREENER_CHAIN } from "./externalLinks";
 import prisma from "./prisma";
+import { nowSeconds } from "./time";
 
 export type TokenWebPresence = {
   websites: string[];
@@ -227,7 +228,7 @@ export async function fetchTokenWebPresence(chain: string, address: string): Pro
 // bypasses the cache (the operator "Run security scan" button refreshes it).
 export async function getTokenWebPresence(
   token: { id: string; chain: string; contractAddress: string; webPresence: unknown; webPresenceCheckedAt: number },
-  now = Math.floor(Date.now() / 1000),
+  now = nowSeconds(),
   opts: { force?: boolean } = {},
 ): Promise<TokenWebPresence> {
   if (!opts.force && token.webPresence && token.webPresenceCheckedAt > 0 && now - token.webPresenceCheckedAt < STORE_TTL_S) {

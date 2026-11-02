@@ -13,9 +13,9 @@ import { pairsModifiedAt, trustScore } from "./export";
 import { buildMerkle, LeafInput, MerkleProof, pairLeafInput, PairCommitment, tokenLeafInput } from "./merkle";
 import prisma from "./prisma";
 import { VERIFIED_STATUSES } from "./status";
+import { nowSeconds } from "./time";
 
 const VERIFIED = [...VERIFIED_STATUSES];
-const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 
 // One published leaf: its stable key, the durable preimage (so a verifier can recompute the hash), the
 // leaf hash, and the proof path to the root.

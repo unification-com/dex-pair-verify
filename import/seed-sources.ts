@@ -14,8 +14,7 @@ import "../lib/env";
 import { BASELINE_SOURCES } from "../lib/baselineSources";
 import prisma from "../lib/prisma";
 import { thresholdSeedData } from "../lib/sourceConfig";
-
-const nowSeconds = (): number => Math.floor(Date.now() / 1000);
+import { nowSeconds } from "../lib/time";
 
 const main = async (): Promise<void> => {
   const now = nowSeconds();

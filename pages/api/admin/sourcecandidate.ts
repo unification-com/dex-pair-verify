@@ -4,11 +4,10 @@ import { requireAdminApi } from "../../../lib/apiAuth";
 import prisma from "../../../lib/prisma";
 import { getSources } from "../../../lib/sourceConfig";
 import { assertSafeSubgraphUrl, detectProvider, UnsafeSubgraphUrlError } from "../../../lib/subgraphVerify";
+import { nowSeconds } from "../../../lib/time";
 import { CandidateStatus } from "../../../types/types";
 
 import type { NextApiRequest, NextApiResponse } from "next";
-
-const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 
 // Promote a discovered candidate into SupportedSource, or reject it (Phase 4,
 // 4.A / D4). Promote writes the DB-backed source of truth (operator-confirmed

@@ -1,5 +1,6 @@
 import {requireAdminApi} from "../../../lib/apiAuth";
 import prisma from "../../../lib/prisma";
+import { nowSeconds } from "../../../lib/time";
 import {runVerdictForPair} from "../../../lib/verdictRunner";
 import {TokenPairStatus} from "../../../types/types";
 
@@ -20,7 +21,7 @@ export default async function handler(
 ) {
     if (!(await requireAdminApi(req, res, { methods: ["POST"] }))) return;
 
-    const now = Math.floor(Date.now() / 1000)
+    const now = nowSeconds()
     // First call: client omits jobStartedAt; we stamp the job and hand it back.
     const jobStartedAt = Number(req.body?.jobStartedAt) || now
     const batch = Math.min(MAX_BATCH, Math.max(1, Number(req.body?.batch) || DEFAULT_BATCH))

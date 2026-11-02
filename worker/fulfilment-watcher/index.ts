@@ -19,9 +19,9 @@ import { decodeDataRequested, decodeFulfilment, EvmLog, receiptCommit, DATA_REQU
 import { enqueueFulfilments, getCursor, setCursor } from "../../lib/beaconQueue";
 import { upsertFulfilment, upsertRequest } from "../../lib/fulfilments";
 import { builtInOooChainIds, oooRouterForChain } from "../../lib/oooRouters";
+import { nowSeconds } from "../../lib/time";
 
 const log = (msg: string): void => console.log(`[fulfilment-watcher ${new Date().toISOString()}] ${msg}`);
-const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 
 // Surface the underlying cause — Node's fetch reports real network failures (ENOTFOUND, ECONNREFUSED, TLS,
 // timeouts) as a bare "fetch failed", with the actionable detail hidden on err.cause.

@@ -12,6 +12,7 @@ import { buildAliasExport, ExportAliasGroup, ExportAliasPair } from "./aliasExpo
 import { chainInfo } from "./chains";
 import prisma from "./prisma";
 import { VERIFIED_STATUSES } from "./status";
+import { nowSeconds } from "./time";
 import { TokenPairStatus } from "../types/types";
 
 // The pair-export wire format. Bumped to 3 (T5 / XR1): adds a per-pair trust
@@ -67,8 +68,6 @@ export type ExportV2 = {
 };
 
 const VERIFIED = [...VERIFIED_STATUSES];
-
-const nowSeconds = (): number => Math.floor(Date.now() / 1000);
 
 const round4 = (n: number): number => Math.round(n * 1e4) / 1e4;
 

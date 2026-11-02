@@ -24,8 +24,7 @@ import {
   newSourcesForNetwork,
   supportedGtKeys,
 } from "../lib/sourceDiscovery";
-
-const nowSeconds = (): number => Math.floor(Date.now() / 1000);
+import { nowSeconds } from "../lib/time";
 
 const main = async (): Promise<void> => {
   const args = process.argv.slice(2);

@@ -18,10 +18,9 @@ import prisma from "./prisma";
 import { getSource, getSources, gtDexFor, gtNetworkFor, thresholdSeedData } from "./sourceConfig";
 import { sqsAdapter } from "./sqsAdapter";
 import { createdStamps } from "./status";
+import { nowSeconds } from "./time";
 import { poolAddressFromGt } from "./univ4";
 import { runVerdictForPair } from "./verdictRunner";
-
-const nowS = (): number => Math.floor(Date.now() / 1000);
 
 // The ingest adapter per Cosmos chain — each uses its own DEX's REST API (Osmosis→SQS,
 // Neutron→Astroport). Adding a Cosmos chain is one entry here + its chain-registry mapping.
@@ -220,7 +219,7 @@ export async function ingestPoolPage(
     pricesFetcher?: unknown;
   } = {},
 ): Promise<IngestPageResult> {
-  const now = opts.now ?? nowS();
+  const now = opts.now ?? nowSeconds();
 
   await ensureThreshold(chain, dex);
 
@@ -277,7 +276,7 @@ export async function ingestTokenPools(
   address: string,
   opts: { now?: number; fetcher?: TokenPoolsFetcher } = {},
 ): Promise<TokenPoolsIngestResult> {
-  const now = opts.now ?? nowS();
+  const now = opts.now ?? nowSeconds();
   const fetcher = opts.fetcher ?? defaultTokenPoolsFetcher;
 
   // Map each supported source's GT dex slug → our internal dex id (and the GT
@@ -342,7 +341,7 @@ export async function ingestPairByAddress(
   address: string,
   opts: { now?: number; fetcher?: PoolByAddressFetcher } = {},
 ): Promise<AddPairByAddressResult> {
-  const now = opts.now ?? nowS();
+  const now = opts.now ?? nowSeconds();
   const fetcher = opts.fetcher ?? defaultPoolByAddressFetcher;
 
   const source = await getSource(chain, dex);

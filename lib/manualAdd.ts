@@ -20,6 +20,7 @@ import { ingestPairByAddress, ingestTokenPools } from "./ingest";
 import prisma from "./prisma";
 import { runScamCheckForToken } from "./scamCheck";
 import { getSources } from "./sourceConfig";
+import { nowSeconds } from "./time";
 import { runVerdictForPair } from "./verdictRunner";
 
 export type TokenSummary = {
@@ -96,7 +97,7 @@ export async function pairSummary(pairId: string): Promise<PairSummary | null> {
 // re-runs the verdict after it writes, so the last call is belt-and-braces. These are
 // the same passes the batch pipeline runs — just scoped to one pair.
 export async function enrichPair(pairId: string, opts: { now?: number } = {}): Promise<PairSummary | null> {
-  const now = opts.now ?? Math.floor(Date.now() / 1000);
+  const now = opts.now ?? nowSeconds();
   const pair = await prisma.pair.findUnique({ where: { id: pairId }, select: { token0Id: true, token1Id: true } });
   if (!pair) {
     return null;
