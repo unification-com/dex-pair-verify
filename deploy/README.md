@@ -13,7 +13,8 @@ lines you set in the unit file; the scripts auto-detect the repo location.
 - `dex-pair-verify.env` — shared config (Node version, host, port, log root), sourced by the scripts.
 - `nvm-init.sh` — shared nvm bootstrap (`nvm use "$NODE_VERSION"`); sourced by every script below.
 - `run.sh` — starts the web server (`next start`); the systemd `ExecStart` target.
-- `pipeline.sh` — runs `yarn pipeline`, logging to `$LOG_ROOT/YYYY-MM/`; the cron target.
+- `pipeline.sh`: runs `yarn pipeline`, logging to `$LOG_ROOT/YYYY-MM/`; the pipeline's cron target.
+- `yarn-job.sh`: runs any yarn script the same way (log + lock); the health check's cron target.
 - `beacon-writer.sh` / `fulfilment-watcher.sh` — start the two BEACON anchoring workers; systemd `ExecStart` targets.
 - `dex-pair-verify.service` — systemd unit template for the web server.
 - `dex-pair-verify-beacon-writer.service` / `dex-pair-verify-fulfilment-watcher.service` — units for the BEACON workers.
@@ -71,14 +72,21 @@ stop` sends `SIGINT` straight to Next.js for a clean shutdown.
 
 ## 5. Pipeline (cron)
 
-As the app user (`crontab -e`), add the line from `crontab.example`, pointing at your
+As the app user (`crontab -e`), add the lines from `crontab.example`, pointing at your
 checkout:
 
     0 3 * * 1,4 /bin/bash /path/to/dex-pair-verify/deploy/pipeline.sh
+    15 */6 * * * /bin/bash /path/to/dex-pair-verify/deploy/yarn-job.sh source-health
 
 Runs Mondays and Thursdays at 03:00 (a run takes about 3 hours; the per-token re-check windows
 keep the API quotas in hand at this cadence). Logs: `$LOG_ROOT/YYYY-MM/dex-pair-verify-YYYY-MM-DD.log`.
 A `flock` guard skips a run if the previous one is still going.
+
+The health check (`yarn source-health`, about 60 Graph queries a run) probes every subgraph source.
+After 2 failed checks in a row a source is paused: left out of the go-ooo manifest and the priceable
+flag until a check passes again. The `/sources` page shows each source's state. It refuses to run
+without `THEGRAPH_API_KEY`, and records nothing when more than half the sources fail at once (that
+points at our side, not the subgraphs). Logs: `$LOG_ROOT/YYYY-MM/source-health-YYYY-MM-DD.log`.
 
 ## 6. BEACON anchoring workers (optional)
 

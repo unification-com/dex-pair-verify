@@ -31,6 +31,7 @@
     "validate-seeds": "tsx import/validate-seeds.ts",
     "seed-sources": "tsx import/seed-sources.ts",
     "pipeline": "tsx import/pipeline.ts",
+    "source-health": "tsx import/source-health.ts",
     "postinstall": "simple-git-hooks",
     "verify-gt": "tsx import/verify_gt.ts"
   },

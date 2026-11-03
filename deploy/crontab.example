@@ -1,6 +1,8 @@
-# dex-pair-verify data pipeline: twice a week, Monday and Thursday at 03:00.
-# Add this line to the app user's crontab with `crontab -e` (do NOT pipe this
+# dex-pair-verify cron jobs: the data pipeline twice a week (Monday and Thursday at
+# 03:00) and the subgraph source health check every 6 hours (at :15).
+# Add these lines to the app user's crontab with `crontab -e` (do NOT pipe this
 # whole file into `crontab`, which would replace the user's existing entries).
 # Edit the path to point at your checkout. Logs: $LOG_ROOT/YYYY-MM/.
 # Run via bash so a lost +x bit doesn't stop it firing.
 0 3 * * 1,4 /bin/bash /home/youruser/dex-pair-verify/deploy/pipeline.sh
+15 */6 * * * /bin/bash /home/youruser/dex-pair-verify/deploy/yarn-job.sh source-health

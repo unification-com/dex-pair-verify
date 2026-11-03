@@ -18,6 +18,7 @@ import ChainName from "../components/ChainName";
 import StatCard from "../components/dashboard/StatCard";
 import DexName from "../components/DexName";
 import Layout from "../components/shell/Layout";
+import SourceHealthBadge from "../components/SourceHealthBadge";
 import PageHeader from "../components/ui/PageHeader";
 import { usd } from "../lib/format";
 import { isOperatorCtx } from "../lib/operatorGate";
@@ -46,6 +47,9 @@ type Supported = {
   factoryAddress: string;
   lastVerifiedAt: number;
   enabledAt: number;
+  healthCheckedAt: number;
+  healthFailures: number;
+  healthError: string;
 };
 
 // A supported source plus its verified-pair count, for the public listing.
@@ -57,6 +61,8 @@ type PublicSource = {
   subgraphSchemaFamily: string;
   factoryAddress: string;
   lastVerifiedAt: number;
+  healthCheckedAt: number;
+  healthFailures: number;
   pairCount: number;
 };
 
@@ -79,6 +85,8 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
           subgraphSchemaFamily: true,
           factoryAddress: true,
           lastVerifiedAt: true,
+          healthCheckedAt: true,
+          healthFailures: true,
         },
       }),
       prisma.pair.groupBy({ by: ["chain", "dex"], where: { status: { in: [...VERIFIED_STATUSES] } }, _count: { _all: true } }),
@@ -117,6 +125,9 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
         factoryAddress: true,
         lastVerifiedAt: true,
         enabledAt: true,
+        healthCheckedAt: true,
+        healthFailures: true,
+        healthError: true,
       },
     }),
   ]);
@@ -187,6 +198,7 @@ const PublicSources: React.FC<PublicProps> = (props) => (
             <span>Schema</span>
             <span>Provider</span>
             <span>Factory</span>
+            <span>Health</span>
             <span>Verified pairs</span>
           </div>
           {props.sources.map((s) => (
@@ -196,6 +208,7 @@ const PublicSources: React.FC<PublicProps> = (props) => (
               <span><span className="badge badge-neutral badge-sm">{s.subgraphSchemaFamily}</span></span>
               <span className="muted">{s.subgraphProvider}</span>
               <span className="mono truncate" title={s.factoryAddress}>{s.factoryAddress}</span>
+              <span><SourceHealthBadge healthCheckedAt={s.healthCheckedAt} healthFailures={s.healthFailures} /></span>
               <span>
                 <Link href={`/pairs?chain=${encodeURIComponent(s.chain)}&dex=${encodeURIComponent(s.dex)}`}><a className="mono">{s.pairCount}</a></Link>
               </span>
@@ -213,7 +226,7 @@ const PublicSources: React.FC<PublicProps> = (props) => (
     <style jsx>{`
       .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--sp-4); }
       .src-tbl { display: flex; flex-direction: column; font-size: var(--fs-sm); }
-      .src-head, .src-row { display: grid; grid-template-columns: 1.2fr 1.4fr 0.8fr 1.4fr 2fr 1fr; gap: var(--sp-3); align-items: center; padding: var(--sp-2) 0; }
+      .src-head, .src-row { display: grid; grid-template-columns: 1.2fr 1.4fr 0.8fr 1.4fr 2fr 0.9fr 1fr; gap: var(--sp-3); align-items: center; padding: var(--sp-2) 0; }
       .src-head { color: var(--text-3); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); }
       .src-row { border-bottom: 1px solid var(--border); }
       .src-row:last-child { border-bottom: 0; }
@@ -400,6 +413,7 @@ const OperatorSources: React.FC<OperatorProps> = (initial) => {
               <span>Provider</span>
               <span>Schema</span>
               <span>Factory</span>
+              <span>Health</span>
               <span>Verified</span>
             </div>
             {supported.map((s) => (
@@ -409,6 +423,7 @@ const OperatorSources: React.FC<OperatorProps> = (initial) => {
                 <span className="muted">{s.subgraphProvider}</span>
                 <span><span className="badge badge-neutral badge-sm">{s.subgraphSchemaFamily}</span></span>
                 <span className="mono truncate" title={s.factoryAddress}>{s.factoryAddress}</span>
+                <span><SourceHealthBadge healthCheckedAt={s.healthCheckedAt} healthFailures={s.healthFailures} error={s.healthError} /></span>
                 <span className="muted mono">{fmtDate(s.lastVerifiedAt)}</span>
               </div>
             ))}
@@ -552,7 +567,7 @@ const OperatorSources: React.FC<OperatorProps> = (initial) => {
 
       <style jsx>{`
         .src-tbl { display: flex; flex-direction: column; font-size: var(--fs-sm); }
-        .src-head, .src-row { display: grid; grid-template-columns: 1fr 1.4fr 1.4fr 0.8fr 2fr 0.9fr; gap: var(--sp-3); align-items: center; padding: var(--sp-2) 0; }
+        .src-head, .src-row { display: grid; grid-template-columns: 1fr 1.4fr 1.4fr 0.8fr 2fr 0.9fr 0.9fr; gap: var(--sp-3); align-items: center; padding: var(--sp-2) 0; }
         .src-head { color: var(--text-3); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--border); }
         .src-row { border-bottom: 1px solid var(--border); }
         .src-row:last-child { border-bottom: 0; }

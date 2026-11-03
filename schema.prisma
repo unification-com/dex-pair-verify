@@ -432,6 +432,12 @@ model SupportedSource {
   // flagged in the UI + manifest, never auto-demoted.
   lastVerifiedAt       Int     @default(0)
   enabledAt            Int     @default(0)
+  // Subgraph health (lib/sourceHealth.ts): when it was last checked, how many checks in a row have
+  // failed (UNHEALTHY_AFTER of them pause the source: it leaves the go-ooo manifest and the priceable
+  // flag until a check passes), and the last failure's message. A passing check stamps lastVerifiedAt.
+  healthCheckedAt      Int     @default(0)
+  healthFailures       Int     @default(0)
+  healthError          String  @default("")
 
   @@unique([chain, dex])
 }

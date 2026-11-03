@@ -11,6 +11,7 @@ import { Prisma } from "@prisma/client";
 import { buildAliasExport, ExportAliasGroup, ExportAliasPair } from "./aliasExport";
 import { chainInfo } from "./chains";
 import prisma from "./prisma";
+import { HEALTHY_SOURCE_WHERE } from "./sourceHealth";
 import { VERIFIED_STATUSES } from "./status";
 import { nowSeconds } from "./time";
 import { TokenPairStatus } from "../types/types";
@@ -195,12 +196,13 @@ const parseAdditionalEndpoints = (raw: Prisma.JsonValue | null): ManifestEndpoin
 // The v3 discovery manifest (4.C): the SupportedSource registry — every source's
 // subgraph endpoint(s), schema family, factory, rpc + verified pair count — so
 // go-ooo consumes it as its source of truth instead of a hard-coded list. Emits
-// ALL supported sources (pairCount 0 for a source not yet ingested); go-ooo skips
-// schema families it can't price (logs a warning), so a forward-compat family
-// doesn't break an old binary.
+// every supported source that isn't paused for a broken subgraph (lib/sourceHealth.ts;
+// go-ooo drops a source missing from the manifest and restores it when it returns),
+// with pairCount 0 for one not yet ingested; go-ooo skips schema families it can't
+// price (logs a warning), so a forward-compat family doesn't break an old binary.
 export async function buildExportManifestV3(opts: { now?: number } = {}): Promise<ExportManifestV3> {
   const [sources, verifiedGroups, modifiedGroups, aliases] = await Promise.all([
-    prisma.supportedSource.findMany({ orderBy: [{ chain: "asc" }, { dex: "asc" }] }),
+    prisma.supportedSource.findMany({ where: HEALTHY_SOURCE_WHERE, orderBy: [{ chain: "asc" }, { dex: "asc" }] }),
     prisma.pair.groupBy({ by: ["chain", "dex"], where: { status: { in: VERIFIED } }, _count: { _all: true } }),
     // Modified-time over ALL pairs (see pairsModifiedAt) so a demotion counts.
     prisma.pair.groupBy({ by: ["chain", "dex"], _max: { lastChecked: true, verdictAt: true } }),
@@ -301,11 +303,11 @@ export type PriceableSourceMeta = { minLiquidityUsd: number };
 
 // The recognised go-ooo price sources + their per-pool liquidity floor, keyed by "<chain>/<dex>".
 // A source is included only if go-ooo can price it (a known subgraph family OR a known Cosmos
-// transport); its floor is the per-(chain,dex) curation threshold when set, else the go-ooo default.
+// transport) and it isn't paused for a broken subgraph (the manifest leaves those out too); its floor is the per-(chain,dex) curation threshold when set, else the go-ooo default.
 // One definition of go-ooo priceability, reused by the public catalogue builder and the /pairs UI.
 export async function priceableSourceMeta(): Promise<Map<string, PriceableSourceMeta>> {
   const [sources, thresholds] = await Promise.all([
-    prisma.supportedSource.findMany({ select: { chain: true, dex: true, subgraphSchemaFamily: true, sourceType: true } }),
+    prisma.supportedSource.findMany({ where: HEALTHY_SOURCE_WHERE, select: { chain: true, dex: true, subgraphSchemaFamily: true, sourceType: true } }),
     prisma.threshold.findMany({ select: { chain: true, dex: true, minLiquidityUsd: true } }),
   ]);
   const floorByKey = new Map<string, number>();
