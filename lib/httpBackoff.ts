@@ -4,7 +4,7 @@
 // 429s again) and retry once. Failures are logged so a rate limit shows in the
 // `yarn dev` console instead of silently yielding nothing.
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+import { sleep } from "./time";
 
 export const RATE_LIMIT_BACKOFF_MS = 65_000;
 

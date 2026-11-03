@@ -4,6 +4,7 @@
 // for testing; the fetch loops live in import/verify_gt.ts.
 
 import { gtDexFor, gtNetworkFor, SourceEntry } from "./sourceConfig";
+import { sleep } from "./time";
 
 const GT_BASE = "https://api.geckoterminal.com/api/v2";
 
@@ -42,7 +43,6 @@ export function verifySource(
   return { chain: source.chain, dex: source.dex, gtNetwork, gtDex, networkOk, dexOk, candidates };
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // Fetch a network's full GeckoTerminal dex list. Returns found=false on a 404
 // (network not on GT). Backs off once on a 429 so the free-tier rate limit

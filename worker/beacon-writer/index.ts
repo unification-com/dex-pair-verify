@@ -20,10 +20,9 @@ import { AnchorSnapshot, getAnchorSnapshot, getTokenAnchorSnapshot } from "../..
 import { getChainState, markMetadataLive, markReanchorSeeded } from "../../lib/beaconChainState";
 import { enqueueLeaves, markAnchored, nextPending, queueStats, seedReanchorBacklog } from "../../lib/beaconQueue";
 import prisma from "../../lib/prisma";
-import { nowSeconds } from "../../lib/time";
+import { nowSeconds, sleep } from "../../lib/time";
 
 const log = (msg: string): void => console.log(`[beacon-writer ${new Date().toISOString()}] ${msg}`);
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Last anchored root per tree, so a re-stamp between changes is flagged changed=0.
 type BeatState = { pairs: string; tokens: string };
