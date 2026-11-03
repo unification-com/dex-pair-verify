@@ -95,7 +95,6 @@ export const SOURCE_SEEDS: SourceSeed[] = [
   { chain: "bsc", dex: "pancakeswap_v2", gtNetwork: "bsc", gtDex: "pancakeswap_v2", schemaFamily: "univ2", subgraphId: "Aj9TDh9SPcn7cz4DXW26ga22VnBzHhPVuKGmE4YBzDFj", factoryAddress: "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73", priceable: true, note: "BSC univ2: tracks reserveBNB (reserveUSD unpopulated); priced via token0Price" },
   { chain: "polygon_pos", dex: "uniswap_v3", gtNetwork: "polygon_pos", gtDex: "uniswap_v3_polygon_pos", schemaFamily: "univ3", subgraphId: "3hCPRGf4z88VC5rsBKU5AA9FBBq5nF3jbKJG7VZCbhjm", factoryAddress: "0x1F98431c8aD98523631AE4a59f267346ea31F984", priceable: true },
   { chain: "bsc", dex: "uniswap_v3", gtNetwork: "bsc", gtDex: "uniswap-bsc", schemaFamily: "univ3", subgraphId: "F85MNzUGYqgSHSHRGgeVMNsdnW1KtZSVgFULumXRZTw2", factoryAddress: "0xdB1d10011AD0Ff90774D0C6Bb92e5C5c8b4461F7", priceable: true },
-  { chain: "bsc", dex: "thena", gtNetwork: "bsc", gtDex: "thena-fusion", schemaFamily: "univ3", subgraphId: "34V3E1o5Kf9CMcnSdmxF7qdQCzEsw8Psa1FnFhHgGrz2", factoryAddress: "0x306F06C147f064A010530292A1EB6737c3e378e4", priceable: false, note: "Thena Fusion (Algebra): Pool lacks totalValueLockedUSD — needs Algebra-aware fields (camelot_v3's Algebra subgraph does expose it; thena's does not)" },
 
   // Tier B — new chains
   { chain: "arbitrum", dex: "uniswap_v3", gtNetwork: "arbitrum", gtDex: "uniswap_v3_arbitrum", schemaFamily: "univ3", subgraphId: "3V7ZY6muhxaQL5qvntX1CFXJ32W7BxXZTGTwmpH5J4t3", factoryAddress: "0x1F98431c8aD98523631AE4a59f267346ea31F984", priceable: true },
@@ -112,4 +111,12 @@ export const SOURCE_SEEDS: SourceSeed[] = [
   // top pools indexed, factory confirmed on-chain via the top pool's factory()).
   { chain: "optimism", dex: "velodrome_slipstream", gtNetwork: "optimism", gtDex: "velodrome-finance-slipstream", schemaFamily: "univ3", subgraphId: "BsBDqDf6rJJyxKACZrCHAa8Gaf384cmL2hxfLaDuB8XM", factoryAddress: "0xCc0bDDB707055e04e497aB22a59c2aF4391cd12F", priceable: true },
   { chain: "optimism", dex: "velodrome", gtNetwork: "optimism", gtDex: "velodrome-finance-v2", schemaFamily: "messari", subgraphId: "A4Y1A82YhSLTn998BVVELC8eWzhi992k4ZitByvssxqA", factoryAddress: "0xF1046053aa5682b4F9a81b5481394DA16BE5FF5a", priceable: true, note: "Messari standardised dex-amm schema (V2 — the A4Y1A82Y subgraph is Velodrome Finance V2, so the GT slug must be velodrome-finance-v2 to keep pool addresses aligned with the subgraph; the bare 'velodrome' GT slug is V1 and does not match)" },
+
+  // Batch 3 (2026-11-03): sized by 24h volume, subgraphs found via the Graph registry, each checked against
+  // GT's own pool prices (worst: Uniswap v2 Base 2.5% on a tiny meme pool, else <= 0.6%), go-ooo's exact
+  // metadata + 10-minutes-back price queries, and the top pool's factory() on-chain. QuickSwap "v4" and
+  // Thena v3 are Algebra Integral, priced by the univ3 family (pools / token0Price / totalValueLockedUSD).
+  { chain: "base", dex: "uniswap_v2", gtNetwork: "base", gtDex: "uniswap-v2-base", schemaFamily: "univ2", subgraphId: "7e2mrDKuzmoSpS9WPHZycL3Ab52RNjdMrPLRduXM9TGi", factoryAddress: "0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6", priceable: true },
+  { chain: "base", dex: "quickswap_v4", gtNetwork: "base", gtDex: "quickswap-v4-base", schemaFamily: "univ3", subgraphId: "BvoKww83s33xPS3NjKqNkfjAzPpALk7KWvaYMbH247db", factoryAddress: "0xC5396866754799B9720125B104AE01d935Ab9C7b", priceable: true },
+  { chain: "bsc", dex: "thena_v3", gtNetwork: "bsc", gtDex: "thena-v3", schemaFamily: "univ3", subgraphId: "BoHp9H2rGzVFPiqc56PJ1Gw7EPDaiHMcupsUuksMGp2K", factoryAddress: "0x30055F87716d3DFD0E5198C27024481099fB4A98", priceable: true },
 ];
