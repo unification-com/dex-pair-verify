@@ -201,14 +201,18 @@ export async function probeSubgraph(url: string, opts: { fetcher?: GraphqlFetche
 // subgraphs). No orderBy — a global sort is slow on big subgraphs and unnecessary
 // for a liveness check. The Messari schema has no token0Price - it prices via per-token
 // lastPriceUSD on liquidityPools.inputTokens - so the price is pulled by an extractor
-// rather than a flat field name. `custom` still has no generic query (awaits a dedicated
+// rather than a flat field name. The sample is in id order, so it can be all junk pools
+// with unpriced tokens: 5 rows failed PancakeSwap v3 Ethereum's healthy Messari subgraph (and
+// passed BSC's by a single row), so Messari takes 20 and accepts any priced token in a pool.
+// The univ families stay at 5: 20 took 5-12s on BSC Uniswap v3 against the 8s fetch timeout.
+// The health check (lib/sourceHealth.ts) gates on this probe, so a false failure pauses a source. `custom` still has no generic query (awaits a dedicated
 // template), so its data probe is not applicable.
 type DataQuerySpec = {
   query: string;
   collection: string;
   reserveField: string;
   // extractPrice pulls the "is this priced" liveness signal from one row. univ2/univ3/univ4 read
-  // token0Price directly; messari reads the first inputToken's lastPriceUSD.
+  // token0Price directly; messari reads the highest lastPriceUSD among the pool's inputTokens.
   extractPrice: (row: Record<string, unknown>) => number;
 };
 const numField = (v: unknown): number => parseFloat(String(v ?? ""));
@@ -234,10 +238,11 @@ const DATA_QUERY: Partial<Record<SchemaFamily, DataQuerySpec>> = {
     extractPrice: (r) => numField(r.token0Price),
   },
   messari: {
-    query: `{ liquidityPools(first: 5) { id inputTokens { lastPriceUSD } totalValueLockedUSD } }`,
+    query: `{ liquidityPools(first: 20) { id inputTokens { lastPriceUSD } totalValueLockedUSD } }`,
     collection: "liquidityPools",
     reserveField: "totalValueLockedUSD",
-    extractPrice: (r) => numField((r.inputTokens as { lastPriceUSD?: unknown }[] | undefined)?.[0]?.lastPriceUSD),
+    extractPrice: (r) =>
+      Math.max(0, ...((r.inputTokens as { lastPriceUSD?: unknown }[] | undefined) ?? []).map((t) => numField(t.lastPriceUSD) || 0)),
   },
 };
 

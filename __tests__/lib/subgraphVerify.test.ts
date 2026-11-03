@@ -131,6 +131,15 @@ describe("dataProbeSubgraph", () => {
     expect(r.applicable).toBe(true);
     expect(r.ok).toBe(true);
   });
+  it("ok when any token of a messari pool is priced, not just the first", async () => {
+    const r = await dataProbeSubgraph("http://x", "messari", { fetcher: dataResp("liquidityPools", [{ id: "0xm", inputTokens: [{ lastPriceUSD: "0" }, { lastPriceUSD: "1.0002" }], totalValueLockedUSD: "5000" }]) });
+    expect(r.ok).toBe(true);
+    expect(r.samples[0].price).toBe(1.0002);
+  });
+  it("fails when no token of any sampled messari pool is priced", async () => {
+    const r = await dataProbeSubgraph("http://x", "messari", { fetcher: dataResp("liquidityPools", [{ id: "0xj", inputTokens: [{ lastPriceUSD: "0" }, { lastPriceUSD: null }], totalValueLockedUSD: "0" }]) });
+    expect(r.ok).toBe(false);
+  });
 
   it("ok when a univ3 pool prices a token", async () => {
     const r = await dataProbeSubgraph("http://x", "univ3", { fetcher: dataResp("pools", [{ id: "0xq", token0Price: "0.0005", totalValueLockedUSD: "1234" }]) });
