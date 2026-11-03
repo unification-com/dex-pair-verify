@@ -15,14 +15,14 @@
 // lib/sources.js (already in production); new targets are sourced from DEX docs /
 // The Graph Explorer / DefiLlama dimension-adapters and validated before inclusion.
 
-import { SchemaFamily } from "./subgraphVerify";
+import type { SchemaFamily } from "./schemaFamilies";
 
 export type SourceSeed = {
   chain: string; // internal chain id
   dex: string; // internal dex id
   gtNetwork: string; // GeckoTerminal network slug (matches a discovered candidate's chain)
   gtDex: string; // GeckoTerminal dex slug (matches a candidate's dex)
-  schemaFamily: SchemaFamily; // "univ2" | "univ3" | "univ4" | "messari" | "custom"  (Algebra → univ3 for price)
+  schemaFamily: SchemaFamily; // lib/schemaFamilies.ts (Algebra → univ3 for price)
   subgraphId: string; // The Graph decentralised-network deployment ID
   factoryAddress: string;
   priceable: boolean; // false = needs a go-ooo template that doesn't exist yet (e.g. Solidly)
@@ -121,8 +121,14 @@ export const SOURCE_SEEDS: SourceSeed[] = [
   { chain: "bsc", dex: "thena_v3", gtNetwork: "bsc", gtDex: "thena-v3", schemaFamily: "univ3", subgraphId: "BoHp9H2rGzVFPiqc56PJ1Gw7EPDaiHMcupsUuksMGp2K", factoryAddress: "0x30055F87716d3DFD0E5198C27024481099fB4A98", priceable: true },
 
   // Avalanche (2026-11-03), the chain's first sources. Same checks as batch 3; Blackhole v3 is Algebra-style CL
-  // priced by univ3. Not yet: Pharaoh v3 ($27.8M/day, the chain's biggest) has only a minimal sqrtPrice-only
-  // subgraph; Pharaoh DLMM and Trader Joe are Liquidity Book (deferred family).
+  // priced by univ3. Pharaoh v3 is below (univ3sqrt); Pharaoh DLMM and Trader Joe are Liquidity Book (deferred family).
   { chain: "avax", dex: "uniswap_v3", gtNetwork: "avax", gtDex: "uniswap-v3-avalanche", schemaFamily: "univ3", subgraphId: "3PZAsZ551zQyFc3nGdDm7R8PtJxUpKXygNgmL87DHHs7", factoryAddress: "0x740b1c1de25031C31FF4fC9A62f554A55cdC1baD", priceable: true },
   { chain: "avax", dex: "blackhole_v3", gtNetwork: "avax", gtDex: "blackhole-v3", schemaFamily: "univ3", subgraphId: "6CASHSjy8PtjnYdwCuBjXFLFvjeEvyK9qSShCawE43vj", factoryAddress: "0x512eb749541B7cf294be882D636218c84a5e9E5F", priceable: true },
+
+  // Minimal CL subgraphs (2026-11-03), priced by univ3sqrt: the Pool has sqrtPrice but no token0Price or USD
+  // liquidity, so go-ooo derives prices from sqrtPrice + token decimals and keeps dpv's reserves. Derived prices
+  // matched GT within ~0.1% on the major pools; both factories confirmed on-chain. Priced only by a go-ooo with
+  // uniswap.V3Sqrt (an older one skips the family).
+  { chain: "avax", dex: "pharaoh_v3", gtNetwork: "avax", gtDex: "pharaoh-exchange-v3", schemaFamily: "univ3sqrt", subgraphId: "55QMDEQcTAqkeCV1oYWbUH6wj9dETKAfcyha2iuPjATP", factoryAddress: "0xAE6E5c62328ade73ceefD42228528b70c8157D0d", priceable: true },
+  { chain: "base", dex: "aerodrome_slipstream_2", gtNetwork: "base", gtDex: "aerodrome-slipstream-2", schemaFamily: "univ3sqrt", subgraphId: "EeEmhjkK76RKQpZcfT2S8ZxzcV6Saq4RUw6krq1KuDJu", factoryAddress: "0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a", priceable: true },
 ];

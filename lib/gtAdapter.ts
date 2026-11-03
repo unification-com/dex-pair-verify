@@ -22,7 +22,7 @@ import {
   PoolFacts,
   PoolPageRequest,
 } from "./ingestAdapter";
-import { FAMILY_COLLECTION } from "./priceFetch";
+import { FAMILY_COLLECTION } from "./schemaFamilies";
 import { getSource, resolveSubgraphUrl } from "./sourceConfig";
 import { isNativeCurrency, poolAddressFromGt, wrappedNativeToken } from "./univ4";
 

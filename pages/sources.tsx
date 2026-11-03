@@ -23,6 +23,7 @@ import PageHeader from "../components/ui/PageHeader";
 import { usd } from "../lib/format";
 import { isOperatorCtx } from "../lib/operatorGate";
 import prisma from "../lib/prisma";
+import { FAMILY_COLLECTION, SCHEMA_FAMILIES } from "../lib/schemaFamilies";
 import { decentralizedTemplate, seedForGt } from "../lib/sourceSeeds";
 import { VERIFIED_STATUSES } from "../lib/status";
 import { CandidateStatus } from "../types/types";
@@ -65,8 +66,6 @@ type PublicSource = {
   healthFailures: number;
   pairCount: number;
 };
-
-const SCHEMA_FAMILIES = ["univ2", "univ3", "univ4", "messari", "custom"];
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const operator = await isOperatorCtx(ctx);
@@ -499,7 +498,7 @@ const OperatorSources: React.FC<OperatorProps> = (initial) => {
 
                         {form.dataApplicable && form.samples.length > 0 ? (
                           <div className="vo-section">
-                            <span className="muted vo-h">Sample data — first {Math.min(5, form.rowCount)} of the {form.schemaFamily === "univ2" ? "pairs" : form.schemaFamily === "messari" ? "liquidityPools" : "pools"} go-ooo would query</span>
+                            <span className="muted vo-h">Sample data — first {Math.min(5, form.rowCount)} of the {FAMILY_COLLECTION[form.schemaFamily] ?? "pools"} go-ooo would query</span>
                             <div className="vo-tbl">
                               <div className="vo-tr vo-th"><span>id</span><span>token0Price</span><span>reserve / TVL</span></div>
                               {form.samples.slice(0, 5).map((s) => (

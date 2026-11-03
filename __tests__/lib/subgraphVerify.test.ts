@@ -22,9 +22,12 @@ const STUDIO = "https://api.studio.thegraph.com/query/12345/my-subgraph/v0.0.1";
 const HOSTED = "https://api.thegraph.com/subgraphs/name/org/subgraph";
 const SELF = "https://subgraph.qomswap.com/subgraphs/name/test/exchange";
 
-// Build an introspection-shaped response from a list of query field names.
-const introspect = (fields: string[]): GraphqlFetcher => async () =>
-  ({ data: { __schema: { queryType: { fields: fields.map((name) => ({ name })) } } } });
+// Build an introspection-shaped response from a list of query field names (+ the Pool type's
+// fields, when the schema has one).
+const named = (names: string[]) => names.map((name) => ({ name }));
+const introspection = (fields: string[], poolFields?: string[]) =>
+  ({ data: { __schema: { queryType: { fields: named(fields) } }, pool: poolFields ? { fields: named(poolFields) } : null } });
+const introspect = (fields: string[], poolFields?: string[]): GraphqlFetcher => async () => introspection(fields, poolFields);
 
 // Build a data-query response for a collection (e.g. "pairs"/"pools") of rows.
 const dataResp = (collection: string, rows: Record<string, unknown>[]): GraphqlFetcher => async () =>
@@ -34,9 +37,7 @@ const dataResp = (collection: string, rows: Record<string, unknown>[]): GraphqlF
 // whether the query asks for __schema) — for the end-to-end verifySubgraphSource.
 const combined = (fields: string[], collection: string, rows: Record<string, unknown>[]): GraphqlFetcher =>
   async (_url, query) =>
-    query.includes("__schema")
-      ? { data: { __schema: { queryType: { fields: fields.map((name) => ({ name })) } } } }
-      : { data: { [collection]: rows } };
+    query.includes("__schema") ? introspection(fields) : { data: { [collection]: rows } };
 
 describe("detectProvider", () => {
   it("classifies each provider shape", () => {
@@ -88,6 +89,11 @@ describe("classifySchemaFamily", () => {
     expect(classifySchemaFamily(["pool", "pools", "poolManager", "token"])).toBe("univ4");
     expect(classifySchemaFamily(["pools", "poolManagers", "modifyLiquidity"])).toBe("univ4");
   });
+  it("univ3sqrt when the Pool type has sqrtPrice but no token0Price (minimal CL subgraphs)", () => {
+    expect(classifySchemaFamily(["pool", "pools", "token"], ["id", "sqrtPrice", "tick", "liquidity"])).toBe("univ3sqrt");
+    expect(classifySchemaFamily(["pool", "pools", "token"], ["id", "sqrtPrice", "token0Price", "token1Price"])).toBe("univ3");
+    expect(classifySchemaFamily(["pools", "poolManager"], ["id", "sqrtPrice"])).toBe("univ4");
+  });
   it("custom when ambiguous or neither", () => {
     expect(classifySchemaFamily(["pairs", "pools"])).toBe("custom");
     expect(classifySchemaFamily(["swaps", "tokens"])).toBe("custom");
@@ -101,6 +107,10 @@ describe("probeSubgraph", () => {
     expect(r.live).toBe(true);
     expect(r.schemaFamily).toBe("univ2");
     expect(r.queryFields).toContain("pairs");
+  });
+  it("univ3sqrt from the introspected Pool type", async () => {
+    const r = await probeSubgraph("http://x", { fetcher: introspect(["pools", "tokens"], ["id", "sqrtPrice", "tick"]) });
+    expect(r.schemaFamily).toBe("univ3sqrt");
   });
   it("not live on GraphQL errors", async () => {
     const r = await probeSubgraph("http://x", { fetcher: async () => ({ errors: [{ message: "bad key" }] }) });
@@ -151,6 +161,16 @@ describe("dataProbeSubgraph", () => {
     expect(r.applicable).toBe(true);
     expect(r.ok).toBe(true);
     expect(r.sampleReserveUsd).toBe(28000000);
+  });
+  it("ok when a univ3sqrt pool has a price (sqrtPrice > 0); no USD liquidity to sample", async () => {
+    const r = await dataProbeSubgraph("http://x", "univ3sqrt", { fetcher: dataResp("pools", [{ id: "0xs", sqrtPrice: "0" }, { id: "0xt", sqrtPrice: "231326762176403495006056" }]) });
+    expect(r.ok).toBe(true);
+    expect(r.sampleId).toBe("0xt");
+    expect(r.sampleReserveUsd).toBeNull();
+  });
+  it("not ok when no sampled univ3sqrt pool has a price", async () => {
+    const r = await dataProbeSubgraph("http://x", "univ3sqrt", { fetcher: dataResp("pools", [{ id: "0xs", sqrtPrice: "0" }]) });
+    expect(r.ok).toBe(false);
   });
   it("not ok when the query returns no rows (empty subgraph)", async () => {
     const r = await dataProbeSubgraph("http://x", "univ2", { fetcher: dataResp("pairs", []) });

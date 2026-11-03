@@ -17,8 +17,9 @@
 
 import { decentralizedTemplate, SOURCE_SEEDS } from "./sourceSeeds";
 
+import type { SchemaFamily } from "./schemaFamilies";
 import type { ThresholdDefaults } from "./sourceConfig";
-import type { SchemaFamily, SubgraphProvider } from "./subgraphVerify";
+import type { SubgraphProvider } from "./subgraphVerify";
 
 export type BaselineSource = {
   chain: string;
@@ -77,6 +78,8 @@ const ADOPTED_GT_KEYS = new Set([
   "bsc/thena-v3", // 2026-11-03
   "avax/uniswap-v3-avalanche", // 2026-11-03
   "avax/blackhole-v3", // 2026-11-03
+  "avax/pharaoh-exchange-v3", // 2026-11-03
+  "base/aerodrome-slipstream-2", // 2026-11-03
 ]);
 
 // Conservative cold-start floors for a newly-adopted source (no data yet) —

@@ -6,7 +6,7 @@
 //      persisted in the DB or emitted in the export manifest (§ 4.A.subgraph-
 //      verification security note),
 //   3. run a GraphQL introspection LIVENESS probe, and
-//   4. auto-classify the SCHEMA FAMILY (univ2 / univ3) that drives the field-map
+//   4. auto-classify the SCHEMA FAMILY (univ2 / univ3 / ...) that drives the field-map
 //      and go-ooo's template-family module (4.B).
 //
 // Pure helpers + an injectable fetcher so the classification logic is unit-testable
@@ -15,8 +15,9 @@
 
 import { bumpGraphQuery } from "./graphQueryCounter";
 
+import type { SchemaFamily } from "./schemaFamilies";
+
 export type SubgraphProvider = "graph-decentralized" | "graph-studio" | "graph-hosted" | "self-hosted";
-export type SchemaFamily = "univ2" | "univ3" | "univ4" | "messari" | "custom";
 
 // Provider taxonomy: URL pattern + the env var that holds its API key. Order
 // matters — most specific first. `self-hosted` is the catch-all (operator-defined
@@ -116,8 +117,10 @@ export function assertSafeSubgraphUrl(rawUrl: string): void {
 // `pairs` query; UniV3-like exposes `pools`; the Messari standardised dex-amm schema exposes
 // `liquidityPools` (its hallmark). Uniswap v4 also exposes `pools`, so it is told apart by its
 // singleton `poolManager` entity (v4 has no factory) - checked before the pools→univ3 rule. A
-// subgraph exposing both pairs+pools (rare) → custom, so the operator confirms.
-export function classifySchemaFamily(queryFieldNames: string[]): SchemaFamily {
+// pools subgraph whose Pool type has sqrtPrice but no token0Price is the minimal univ3sqrt schema
+// (poolFieldNames, from introspecting the Pool type; empty when unknown → univ3). A subgraph
+// exposing both pairs+pools (rare) → custom, so the operator confirms.
+export function classifySchemaFamily(queryFieldNames: string[], poolFieldNames: string[] = []): SchemaFamily {
   const names = new Set(queryFieldNames.map((n) => n.toLowerCase()));
   if (names.has("liquiditypools")) {
     return "messari";
@@ -131,12 +134,14 @@ export function classifySchemaFamily(queryFieldNames: string[]): SchemaFamily {
     return "univ2";
   }
   if (hasPools && !hasPairs) {
-    return "univ3";
+    const poolFields = new Set(poolFieldNames);
+    return poolFields.has("sqrtPrice") && !poolFields.has("token0Price") ? "univ3sqrt" : "univ3";
   }
   return "custom";
 }
 
-const INTROSPECTION_QUERY = `{ __schema { queryType { fields { name } } } }`;
+// The query fields, plus the Pool type's fields to tell univ3sqrt from univ3 (null without a Pool type).
+const INTROSPECTION_QUERY = `{ __schema { queryType { fields { name } } } pool: __type(name: "Pool") { fields { name } } }`;
 
 export type GraphqlFetcher = (url: string, query: string) => Promise<unknown>;
 
@@ -177,7 +182,10 @@ export type ProbeResult = {
 export async function probeSubgraph(url: string, opts: { fetcher?: GraphqlFetcher } = {}): Promise<ProbeResult> {
   const fetcher = opts.fetcher ?? defaultGraphqlFetch;
   const json = (await fetcher(url, INTROSPECTION_QUERY)) as
-    | { data?: { __schema?: { queryType?: { fields?: { name: string }[] } } }; errors?: { message?: string }[] }
+    | {
+        data?: { __schema?: { queryType?: { fields?: { name: string }[] } }; pool?: { fields?: { name: string }[] } | null };
+        errors?: { message?: string }[];
+      }
     | null;
   if (!json) {
     return { live: false, schemaFamily: "custom", queryFields: [], error: "no response / non-2xx / timeout" };
@@ -189,7 +197,8 @@ export async function probeSubgraph(url: string, opts: { fetcher?: GraphqlFetche
   if (!fields.length) {
     return { live: false, schemaFamily: "custom", queryFields: [], error: "introspection returned no query fields" };
   }
-  return { live: true, schemaFamily: classifySchemaFamily(fields), queryFields: fields };
+  const poolFields = json.data?.pool?.fields?.map((f) => f.name) ?? [];
+  return { live: true, schemaFamily: classifySchemaFamily(fields, poolFields), queryFields: fields };
 }
 
 // Minimal "is this subgraph returning usable pricing data" query per schema family.
@@ -210,9 +219,10 @@ export async function probeSubgraph(url: string, opts: { fetcher?: GraphqlFetche
 type DataQuerySpec = {
   query: string;
   collection: string;
-  reserveField: string;
+  reserveField?: string; // absent when the schema has no USD liquidity (univ3sqrt)
   // extractPrice pulls the "is this priced" liveness signal from one row. univ2/univ3/univ4 read
-  // token0Price directly; messari reads the highest lastPriceUSD among the pool's inputTokens.
+  // token0Price directly; messari reads the highest lastPriceUSD among the pool's inputTokens;
+  // univ3sqrt reads sqrtPrice (positive once the pool has a price).
   extractPrice: (row: Record<string, unknown>) => number;
 };
 const numField = (v: unknown): number => parseFloat(String(v ?? ""));
@@ -228,6 +238,11 @@ const DATA_QUERY: Partial<Record<SchemaFamily, DataQuerySpec>> = {
     collection: "pools",
     reserveField: "totalValueLockedUSD",
     extractPrice: (r) => numField(r.token0Price),
+  },
+  univ3sqrt: {
+    query: `{ pools(first: 5) { id sqrtPrice } }`,
+    collection: "pools",
+    extractPrice: (r) => numField(r.sqrtPrice),
   },
   univ4: {
     // Same pool shape as v3 plus hooks (only no-hook pools are priceable - surfaced here so the
@@ -301,7 +316,7 @@ export async function dataProbeSubgraph(
   // Per-row sample (id + priced token0Price + reserve/TVL), surfaced for display.
   const samples: DataSample[] = rows.map((r) => {
     const p = spec.extractPrice(r);
-    const rv = parseFloat(String(r[spec.reserveField] ?? ""));
+    const rv = spec.reserveField ? parseFloat(String(r[spec.reserveField] ?? "")) : NaN;
     return { id: r.id, price: Number.isFinite(p) ? p : null, reserve: Number.isFinite(rv) ? rv : null };
   });
   // Usable = at least one sampled pool prices a token (token0Price > 0). reserveUSD

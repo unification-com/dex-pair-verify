@@ -8,6 +8,8 @@
 import { ApolloClient, gql, InMemoryCache } from "@apollo/client";
 
 import { chainInfo } from "./chains";
+import { sqrtPriceToToken1PerToken0, uniswapPrices } from "./poolPrice";
+import { FAMILY_COLLECTION } from "./schemaFamilies";
 import { getSource, resolveSubgraphUrl } from "./sourceConfig";
 import { isHookedPool, normaliseV4Symbol } from "./univ4";
 
@@ -32,19 +34,21 @@ const getCurrentBlockNumber = async (rpc: string): Promise<number> => {
   return parseInt(json.result, 16);
 };
 
-// The subgraph collection name + per-pool fields per schema family. univ2/univ3/univ4 expose
-// token0Price/token1Price directly; the Messari dex-amm schema exposes per-token lastPriceUSD on
-// inputTokens, from which the pair price is derived (see the result mapping below). univ4 also
-// selects hooks so hooked pools (non-canonical price) can be skipped.
-export const FAMILY_COLLECTION: Record<string, string> = { univ2: "pairs", univ3: "pools", univ4: "pools", messari: "liquidityPools" };
+// The per-pool fields per schema family (collection: lib/schemaFamilies.ts). univ2/univ3/univ4
+// expose token0Price/token1Price directly; the Messari dex-amm schema exposes per-token
+// lastPriceUSD on inputTokens and univ3sqrt exposes sqrtPrice + token decimals, from which the
+// pair prices are derived (see the result mapping below). univ4 also selects hooks so hooked
+// pools (non-canonical price) can be skipped.
+const UNI_PRICE_FIELDS = `token0 { id symbol } token1 { id symbol } token0Price token1Price`;
+const FAMILY_FIELDS: Record<string, string> = {
+  messari: `id inputTokens { id symbol lastPriceUSD }`,
+  univ3sqrt: `id token0 { id symbol decimals } token1 { id symbol decimals } sqrtPrice`,
+  univ4: `id hooks ${UNI_PRICE_FIELDS}`,
+};
 
 const genQuery = (family: string, addrStr: string, blockNum: number | null): string => {
   const blockArg = blockNum === null ? "" : `block: {number: ${blockNum}},`;
-  const fields = family === "messari"
-    ? `id inputTokens { id symbol lastPriceUSD }`
-    : family === "univ4"
-      ? `id hooks token0 { id symbol } token1 { id symbol } token0Price token1Price`
-      : `id token0 { id symbol } token1 { id symbol } token0Price token1Price`;
+  const fields = FAMILY_FIELDS[family] ?? `id ${UNI_PRICE_FIELDS}`;
   return `
     ${FAMILY_COLLECTION[family]}(
       ${blockArg}
@@ -118,49 +122,72 @@ export async function fetchPoolPrices(
 
   const prices: PoolPriceRow[] = [];
   for (let p = 0; p <= subBlocks; p += 1) {
-    const rows = result.data?.[`p${p}`] ?? [];
-    for (const d of rows) {
-      if (family === "messari") {
-        // Messari prices via per-token lastPriceUSD; derive token0Price (token1 per token0) =
-        // lastPriceUSD(token0) / lastPriceUSD(token1), and token1Price as its inverse.
-        const toks = d.inputTokens ?? [];
-        if (toks.length < 2) continue;
-        const [t0, t1] = toks;
-        const p0 = Number(t0.lastPriceUSD);
-        const p1 = Number(t1.lastPriceUSD);
-        if (!(p0 > 0) || !(p1 > 0)) continue;
-        prices.push({
-          chain,
-          dex,
-          token0ContractAddress: t0.id,
-          token0Symbol: t0.symbol,
-          token0Price: String(p0 / p1),
-          token1ContractAddress: t1.id,
-          token1Symbol: t1.symbol,
-          token1Price: String(p1 / p0),
-          pairContractAddress: d.id,
-        });
-        continue;
-      }
-      if (family === "univ4" && isHookedPool(d.hooks)) {
-        continue; // hooked pools are not priceable for the oracle (non-canonical price)
-      }
-      // v4 reports native ETH as id 0x0 / symbol "ETH"; normalise it to the chain's wrapped
-      // symbol so the pair lines up with the WETH.USDC form (no-op for v2/v3).
-      const t0Symbol = family === "univ4" ? normaliseV4Symbol(chain, d.token0.id, d.token0.symbol) : d.token0.symbol;
-      const t1Symbol = family === "univ4" ? normaliseV4Symbol(chain, d.token1.id, d.token1.symbol) : d.token1.symbol;
-      prices.push({
-        chain,
-        dex,
-        token0ContractAddress: d.token0.id,
-        token0Symbol: t0Symbol,
-        token0Price: d.token0Price,
-        token1ContractAddress: d.token1.id,
-        token1Symbol: t1Symbol,
-        token1Price: d.token1Price,
-        pairContractAddress: d.id,
-      });
+    for (const d of (result.data?.[`p${p}`] ?? []) as SubgraphPoolRow[]) {
+      const row = toPoolPriceRow(chain, dex, family, d);
+      if (row) prices.push(row);
     }
   }
   return { success: true, prices, error: "" };
+}
+
+type SubgraphToken = { id: string; symbol: string; decimals?: string; lastPriceUSD?: string };
+
+// One pool/pair row as the family's query above returns it (only that family's fields are set).
+export type SubgraphPoolRow = {
+  id: string;
+  token0?: SubgraphToken;
+  token1?: SubgraphToken;
+  token0Price?: string;
+  token1Price?: string;
+  sqrtPrice?: string;
+  hooks?: string | null;
+  inputTokens?: SubgraphToken[];
+};
+
+// One subgraph row as a price row in the Uniswap convention (token0Price = token0 per token1), or
+// null when the pool can't be priced: a hooked v4 pool, a Messari pool missing a token price, a
+// univ3sqrt pool with no price yet.
+export function toPoolPriceRow(chain: string, dex: string, family: string, d: SubgraphPoolRow): PoolPriceRow | null {
+  if (family === "messari") {
+    // Messari prices via per-token lastPriceUSD: token1 per token0 is
+    // lastPriceUSD(token0) / lastPriceUSD(token1).
+    const [t0, t1] = d.inputTokens ?? [];
+    const p0 = Number(t0?.lastPriceUSD);
+    const p1 = Number(t1?.lastPriceUSD);
+    if (!(p0 > 0) || !(p1 > 0)) return null;
+    return {
+      chain,
+      dex,
+      token0ContractAddress: t0.id,
+      token0Symbol: t0.symbol,
+      token1ContractAddress: t1.id,
+      token1Symbol: t1.symbol,
+      pairContractAddress: d.id,
+      ...uniswapPrices(p0 / p1),
+    };
+  }
+  const { token0, token1 } = d;
+  if (!token0 || !token1) return null;
+  if (family === "univ4" && isHookedPool(d.hooks)) {
+    return null; // hooked pools are not priceable for the oracle (non-canonical price)
+  }
+  let pairPrices = { token0Price: d.token0Price ?? "", token1Price: d.token1Price ?? "" };
+  if (family === "univ3sqrt") {
+    const token1PerToken0 = sqrtPriceToToken1PerToken0(d.sqrtPrice ?? "0", Number(token0.decimals), Number(token1.decimals));
+    if (!(token1PerToken0 > 0)) return null; // no price yet
+    pairPrices = uniswapPrices(token1PerToken0);
+  }
+  // v4 reports native ETH as id 0x0 / symbol "ETH"; normalise it to the chain's wrapped
+  // symbol so the pair lines up with the WETH.USDC form (no-op for v2/v3).
+  const symbol = (t: SubgraphToken) => (family === "univ4" ? normaliseV4Symbol(chain, t.id, t.symbol) : t.symbol);
+  return {
+    chain,
+    dex,
+    token0ContractAddress: token0.id,
+    token0Symbol: symbol(token0),
+    token1ContractAddress: token1.id,
+    token1Symbol: symbol(token1),
+    pairContractAddress: d.id,
+    ...pairPrices,
+  };
 }

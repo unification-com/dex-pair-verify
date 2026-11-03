@@ -282,6 +282,7 @@ const CATALOGUE_QUERY_FORMAT = "BASE.TARGET.AD";
 export const GOOOO_PRICEABLE_FAMILIES: ReadonlySet<string> = new Set([
   "univ2",
   "univ3",
+  "univ3sqrt", // needs the go-ooo release with uniswap.V3Sqrt; an older go-ooo skips the source, leaving its pairs unpriced
   "univ4",
   "messari",
 ]);
