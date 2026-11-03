@@ -49,7 +49,10 @@ export const SOURCE_SEEDS: SourceSeed[] = [
   { chain: "eth", dex: "shibaswap", gtNetwork: "eth", gtDex: "shibaswap", schemaFamily: "univ2", subgraphId: "61LXXvGA1KXkJZbCceYqw9APcwTGefK5MytwnVsdAQpw", factoryAddress: "0x115934131916C8b277DD010Ee02de363c09d037c", priceable: true },
   { chain: "polygon_pos", dex: "quickswap_v3", gtNetwork: "polygon_pos", gtDex: "quickswap_v3", schemaFamily: "univ3", subgraphId: "FqsRcH1XqSjqVx9GRTvEJe959aCbKrcyGgDWBrUkG24g", factoryAddress: "0x411b0fAcC3489691f28ad58c47006AF5E3Ab3A28", priceable: true },
   { chain: "xdai", dex: "honeyswap", gtNetwork: "xdai", gtDex: "honeyswap", schemaFamily: "univ2", subgraphId: "HTxWvPGcZ5oqWLYEVtWnVJDfnai2Ud1WaABiAR72JaSJ", factoryAddress: "0xA818b4F111Ccac7AA31D0BCc0806d64F2E0737D7", priceable: true },
-  { chain: "bsc", dex: "bsc_pancakeswap_v3", gtNetwork: "bsc", gtDex: "pancakeswap-v3-bsc", schemaFamily: "univ3", subgraphId: "A1fvJWQLBeUAggX2WQTMm3FKjXTekNXo77ZySun4YN2m", factoryAddress: "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865", priceable: true },
+  // 2026-11-02: the original univ3 deployment (A1fvJWQ…) hit an indexing error and stopped serving; this
+  // Messari-schema "grafted fix" deployment is live, indexes the top pools, and its pair prices matched
+  // CoinGecko to within 0.43% across dpv's 8 deepest verified pools.
+  { chain: "bsc", dex: "bsc_pancakeswap_v3", gtNetwork: "bsc", gtDex: "pancakeswap-v3-bsc", schemaFamily: "messari", subgraphId: "G4vqYZxFaL7driMegHynL9RywXgbdWEVwR1Y7gb9YSLD", factoryAddress: "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865", priceable: true },
 
   // Uniswap v4 (eth) — the first singleton/hooks family. The "factory" slot carries the singleton
   // PoolManager address (v4 has no per-pool factory); pools are 32-byte poolIds; native ETH (0x0)
@@ -97,5 +100,8 @@ export const SOURCE_SEEDS: SourceSeed[] = [
 
   // Solidly (ve(3,3)) — seeded but NOT priceable until the go-ooo Solidly template (4.B).
   { chain: "base", dex: "aerodrome_slipstream", gtNetwork: "base", gtDex: "aerodrome-slipstream", schemaFamily: "univ3", subgraphId: "GENunSHWLBXm59mBSgPzQ8metBEp9YDfdqwFr91Av1UM", factoryAddress: "0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A", priceable: true, note: "Aerodrome Slipstream (concentrated liquidity → univ3); classic Solidly aerodrome-base pools are a separate source (await a Solidly/Messari template)" },
+  // Velodrome Slipstream (CL): univ3-shaped; "Velodrome Optimism Full" probed 2026-11-02 (univ3 data query OK, the
+  // top pools indexed, factory confirmed on-chain via the top pool's factory()).
+  { chain: "optimism", dex: "velodrome_slipstream", gtNetwork: "optimism", gtDex: "velodrome-finance-slipstream", schemaFamily: "univ3", subgraphId: "BsBDqDf6rJJyxKACZrCHAa8Gaf384cmL2hxfLaDuB8XM", factoryAddress: "0xCc0bDDB707055e04e497aB22a59c2aF4391cd12F", priceable: true },
   { chain: "optimism", dex: "velodrome", gtNetwork: "optimism", gtDex: "velodrome-finance-v2", schemaFamily: "messari", subgraphId: "A4Y1A82YhSLTn998BVVELC8eWzhi992k4ZitByvssxqA", factoryAddress: "0xF1046053aa5682b4F9a81b5481394DA16BE5FF5a", priceable: true, note: "Messari standardised dex-amm schema (V2 — the A4Y1A82Y subgraph is Velodrome Finance V2, so the GT slug must be velodrome-finance-v2 to keep pool addresses aligned with the subgraph; the bare 'velodrome' GT slug is V1 and does not match)" },
 ];

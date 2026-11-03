@@ -1,7 +1,7 @@
 # Deployment
 
 Run dex-pair-verify on a single Linux host: the Next.js web server under systemd,
-and the weekly data pipeline under cron.
+and the twice-weekly data pipeline under cron.
 
 Distro-agnostic — needs only `bash`, `systemd`, `cron` and `flock` (util-linux),
 plus a user-space Node toolchain via [nvm](https://github.com/nvm-sh/nvm) and `yarn`,
@@ -17,7 +17,7 @@ lines you set in the unit file; the scripts auto-detect the repo location.
 - `beacon-writer.sh` / `fulfilment-watcher.sh` — start the two BEACON anchoring workers; systemd `ExecStart` targets.
 - `dex-pair-verify.service` — systemd unit template for the web server.
 - `dex-pair-verify-beacon-writer.service` / `dex-pair-verify-fulfilment-watcher.service` — units for the BEACON workers.
-- `crontab.example` — the weekly cron line.
+- `crontab.example`: the pipeline cron line.
 
 ## 1. Configure
 
@@ -69,14 +69,15 @@ As the app user, from the repo root:
 `run.sh` `exec`s Node, so systemd supervises the server process directly — `systemctl
 stop` sends `SIGINT` straight to Next.js for a clean shutdown.
 
-## 5. Weekly pipeline (cron)
+## 5. Pipeline (cron)
 
 As the app user (`crontab -e`), add the line from `crontab.example`, pointing at your
 checkout:
 
-    0 3 * * 1 /bin/bash /path/to/dex-pair-verify/deploy/pipeline.sh
+    0 3 * * 1,4 /bin/bash /path/to/dex-pair-verify/deploy/pipeline.sh
 
-Runs every Monday at 03:00. Logs: `$LOG_ROOT/YYYY-MM/dex-pair-verify-YYYY-MM-DD.log`.
+Runs Mondays and Thursdays at 03:00 (a run takes about 3 hours; the per-token re-check windows
+keep the API quotas in hand at this cadence). Logs: `$LOG_ROOT/YYYY-MM/dex-pair-verify-YYYY-MM-DD.log`.
 A `flock` guard skips a run if the previous one is still going.
 
 ## 6. BEACON anchoring workers (optional)
