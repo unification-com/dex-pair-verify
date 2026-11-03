@@ -31,7 +31,7 @@ type Props = { chainDex: Record<string, string[]> };
 // chains (it would pull in hundreds of unrelated pools). Add the specific token via
 // token-mode if you really want its other-chain pools. Compared case-insensitively.
 const COMMON_QUOTE = new Set(
-  ["weth", "eth", "wbnb", "bnb", "usdc", "usdc.e", "usdt", "dai", "wbtc", "busd", "wmatic", "matic", "wxdai", "xdai", "frax"].map((s) => s),
+  ["weth", "eth", "wbnb", "bnb", "usdc", "usdc.e", "usdt", "dai", "wbtc", "busd", "wmatic", "matic", "wxdai", "xdai", "wavax", "avax", "frax"].map((s) => s),
 );
 
 const PACE_MS = 600;

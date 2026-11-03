@@ -40,6 +40,11 @@ export const chainInfo: Record<string, ChainInfo> = {
     rpc: "https://optimism-rpc.publicnode.com",
     blocksPerMin: 30, // ~2s blocks
   },
+  // Avalanche C-Chain (2026-11-03: eth_chainId 0xa86a; 600 blocks in 583s, so ~1s blocks).
+  avax: {
+    rpc: "https://avalanche-c-chain-rpc.publicnode.com",
+    blocksPerMin: 60,
+  },
 };
 
 // EVM numeric chain id per our internal chain key. null = not an EVM chain we
@@ -52,6 +57,7 @@ export const EVM_CHAIN_ID: Record<string, number | null> = {
   arbitrum: 42161,
   base: 8453,
   optimism: 10,
+  avax: 43114,
   qom: null,
 };
 

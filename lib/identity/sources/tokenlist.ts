@@ -36,6 +36,7 @@ export const TOKEN_LISTS: { name: string; url: string }[] = [
   { name: "coingecko-base", url: "https://tokens.coingecko.com/base/all.json" },
   { name: "coingecko-arbitrum", url: "https://tokens.coingecko.com/arbitrum-one/all.json" },
   { name: "coingecko-optimism", url: "https://tokens.coingecko.com/optimistic-ethereum/all.json" },
+  { name: "coingecko-avalanche", url: "https://tokens.coingecko.com/avalanche/all.json" }, // 697 tokens, 2026-11-03
   // Primary-DEX curated lists for long-tail, chain-native tokens that the CoinGecko
   // per-chain lists (CoinGecko-listed only) and the Uniswap default (major tokens)
   // both miss — the chain's own main DEX is the authority there (archetype: a $54M
@@ -48,6 +49,7 @@ export const TOKEN_LISTS: { name: string; url: string }[] = [
   { name: "optimism-superchain", url: "https://static.optimism.io/optimism.tokenlist.json" }, // Optimism + Base
   { name: "arbitrum-foundation", url: "https://tokenlist.arbitrum.io/ArbTokenLists/arbed_arb_whitelist_era.json" }, // Arbitrum
   { name: "honeyswap-gnosis", url: "https://tokens.honeyswap.org" }, // Gnosis (xdai) (+ some Polygon)
+  { name: "traderjoe-avalanche", url: "https://raw.githubusercontent.com/traderjoe-xyz/joe-tokenlists/main/mc.tokenlist.json" }, // Avalanche (276 tokens, 2026-11-03)
 ];
 
 const LIST_TTL_MS = 24 * 60 * 60 * 1000;

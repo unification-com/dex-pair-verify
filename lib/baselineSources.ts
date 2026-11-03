@@ -75,6 +75,8 @@ const ADOPTED_GT_KEYS = new Set([
   "base/uniswap-v2-base", // 2026-11-03
   "base/quickswap-v4-base", // 2026-11-03
   "bsc/thena-v3", // 2026-11-03
+  "avax/uniswap-v3-avalanche", // 2026-11-03
+  "avax/blackhole-v3", // 2026-11-03
 ]);
 
 // Conservative cold-start floors for a newly-adopted source (no data yet) —

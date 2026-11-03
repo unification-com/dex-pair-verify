@@ -20,6 +20,7 @@ export const BLOCKSCOUT_BASE: Record<string, string | null> = {
   arbitrum: "https://arbitrum.blockscout.com",
   optimism: "https://explorer.optimism.io",
   bsc: null,
+  avax: null,
 };
 
 // DexScreener chain slug per chain key. Shared with lib/tokenWebPresence.ts.
@@ -31,6 +32,7 @@ export const DEXSCREENER_CHAIN: Record<string, string> = {
   base: "base",
   arbitrum: "arbitrum",
   optimism: "optimism",
+  avax: "avalanche",
 };
 
 // Honeypot.is web path per chain — ONLY the chains its buy/sell simulation covers
@@ -81,6 +83,7 @@ export const BLOCK_EXPLORER_BASE: Record<string, string> = {
   optimism: "https://optimistic.etherscan.io",
   gnosis: "https://gnosis.blockscout.com",
   xdai: "https://gnosis.blockscout.com",
+  avax: "https://snowtrace.io",
 };
 
 // A token/address page on the chain's block explorer (linkType is "token" or "address"), or null when

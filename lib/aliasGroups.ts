@@ -32,13 +32,15 @@ export const ALIAS_GROUPS: Record<string, string[]> = {
     "gnosis-xdai-bridged-usdc-gnosis", "axlusdc",
     // USDT bridged/chain variants with their own cg id:
     "binance-bridged-usdt-bnb-smart-chain", "bridged-usdt", "l2-standard-bridged-usdt-base", "usdt0",
+    // Avalanche Bridge forms (USDC.e / USDT.e / DAI.e); native USDC and USDt share usd-coin / tether:
+    "usd-coin-avalanche-bridged-usdc-e", "tether-avalanche-bridged-usdt-e", "avalanche-bridged-dai-avalanche",
   ],
   // The ether class: native ETH + WETH + its 1:1 bridged forms. NO staked/restaked derivatives.
   ETH: [
     "ethereum", "weth", "axlweth", "binance-peg-weth",
     "arbitrum-bridged-weth-arbitrum-one", "l2-standard-bridged-weth-base",
     "l2-standard-bridged-weth-optimism", "polygon-pos-bridged-weth-polygon-pos",
-    "gnosis-xdai-bridged-weth-gnosis-chain",
+    "gnosis-xdai-bridged-weth-gnosis-chain", "avalanche-bridged-weth-avalanche",
   ],
   // The bitcoin class: BTC + its 1:1 wrapped/bridged forms. NO staked derivatives (e.g. LBTC).
   BTC: [
@@ -46,6 +48,7 @@ export const ALIAS_GROUPS: Record<string, string[]> = {
     "tbtc", "avalanche-bridged-btc-arbitrum-one",
     "arbitrum-bridged-wbtc-arbitrum-one", "polygon-bridged-wbtc-polygon-pos",
     "gnosis-xdai-bridged-wbtc-gnosis-chain",
+    "bitcoin-avalanche-bridged-btc-b", "avalanche-old-bridged-wbtc-avalanche",
     // NB: renBTC deliberately OMITTED — Ren Protocol is defunct (no reliable mint/redeem), so it is no
     // longer a trustworthy 1:1 BTC form.
   ],

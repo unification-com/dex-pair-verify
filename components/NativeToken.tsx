@@ -11,6 +11,7 @@ const NativeToken: React.FC<{ chain: string }> = ({ chain}) => {
         arbitrum: "ETH",
         base: "ETH",
         optimism: "ETH",
+        avax: "AVAX",
         osmosis: "OSMO",
     }
 

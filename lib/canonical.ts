@@ -64,6 +64,7 @@ const CG_PLATFORM_BY_CHAIN: Record<string, string | null> = {
   arbitrum: "arbitrum-one",
   base: "base",
   optimism: "optimistic-ethereum",
+  avax: "avalanche",
   qom: null,
 };
 

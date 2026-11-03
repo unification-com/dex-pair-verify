@@ -39,6 +39,7 @@ const GT_NET: Record<string, string> = {
   base: "base",
   arbitrum: "arbitrum",
   optimism: "optimism",
+  avax: "avax",
 };
 
 // Blockscout instance base + DexScreener slug per chain are shared with

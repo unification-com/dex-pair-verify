@@ -13,6 +13,7 @@ const chainNames: Record<string, string> = {
     arbitrum: "Arbitrum",
     base: "Base",
     optimism: "Optimism",
+    avax: "Avalanche",
     qom: "QoM",
 };
 

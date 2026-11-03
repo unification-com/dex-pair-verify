@@ -119,4 +119,10 @@ export const SOURCE_SEEDS: SourceSeed[] = [
   { chain: "base", dex: "uniswap_v2", gtNetwork: "base", gtDex: "uniswap-v2-base", schemaFamily: "univ2", subgraphId: "7e2mrDKuzmoSpS9WPHZycL3Ab52RNjdMrPLRduXM9TGi", factoryAddress: "0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6", priceable: true },
   { chain: "base", dex: "quickswap_v4", gtNetwork: "base", gtDex: "quickswap-v4-base", schemaFamily: "univ3", subgraphId: "BvoKww83s33xPS3NjKqNkfjAzPpALk7KWvaYMbH247db", factoryAddress: "0xC5396866754799B9720125B104AE01d935Ab9C7b", priceable: true },
   { chain: "bsc", dex: "thena_v3", gtNetwork: "bsc", gtDex: "thena-v3", schemaFamily: "univ3", subgraphId: "BoHp9H2rGzVFPiqc56PJ1Gw7EPDaiHMcupsUuksMGp2K", factoryAddress: "0x30055F87716d3DFD0E5198C27024481099fB4A98", priceable: true },
+
+  // Avalanche (2026-11-03), the chain's first sources. Same checks as batch 3; Blackhole v3 is Algebra-style CL
+  // priced by univ3. Not yet: Pharaoh v3 ($27.8M/day, the chain's biggest) has only a minimal sqrtPrice-only
+  // subgraph; Pharaoh DLMM and Trader Joe are Liquidity Book (deferred family).
+  { chain: "avax", dex: "uniswap_v3", gtNetwork: "avax", gtDex: "uniswap-v3-avalanche", schemaFamily: "univ3", subgraphId: "3PZAsZ551zQyFc3nGdDm7R8PtJxUpKXygNgmL87DHHs7", factoryAddress: "0x740b1c1de25031C31FF4fC9A62f554A55cdC1baD", priceable: true },
+  { chain: "avax", dex: "blackhole_v3", gtNetwork: "avax", gtDex: "blackhole-v3", schemaFamily: "univ3", subgraphId: "6CASHSjy8PtjnYdwCuBjXFLFvjeEvyK9qSShCawE43vj", factoryAddress: "0x512eb749541B7cf294be882D636218c84a5e9E5F", priceable: true },
 ];

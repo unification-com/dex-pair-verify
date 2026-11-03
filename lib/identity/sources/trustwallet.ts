@@ -28,6 +28,7 @@ const TRUSTWALLET_FOLDER: Record<string, string> = {
   arbitrum: "arbitrum",
   base: "base",
   optimism: "optimism",
+  avax: "avalanchec",
 };
 
 const assetInfoUrl = (folder: string, checksumAddress: string): string =>
