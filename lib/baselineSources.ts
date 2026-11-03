@@ -71,6 +71,7 @@ const ADOPTED_GT_KEYS = new Set([
   "bsc/uniswap-v4-bsc",
   "base/pancakeswap-v3-base",
   "optimism/velodrome-finance-slipstream", // 2026-11-02
+  "eth/pancakeswap-v3-ethereum", // 2026-11-03
 ]);
 
 // Conservative cold-start floors for a newly-adopted source (no data yet) —

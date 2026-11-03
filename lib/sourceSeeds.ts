@@ -53,6 +53,10 @@ export const SOURCE_SEEDS: SourceSeed[] = [
   // Messari-schema "grafted fix" deployment is live, indexes the top pools, and its pair prices matched
   // CoinGecko to within 0.43% across dpv's 8 deepest verified pools.
   { chain: "bsc", dex: "bsc_pancakeswap_v3", gtNetwork: "bsc", gtDex: "pancakeswap-v3-bsc", schemaFamily: "messari", subgraphId: "G4vqYZxFaL7driMegHynL9RywXgbdWEVwR1Y7gb9YSLD", factoryAddress: "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865", priceable: true },
+  // PancakeSwap v3 on Ethereum (2026-11-03): Messari schema; 5/5 top GT pools indexed, pair prices within
+  // 0.19% of the pools, protocol id = the on-chain factory (same deployer address as on BSC). Mostly a
+  // USDC/USDT source. Low curation signal, so the health check is what keeps it honest.
+  { chain: "eth", dex: "pancakeswap_v3", gtNetwork: "eth", gtDex: "pancakeswap-v3-ethereum", schemaFamily: "messari", subgraphId: "JAGXF8B14mpB8QGKnwhKTs5JxsQZBJQvbDGFcWwL7gbm", factoryAddress: "0x0BFbCF9fa4f9C56B0F40a671Ad40E0805A091865", priceable: true },
 
   // Uniswap v4 (eth) — the first singleton/hooks family. The "factory" slot carries the singleton
   // PoolManager address (v4 has no per-pool factory); pools are 32-byte poolIds; native ETH (0x0)
