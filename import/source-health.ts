@@ -1,5 +1,5 @@
-// Subgraph health check for every live subgraph source: a thin CLI over
-// checkSourceHealth (lib/sourceHealth.ts). Sources that keep failing are paused
+// Price-feed health check for every live subgraph and Cosmos source: a thin CLI
+// over checkSourceHealth (lib/sourceHealth.ts). Sources that keep failing are paused
 // (left out of the go-ooo manifest and the priceable flag) until they recover.
 // Run from cron every few hours:
 //   yarn source-health

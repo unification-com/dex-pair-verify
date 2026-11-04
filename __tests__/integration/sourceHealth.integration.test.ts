@@ -1,16 +1,17 @@
-// Integration tests for lib/sourceHealth.ts: recording subgraph health, and paused sources leaving
-// the go-ooo manifest and the priceable flag.
+// Integration tests for lib/sourceHealth.ts: recording price-feed health (subgraph and Cosmos sources),
+// and paused sources leaving the go-ooo manifest and the priceable flag.
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { resetDb, seedSource, testPrisma } from "./helpers";
-import { buildExportManifestV3, priceableSourceMeta } from "../../lib/export";
-import { checkSourceHealth, HealthProbe } from "../../lib/sourceHealth";
+import { resetDb, seedPair, seedSource, seedToken, testPrisma } from "./helpers";
+import { buildExportManifestV3, GOOOO_PRICEABLE_COSMOS_SOURCE_TYPES, priceableSourceMeta } from "../../lib/export";
+import { checkSourceHealth, COSMOS_USD_PRICES, HealthProbe, HealthSource, probeCosmosHealth, UsdPrices } from "../../lib/sourceHealth";
+import { TokenPairStatus } from "../../types/types";
 
 const NOW = 1_700_000_000;
 const passing: HealthProbe = async () => null;
 // Fails only the given source URLs.
-const failingFor = (...urls: string[]): HealthProbe => async (url) => (urls.includes(url) ? "bad indexers" : null);
+const failingFor = (...urls: string[]): HealthProbe => async (s) => (urls.includes(s.subgraphUrlTemplate) ? "bad indexers" : null);
 const check = (probe: HealthProbe, now = NOW) => checkSourceHealth({ now, probe, retryGapMs: 0 });
 const row = (id: string) => testPrisma.supportedSource.findUniqueOrThrow({ where: { id } });
 const manifestKeys = async () => (await buildExportManifestV3({ now: NOW })).supportedSources.map((s) => `${s.chain}/${s.dex}`);
@@ -59,7 +60,7 @@ describe("checkSourceHealth", () => {
 
   it("retries a failed probe before counting it", async () => {
     let calls = 0;
-    const flaky: HealthProbe = async (url) => (url === sources[0].subgraphUrlTemplate && ++calls === 1 ? "timeout" : null);
+    const flaky: HealthProbe = async (s) => (s.subgraphUrlTemplate === sources[0].subgraphUrlTemplate && ++calls === 1 ? "timeout" : null);
     await check(flaky);
     expect(calls).toBe(2);
     expect((await row(sources[0].id)).healthFailures).toBe(0);
@@ -72,12 +73,18 @@ describe("checkSourceHealth", () => {
     expect((await row(sources[0].id)).healthCheckedAt).toBe(0);
   });
 
-  it("leaves non-subgraph sources alone", async () => {
+  it("probes the Cosmos sources too, and leaves a source type it can't probe alone", async () => {
     const sqs = await seedSource({ chain: "osmosis", dex: "osmosis_sqs", sourceType: "rest-sqs", subgraphUrlTemplate: "https://sqs.test" });
+    const other = await seedSource({ chain: "solana", dex: "raydium", sourceType: "rest-unknown", subgraphUrlTemplate: "https://x.test" });
     const probe = vi.fn(passing);
     await checkSourceHealth({ now: NOW, probe, retryGapMs: 0 });
-    expect(probe).toHaveBeenCalledTimes(3);
-    expect((await row(sqs.id)).healthCheckedAt).toBe(0);
+    expect(probe).toHaveBeenCalledTimes(4);
+    expect((await row(sqs.id)).healthCheckedAt).toBe(NOW);
+    expect((await row(other.id)).healthCheckedAt).toBe(0);
+  });
+
+  it("has a Cosmos probe for every Cosmos transport go-ooo prices", () => {
+    expect(Object.keys(COSMOS_USD_PRICES).sort()).toEqual(Array.from(GOOOO_PRICEABLE_COSMOS_SOURCE_TYPES).sort());
   });
 
   it("refuses to run when a gateway source's API key is missing", async () => {
@@ -85,5 +92,40 @@ describe("checkSourceHealth", () => {
     await seedSource({ chain: "base", subgraphUrlTemplate: "https://gateway-arbitrum.network.thegraph.com/api/{API_KEY}/subgraphs/id/X" });
     await expect(check(passing)).rejects.toThrow(/THEGRAPH_API_KEY is not set/);
     expect((await row(sources[0].id)).healthCheckedAt).toBe(0);
+  });
+});
+
+describe("probeCosmosHealth", () => {
+  const OSMOSIS: HealthSource = { chain: "osmosis", dex: "osmosis_sqs", sourceType: "rest-sqs", subgraphUrlTemplate: "https://sqs.test", subgraphSchemaFamily: "custom" };
+  const pricing = (table: Record<string, number>): UsdPrices => async (_url, _chain, denoms) =>
+    new Map(denoms.filter((d) => d in table).map((d) => [d, table[d]]));
+
+  beforeEach(async () => {
+    const token = (contractAddress: string, symbol: string) => seedToken({ chain: "osmosis", contractAddress, symbol });
+    const [osmo, usdc, atom, junk] = [await token("uosmo", "OSMO"), await token("ibc/USDC", "USDC"), await token("ibc/ATOM", "ATOM"), await token("ibc/JUNK", "JUNK")];
+    const pair = (t0: string, t1: string, reserveUsd: number, status: TokenPairStatus) =>
+      seedPair(t0, t1, { chain: "osmosis", dex: "osmosis_sqs", reserveUsd, status });
+    await pair(osmo.id, usdc.id, 2_000_000, TokenPairStatus.AutoVerified);
+    await pair(atom.id, usdc.id, 500_000, TokenPairStatus.ManualVerified);
+    await pair(junk.id, usdc.id, 9_000_000, TokenPairStatus.AutoRejected); // deeper, but not verified
+  });
+
+  it("passes when both tokens of the deepest verified pair are priced", async () => {
+    let asked: string[] = [];
+    const prices: UsdPrices = async (url, chain, denoms) => {
+      asked = denoms;
+      return pricing({ uosmo: 0.047, "ibc/USDC": 1 })(url, chain, denoms);
+    };
+    expect(await probeCosmosHealth(OSMOSIS, prices)).toBeNull();
+    expect(asked).toEqual(["uosmo", "ibc/USDC"]);
+  });
+
+  it("fails naming the token its price API no longer prices", async () => {
+    expect(await probeCosmosHealth(OSMOSIS, pricing({ "ibc/USDC": 1 }))).toBe("OSMO not priced by rest-sqs");
+    expect(await probeCosmosHealth(OSMOSIS, pricing({}))).toBe("OSMO, USDC not priced by rest-sqs");
+  });
+
+  it("passes a source with no verified pair: it advertises nothing to price", async () => {
+    expect(await probeCosmosHealth({ ...OSMOSIS, dex: "other" }, pricing({}))).toBeNull();
   });
 });

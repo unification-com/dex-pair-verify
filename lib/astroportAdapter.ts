@@ -6,15 +6,10 @@
 // poolPage is mostly mapping, with no separate prices call. Only clean 2-asset AMM pool types are
 // kept; transmuter / staking adapters are skipped (degenerate or non-trading).
 
-import { AstroportPool, AstroportPoolsFetcher, DEFAULT_ASTROPORT_URL, fetchAstroportPools } from "./astroport";
+import { ASTROPORT_CHAIN_ID, AstroportPool, AstroportPoolsFetcher, DEFAULT_ASTROPORT_URL, fetchAstroportPools } from "./astroport";
 import { buildCosmosPage, CosmosPoolCandidate } from "./cosmosPage";
 import { cosmosAssetMap } from "./cosmosRegistry";
 import { emptyPoolFacts, IngestAdapter, NormalisedPage, PoolPageRequest } from "./ingestAdapter";
-
-// The Cosmos chain id Astroport is queried by, per our internal chain key.
-const ASTROPORT_CHAIN_ID: Record<string, string> = {
-  neutron: "neutron-1",
-};
 
 // Clean 2-asset AMM pool types whose spot price an oracle can trust. Excluded: transmuter (1:1 peg
 // bridge), sv_adapter + pair_xastro (staking adapters) — degenerate or non-trading as price feeds.

@@ -1,5 +1,5 @@
 // lib/sourceHealthState.ts
-// A source's subgraph health as a state, from the columns lib/sourceHealth.ts
+// A source's price-feed health as a state, from the columns lib/sourceHealth.ts
 // maintains. Free of Prisma so the /sources page can use it in the browser.
 
 // Consecutive failed checks that pause a source. One failure can be a passing

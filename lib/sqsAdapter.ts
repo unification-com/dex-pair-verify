@@ -14,11 +14,8 @@ import { cosmosAssetMap } from "./cosmosRegistry";
 import { emptyPoolFacts, IngestAdapter, NormalisedPage, PoolPageRequest } from "./ingestAdapter";
 import { DEFAULT_SQS_URL, fetchSqsPools, fetchSqsPrices, SqsPool, SqsPoolsFetcher, SqsPricesFetcher } from "./sqs";
 
-// The USD denom each Cosmos chain prices against on SQS (the unit /tokens/prices quotes in). Osmosis
-// uses the native Noble USDC. One entry per SQS-backed Cosmos chain.
-const QUOTE_DENOM: Record<string, string> = {
-  osmosis: "ibc/498A0751C798A0D9A389AA3691123DADA57DAA4FE165D5C75894505B876BA6E4",
-};
+// The Cosmos chains priced through SQS.
+const SQS_CHAINS: ReadonlySet<string> = new Set(["osmosis"]);
 
 const num = (s: string | undefined | null): number => {
   const n = parseFloat(s ?? "");
@@ -35,8 +32,7 @@ export const sqsAdapter: IngestAdapter = {
   async poolPage(chain, _dex, page, req: PoolPageRequest): Promise<NormalisedPage> {
     // SQS returns the entire pool set in one response, so page 1 ingests it and later pages are empty
     // (the orchestrator stops paginating). The source's last_page is therefore 1.
-    const quoteDenom = QUOTE_DENOM[chain];
-    if (page > 1 || !quoteDenom) {
+    if (page > 1 || !SQS_CHAINS.has(chain)) {
       return { poolCount: 0, pools: [], tokens: new Map(), facts: emptyPoolFacts() };
     }
 
@@ -62,7 +58,7 @@ export const sqsAdapter: IngestAdapter = {
       denoms.add(p.balances[0].denom);
       denoms.add(p.balances[1].denom);
     }
-    const prices = await pricesFetcher(sqsUrl, Array.from(denoms), quoteDenom);
+    const prices = await pricesFetcher(sqsUrl, Array.from(denoms));
 
     const candidates: CosmosPoolCandidate[] = matched.map((p) => ({
       poolId: String(poolIdOf(p)),

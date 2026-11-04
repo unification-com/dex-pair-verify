@@ -7,6 +7,11 @@
 
 export const DEFAULT_ASTROPORT_URL = "https://api.astroport.fi";
 
+// The Cosmos chain id Astroport is queried by, per our internal chain key.
+export const ASTROPORT_CHAIN_ID: Record<string, string> = {
+  neutron: "neutron-1",
+};
+
 // The slice of an Astroport pool asset we consume.
 export type AstroportAsset = {
   denom: string;
@@ -42,3 +47,32 @@ export const fetchAstroportPools: AstroportPoolsFetcher = async (baseUrl, chainI
     return [];
   }
 };
+
+// Each denom's USD price, from the deepest active pool holding it (absent when none prices it): the same
+// rule as go-ooo's Astroport client, which prices a pair as base USD ÷ target USD.
+export async function astroportUsdPrices(
+  baseUrl: string,
+  chain: string,
+  denoms: string[],
+  fetcher: AstroportPoolsFetcher = fetchAstroportPools,
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const chainId = ASTROPORT_CHAIN_ID[chain];
+  if (!chainId || denoms.length === 0) {
+    return out;
+  }
+  const wanted = new Set(denoms);
+  const depth = new Map<string, number>();
+  for (const p of await fetcher(baseUrl, chainId)) {
+    if (p.isDeregistered) {
+      continue;
+    }
+    for (const a of p.assets ?? []) {
+      if (wanted.has(a.denom) && a.priceUSD > 0 && (!depth.has(a.denom) || p.totalLiquidityUSD > (depth.get(a.denom) as number))) {
+        out.set(a.denom, a.priceUSD);
+        depth.set(a.denom, p.totalLiquidityUSD);
+      }
+    }
+  }
+  return out;
+}

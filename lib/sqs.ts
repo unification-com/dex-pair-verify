@@ -23,8 +23,8 @@ export type SqsPool = {
 };
 
 export type SqsPoolsFetcher = (baseUrl: string, minLiquidityCapUsd: number) => Promise<SqsPool[]>;
-// Resolve each base denom's price in quoteDenom terms (SQS quotes everything in a USD denom).
-export type SqsPricesFetcher = (baseUrl: string, baseDenoms: string[], quoteDenom: string) => Promise<Map<string, number>>;
+// Resolve each base denom's USD price (SQS quotes everything in a USD denom).
+export type SqsPricesFetcher = (baseUrl: string, baseDenoms: string[]) => Promise<Map<string, number>>;
 
 // The safety floor for the pool-discovery fetch when no curation floor is supplied. The FULL /pools
 // response (every Osmosis pool, ~4 MB) is too large to fetch reliably, so discovery is ALWAYS bounded
@@ -61,16 +61,19 @@ export const fetchSqsPools: SqsPoolsFetcher = async (baseUrl, minLiquidityCapUsd
 const PRICE_BATCH = 100;
 
 // Batch-resolve denom → USD price. SQS GET /tokens/prices?base=<d1,d2,...> responds with
-// {"<denom>":{"<quoteDenom>":"<price>"}}; we read out the quoteDenom price per base. Unparseable or
-// missing quotes are simply omitted (the caller treats an absent price as 0).
-export const fetchSqsPrices: SqsPricesFetcher = async (baseUrl, baseDenoms, quoteDenom) => {
+// {"<denom>":{"<usdDenom>":"<price>"}}: one quote per base, in whichever USD denom SQS prices in. We read
+// that single quote rather than a hard-coded denom, as go-ooo's client does: SQS moved from Noble USDC to
+// alloyed USDC (factory/…/alloyed/allUSDC), and the old fixed quote denom then priced nothing, so every
+// Osmosis pool was dropped at ingest. Unparseable or missing quotes are simply omitted (the caller treats
+// an absent price as 0).
+export const fetchSqsPrices: SqsPricesFetcher = async (baseUrl, baseDenoms) => {
   const out = new Map<string, number>();
   const base = trimUrl(baseUrl);
   for (let i = 0; i < baseDenoms.length; i += PRICE_BATCH) {
     const chunk = baseDenoms.slice(i, i + PRICE_BATCH);
     const json = (await httpGetJson(`${base}/tokens/prices?base=${chunk.join(",")}`)) as Record<string, Record<string, string>> | null;
     for (const [denom, quotes] of Object.entries(json ?? {})) {
-      const price = parseFloat(quotes?.[quoteDenom] ?? "");
+      const price = parseFloat(Object.values(quotes ?? {})[0] ?? "");
       if (Number.isFinite(price)) {
         out.set(denom, price);
       }

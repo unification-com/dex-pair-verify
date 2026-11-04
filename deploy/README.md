@@ -82,7 +82,9 @@ Runs Mondays and Thursdays at 03:00 (a run takes about 3 hours; the per-token re
 keep the API quotas in hand at this cadence). Logs: `$LOG_ROOT/YYYY-MM/dex-pair-verify-YYYY-MM-DD.log`.
 A `flock` guard skips a run if the previous one is still going.
 
-The health check (`yarn source-health`, about 60 Graph queries a run) probes every subgraph source.
+The health check (`yarn source-health`, about 60 Graph queries a run) probes every subgraph source,
+plus each Cosmos source (Osmosis SQS, Astroport on Neutron) by pricing its deepest verified pair the way
+go-ooo does.
 After 2 failed checks in a row a source is paused: left out of the go-ooo manifest and the priceable
 flag until a check passes again. The `/sources` page shows each source's state. It refuses to run
 without `THEGRAPH_API_KEY`, and records nothing when more than half the sources fail at once (that
