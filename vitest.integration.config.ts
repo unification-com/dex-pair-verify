@@ -17,7 +17,9 @@ export default defineConfig({
     exclude: ["node_modules/**", ".next/**", "dist/**", "build/**", "tmp/**"],
     setupFiles: ["./__tests__/integration/setup.ts"],
     pool: "forks",
-    poolOptions: { forks: { singleFork: true } },
+    // One fork for the whole suite (Vitest 4's form of the old poolOptions.forks.singleFork).
+    maxWorkers: 1,
+    isolate: false,
     fileParallelism: false,
     reporters: ["default"],
   },

@@ -8,6 +8,9 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  // tsconfig keeps JSX as-is for Next ("jsx": "preserve"), which vite's transformer honours, so
+  // compile it here for the component tests (React 17 has the automatic runtime).
+  oxc: { jsx: { runtime: "automatic" } },
   test: {
     // Default environment: node (covers lib/, import scripts).
     // React component tests can opt into jsdom per-file via
