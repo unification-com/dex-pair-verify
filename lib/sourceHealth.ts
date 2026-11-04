@@ -51,21 +51,29 @@ export const COSMOS_USD_PRICES: Record<string, UsdPrices> = {
   "rest-astroport": (baseUrl, chain, denoms) => astroportUsdPrices(baseUrl, chain, denoms),
 };
 
-// A Cosmos source passes when its price API returns a positive USD price for both tokens of its deepest
-// verified pair: the call go-ooo prices that source's pairs through (base USD ÷ target USD). With no
-// verified pair the source advertises nothing priceable, so there is nothing to check.
+// How many of a Cosmos source's deepest verified pairs one probe samples.
+const COSMOS_PROBE_PAIRS = 5;
+
+// A Cosmos source passes when its price API returns a positive USD price for both tokens of at least one
+// of its deepest verified pairs: the call go-ooo prices that source's pairs through (base USD ÷ target
+// USD). Any priced pair proves the feed works, so one token losing its price (Astroport dropped DYDX's,
+// 2026-11-04) doesn't pause every pair the source serves. With no verified pair the source advertises
+// nothing priceable, so there is nothing to check.
 export async function probeCosmosHealth(source: HealthSource, usdPrices: UsdPrices): Promise<string | null> {
   const token = { select: { contractAddress: true, symbol: true } };
-  const pair = await prisma.pair.findFirst({
+  const pairs = await prisma.pair.findMany({
     where: { chain: source.chain, dex: source.dex, status: { in: [...VERIFIED_STATUSES] } },
     orderBy: { reserveUsd: "desc" },
+    take: COSMOS_PROBE_PAIRS,
     select: { token0: token, token1: token },
   });
-  if (!pair) return null;
-  const tokens = [pair.token0, pair.token1];
-  const prices = await usdPrices(source.subgraphUrlTemplate, source.chain, tokens.map((t) => t.contractAddress));
-  const unpriced = tokens.filter((t) => !((prices.get(t.contractAddress) ?? 0) > 0)).map((t) => t.symbol);
-  return unpriced.length ? `${unpriced.join(", ")} not priced by ${source.sourceType}` : null;
+  if (pairs.length === 0) return null;
+  const tokens = pairs.flatMap((p) => [p.token0, p.token1]);
+  const prices = await usdPrices(source.subgraphUrlTemplate, source.chain, Array.from(new Set(tokens.map((t) => t.contractAddress))));
+  const priced = (t: { contractAddress: string }) => (prices.get(t.contractAddress) ?? 0) > 0;
+  if (pairs.some((p) => priced(p.token0) && priced(p.token1))) return null;
+  const unpriced = Array.from(new Set(tokens.filter((t) => !priced(t)).map((t) => t.symbol)));
+  return `no verified pair priced by ${source.sourceType} (unpriced: ${unpriced.join(", ")})`;
 }
 
 export const probeSourceHealth: HealthProbe = (source) => {

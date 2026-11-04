@@ -110,19 +110,23 @@ describe("probeCosmosHealth", () => {
     await pair(junk.id, usdc.id, 9_000_000, TokenPairStatus.AutoRejected); // deeper, but not verified
   });
 
-  it("passes when both tokens of the deepest verified pair are priced", async () => {
+  it("prices the tokens of the deepest verified pairs in one call, and passes when one pair is fully priced", async () => {
     let asked: string[] = [];
     const prices: UsdPrices = async (url, chain, denoms) => {
       asked = denoms;
       return pricing({ uosmo: 0.047, "ibc/USDC": 1 })(url, chain, denoms);
     };
     expect(await probeCosmosHealth(OSMOSIS, prices)).toBeNull();
-    expect(asked).toEqual(["uosmo", "ibc/USDC"]);
+    expect(asked).toEqual(["uosmo", "ibc/USDC", "ibc/ATOM"]);
   });
 
-  it("fails naming the token its price API no longer prices", async () => {
-    expect(await probeCosmosHealth(OSMOSIS, pricing({ "ibc/USDC": 1 }))).toBe("OSMO not priced by rest-sqs");
-    expect(await probeCosmosHealth(OSMOSIS, pricing({}))).toBe("OSMO, USDC not priced by rest-sqs");
+  it("passes when one token has lost its price but another verified pair still prices", async () => {
+    expect(await probeCosmosHealth(OSMOSIS, pricing({ "ibc/USDC": 1, "ibc/ATOM": 1.97 }))).toBeNull();
+  });
+
+  it("fails naming the unpriced tokens when no verified pair prices", async () => {
+    expect(await probeCosmosHealth(OSMOSIS, pricing({ "ibc/USDC": 1 }))).toBe("no verified pair priced by rest-sqs (unpriced: OSMO, ATOM)");
+    expect(await probeCosmosHealth(OSMOSIS, pricing({}))).toBe("no verified pair priced by rest-sqs (unpriced: OSMO, USDC, ATOM)");
   });
 
   it("passes a source with no verified pair: it advertises nothing to price", async () => {
