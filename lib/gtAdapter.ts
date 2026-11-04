@@ -88,12 +88,16 @@ async function gtFetch(url: string, label: string): Promise<{ data?: unknown[]; 
   return (await res.json()) as { data?: unknown[]; included?: unknown[] };
 }
 
+// A pools list response (`data` = pools, `included` = their embedded tokens) as a PoolPage. Shared by
+// every array-shaped pools endpoint (dex page, a token's pools, pools by address).
+const toPoolPage = (json: { data?: unknown[]; included?: unknown[] } | null): PoolPage => ({
+  pools: (json?.data as GtPool[]) ?? [],
+  tokens: ((json?.included as ({ type?: string } & GtToken)[]) ?? []).filter((r) => r.type === "token"),
+});
+
 const defaultPoolPageFetcher: PoolPageFetcher = async (chain, dex, page) => {
   const url = `${GT_BASE}/networks/${chain}/dexes/${dex}/pools?page=${page}&sort=h24_tx_count_desc&include=base_token,quote_token`;
-  const json = await gtFetch(url, `pools ${chain}/${dex} p${page}`);
-  const pools = (json?.data as GtPool[]) ?? [];
-  const tokens = ((json?.included as ({ type?: string } & GtToken)[]) ?? []).filter((r) => r.type === "token");
-  return { pools, tokens };
+  return toPoolPage(await gtFetch(url, `pools ${chain}/${dex} p${page}`));
 };
 
 // --- helpers -------------------------------------------------------------
@@ -294,10 +298,18 @@ export type TokenPoolsFetcher = (gtNetwork: string, address: string) => Promise<
 
 export const defaultTokenPoolsFetcher: TokenPoolsFetcher = async (gtNetwork, address) => {
   const url = `${GT_BASE}/networks/${gtNetwork}/tokens/${address}/pools?include=base_token,quote_token`;
-  const json = await gtFetch(url, `token-pools ${gtNetwork}/${address}`);
-  const pools = (json?.data as GtPool[]) ?? [];
-  const tokens = ((json?.included as ({ type?: string } & GtToken)[]) ?? []).filter((r) => r.type === "token");
-  return { pools, tokens };
+  return toPoolPage(await gtFetch(url, `token-pools ${gtNetwork}/${address}`));
+};
+
+// Fetch up to GT_MULTI_MAX known pools by address in one call (tokens embedded via `include`). A pool
+// GeckoTerminal no longer knows is simply absent from the reply. The CoinGecko Demo key allows 30
+// addresses a call (paid plans 50); each call costs one credit however many it carries.
+export const GT_MULTI_MAX = 30;
+export type PoolsByAddressFetcher = (gtNetwork: string, addresses: string[]) => Promise<PoolPage>;
+
+export const defaultPoolsByAddressFetcher: PoolsByAddressFetcher = async (gtNetwork, addresses) => {
+  const url = `${GT_BASE}/networks/${gtNetwork}/pools/multi/${addresses.join(",")}?include=base_token,quote_token`;
+  return toPoolPage(await gtFetch(url, `pools-multi ${gtNetwork} x${addresses.length}`));
 };
 
 // Fetch ONE pool by its contract address (tokens embedded via `include`). GT's single-pool endpoint

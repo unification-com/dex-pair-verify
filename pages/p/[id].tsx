@@ -111,6 +111,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     config: context.config,
     firstParty: context.firstParty,
     reserveTrusted: context.reserveTrusted,
+    lastSeenAt: context.lastSeenAt,
   });
 
   // Trust signals, derived from the same primitives as the fences.

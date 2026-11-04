@@ -38,7 +38,7 @@ const main = async (): Promise<void> => {
 
   step(1, "INGEST");
   const ing = await ingestAll({ log });
-  console.log(`→ ${ing.pairs} pairs ingested`);
+  console.log(`→ ${ing.pairs} pairs ingested · ${ing.refresh.returned}/${ing.refresh.requested} unseen pairs refreshed by address`);
 
   step(2, "IDENTITY CHECK");
   const id = await identityPass({ log });

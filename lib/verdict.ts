@@ -17,6 +17,7 @@
 // re-verify cron, the UI rescan).
 
 import { phantomLiquidityApplies } from "./phantomLiquidity";
+import { unseenTooLong } from "./unseen";
 import { TokenPairStatus } from "../types/types";
 
 export type Fence = {
@@ -305,6 +306,7 @@ export type VerdictConfig = {
   maxDecimals: number;
   hardMinLiquidityUsd: number; // below this is an auto-reject, regardless of score
   autoVerifyConfidence: number; // confidence band for auto-verify
+  maxUnseenDays: number; // a pair no ingest has returned for longer is auto-rejected (lib/unseen.ts)
 };
 
 export const DEFAULT_VERDICT_CONFIG: VerdictConfig = {
@@ -317,6 +319,8 @@ export const DEFAULT_VERDICT_CONFIG: VerdictConfig = {
   maxDecimals: 36,
   hardMinLiquidityUsd: 500,
   autoVerifyConfidence: 0.85,
+  // Two missed twice-weekly pipeline runs plus slack, so one failed fetch never takes a pair out.
+  maxUnseenDays: 8,
 };
 
 export type VerdictTokenInput = {
@@ -377,6 +381,8 @@ export type VerdictContext = {
   // it false (their reserveUsd IS price-derived, so the guard stays active). Narrower than firstParty,
   // which ALSO exempts the hard-floor + auto-reject branches.
   reserveTrusted: boolean;
+  // When an ingest last returned this pair (Pair.lastChecked, unix seconds; 0 = never stamped).
+  lastSeenAt: number;
 };
 
 // Stable machine-readable code for each adjudication outcome — one per branch of
@@ -386,6 +392,7 @@ export type VerdictContext = {
 // everywhere (DRY) and type-checked — a typo is a compile error, not a silent
 // miss.
 export const VERDICT_REASON = {
+  unseenTooLong: "unseenTooLong",
   intraChainImpostorLoser: "intraChainImpostorLoser",
   liquidityBelowHardFloor: "liquidityBelowHardFloor",
   phantomLiquidity: "phantomLiquidity",
@@ -500,16 +507,31 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
     token1PriceDeviation: f.price1.observed,
     token0Decimals: pair.token0.decimals,
     token1Decimals: pair.token1.decimals,
+    lastSeenAt: ctx.lastSeenAt,
   };
 
+  // The reason code rides along in the persisted evidence so a pass can select pairs by why they
+  // were judged (the pipeline's refresh re-fetches the ones taken out for going unseen).
   const result = (verdict: TokenPairStatus, reasonCode: VerdictReasonCode, reason: string): VerdictResult => ({
     verdict,
     reason,
     reasonCode,
-    evidence,
+    evidence: { ...evidence, reasonCode },
     canonicalKey: ctx.canonicalKey,
     confidence,
   });
+
+  // 0. Unseen too long: no ingest has returned this pair for over maxUnseenDays, so its data is stale
+  //    and the pool may be gone. Out of OoO pricing (first-party included: a pool its source no longer
+  //    returns can't be priced); fully automatic both ways, since the next ingest that sees it
+  //    re-judges it on fresh data.
+  if (unseenTooLong(ctx.lastSeenAt, now, config.maxUnseenDays)) {
+    return result(
+      TokenPairStatus.AutoRejected,
+      VERDICT_REASON.unseenTooLong,
+      `not returned by its source for over ${config.maxUnseenDays} days: out of OoO pricing until an ingest sees it again`,
+    );
+  }
 
   // 1. Intra-(chain, dex) impostor conflict loser → NotCurrentlyUsable. Checked
   //    BEFORE the hard impostor fence: a loser definitionally doesn't match the

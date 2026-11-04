@@ -249,10 +249,28 @@ const makeCtx = (over: Partial<VerdictContext> = {}): VerdictContext => ({
   canonicalFactoryAddress: UNI_V3_FACTORY,
   firstParty: false,
   reserveTrusted: false,
+  lastSeenAt: NOW,
   ...over,
 });
 
 describe("evaluatePair", () => {
+  it("auto-rejects a pair no ingest has returned for longer than maxUnseenDays, recording why", () => {
+    const days = DEFAULT_VERDICT_CONFIG.maxUnseenDays;
+    const r = evaluatePair(makePair(), makeCtx({ lastSeenAt: NOW - (days + 1) * 86_400 }));
+    expect(r.verdict).toBe(TokenPairStatus.AutoRejected);
+    expect(r.reasonCode).toBe(VERDICT_REASON.unseenTooLong);
+    expect(r.evidence.reasonCode).toBe(VERDICT_REASON.unseenTooLong);
+  });
+
+  it("judges a pair seen within the window, or never stamped, on its other fences", () => {
+    const days = DEFAULT_VERDICT_CONFIG.maxUnseenDays;
+    for (const lastSeenAt of [NOW - (days - 1) * 86_400, 0]) {
+      const r = evaluatePair(makePair(), makeCtx({ lastSeenAt }));
+      expect(r.verdict).toBe(TokenPairStatus.AutoVerified);
+      expect(r.evidence.reasonCode).toBe(r.reasonCode);
+    }
+  });
+
   it("auto-verifies a clean novel pair on fences alone (confidence 1.0)", () => {
     const r = evaluatePair(makePair(), makeCtx());
     expect(r.verdict).toBe(TokenPairStatus.AutoVerified);

@@ -23,7 +23,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
         minLiquidityUsd: c.minLiquidityUsd, hardMinLiquidityUsd: c.hardMinLiquidityUsd,
         minTxCount: c.minTxCount, minTurnoverRatio: c.minTurnoverRatio, minAgeHours: c.minAgeHours,
         maxPriceDeviationPercent: c.maxPriceDeviationPercent, minDecimals: c.minDecimals,
-        maxDecimals: c.maxDecimals, autoVerifyConfidence: c.autoVerifyConfidence,
+        maxDecimals: c.maxDecimals, autoVerifyConfidence: c.autoVerifyConfidence, maxUnseenDays: c.maxUnseenDays,
       },
     },
   };
@@ -32,6 +32,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
 type Config = {
   minLiquidityUsd: number; hardMinLiquidityUsd: number; minTxCount: number; minTurnoverRatio: number;
   minAgeHours: number; maxPriceDeviationPercent: number; minDecimals: number; maxDecimals: number; autoVerifyConfidence: number;
+  maxUnseenDays: number;
 };
 type Props = { config: Config };
 
@@ -41,6 +42,7 @@ const FENCES: { group: string; name: string; weight: number; hard?: boolean; wha
   { group: "Identity", name: "Both tokens identified", weight: FENCE_WEIGHTS.identified, what: "Each token is CoinGecko-listed OR confirmed real by ≥2 independent sources (token lists + GoPlus). The single biggest gate — a token with no identity has no reference price, so it can't be safely served." },
   { group: "Provenance", name: "Canonical address (per token)", weight: FENCE_WEIGHTS.canonical0, what: "The on-chain contract matches CoinGecko's canonical contract for that coin id. Catches impostors reusing a known symbol. A mismatch → review (it can also be a legit bridged/multi-contract variant — e.g. when MATIC rebranded to POL the canonical contract moved, so a MATIC-labelled pool can legitimately mismatch)." },
   { group: "Provenance", name: "Factory matches canonical", weight: FENCE_WEIGHTS.factory, what: "The pool was deployed by the DEX's real factory contract (read on-chain). A non-canonical factory → review (impostor, or a legit secondary factory)." },
+  { group: "Liquidity & Activity", name: "Seen by its source recently", weight: 0, hard: true, what: "The pool was returned by an ingest (the page ingest, or the pipeline's refresh of unseen pairs by address) within the window. HARD, and automatic both ways: a pool its source stops returning is taken out of OoO pricing, and is re-judged and put back as soon as an ingest returns it again. Not part of the confidence score." },
   { group: "Liquidity & Activity", name: "Liquidity floor", weight: FENCE_WEIGHTS.liquidity, what: "Reserve ≥ the soft floor. Below a separate HARD floor it auto-rejects — too thin to price / cheap to manipulate." },
   { group: "Liquidity & Activity", name: "Tx count", weight: FENCE_WEIGHTS.txCount, what: "Lifetime swaps ≥ floor — a deep-but-dormant pool can carry a stale price." },
   { group: "Liquidity & Activity", name: "Turnover", weight: FENCE_WEIGHTS.turnover, what: "24h volume ÷ liquidity ≥ floor — confirms the price is fresh, not just deep." },
@@ -54,7 +56,7 @@ const STATUS_NOTE: Partial<Record<TokenPairStatus, string>> = {
   [TokenPairStatus.AutoVerified]: "Passed the gates above the confidence bar — exported to the oracle.",
   [TokenPairStatus.ManualVerified]: "Operator-confirmed — confidence is forced to 100%, exported.",
   [TokenPairStatus.NeedsReview]: "Passed most gates but missed a soft one (usually identity, or a canonical/factory mismatch) — needs a human call. This is the daily queue.",
-  [TokenPairStatus.AutoRejected]: "Failed a hard gate (bogus decimals, or unidentified AND below the soft liquidity floor) — not usable.",
+  [TokenPairStatus.AutoRejected]: "Failed a hard gate (bogus decimals, unidentified AND below the soft liquidity floor, or not returned by its source lately) — not usable. Re-judged every run, so it comes back by itself if the gate clears.",
   [TokenPairStatus.ManualRejected]: "Operator-rejected.",
   [TokenPairStatus.Duplicate]: "A duplicate of another pair / token symbol.",
   [TokenPairStatus.NotCurrentlyUsable]: "Lost an intra-DEX impostor conflict (a different contract won the canonical match), or otherwise not currently usable.",
@@ -118,7 +120,8 @@ const Help: React.FC<Props> = ({ config }) => {
             Default thresholds: liquidity floor <span className="mono">${config.minLiquidityUsd}</span> (hard <span className="mono">${config.hardMinLiquidityUsd}</span>) ·
             min tx <span className="mono">{config.minTxCount}</span> · min turnover <span className="mono">{config.minTurnoverRatio}</span> ·
             min age <span className="mono">{config.minAgeHours}h</span> · max price deviation <span className="mono">{config.maxPriceDeviationPercent}%</span> ·
-            decimals <span className="mono">{config.minDecimals}–{config.maxDecimals}</span>.
+            decimals <span className="mono">{config.minDecimals}–{config.maxDecimals}</span> ·
+            max unseen <span className="mono">{config.maxUnseenDays}d</span>.
           </p>
         </section>
 

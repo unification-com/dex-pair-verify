@@ -11,7 +11,7 @@ import prisma from "../lib/prisma";
 const main = async (): Promise<void> => {
   console.log(`Ingesting from GeckoTerminal into "${targetDb()}"…`);
   const s = await ingestAll({ log: (m) => console.log(`  ${m}`) });
-  console.log(`Done. ${s.pairs} pairs ingested. Verdicts: ${JSON.stringify(s.tallies)}`);
+  console.log(`Done. ${s.pairs} pairs ingested, ${s.refresh.returned}/${s.refresh.requested} unseen pairs refreshed. Verdicts: ${JSON.stringify(s.tallies)}`);
 };
 
 main()

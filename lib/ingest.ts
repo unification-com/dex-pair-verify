@@ -12,7 +12,18 @@
 
 import { astroportAdapter } from "./astroportAdapter";
 import { isCosmosRegistryChain } from "./cosmosRegistry";
-import { gtAdapter, normaliseGtPage, defaultPoolByAddressFetcher, defaultTokenPoolsFetcher, PoolByAddressFetcher, PoolPageFetcher, TokenPoolsFetcher } from "./gtAdapter";
+import {
+  defaultPoolByAddressFetcher,
+  defaultPoolsByAddressFetcher,
+  defaultTokenPoolsFetcher,
+  GT_MULTI_MAX,
+  gtAdapter,
+  normaliseGtPage,
+  PoolByAddressFetcher,
+  PoolPageFetcher,
+  PoolsByAddressFetcher,
+  TokenPoolsFetcher,
+} from "./gtAdapter";
 import { IngestAdapter, NormalisedPool, NormalisedToken, PoolFacts } from "./ingestAdapter";
 import prisma from "./prisma";
 import { getSource, getSources, gtDexFor, gtNetworkFor, thresholdSeedData } from "./sourceConfig";
@@ -176,7 +187,8 @@ async function ingestOnePool(
     data: { token0PriceCg: t0.priceUsd, token1PriceCg: t1.priceUsd },
   });
 
-  const out = await runVerdictForPair(pairId);
+  // Judge on the same clock the pair was just stamped with (lastChecked feeds the unseen rule).
+  const out = await runVerdictForPair(pairId, { now });
   return out.skippedManual ? "skippedManual" : out.result?.verdict ?? "error";
 }
 
@@ -389,4 +401,52 @@ export async function ingestPairByAddress(
     return { ok: false, reason: "pair not found after ingest" };
   }
   return { ok: true, pairId: pair.id, token0Id: pair.token0Id, token1Id: pair.token1Id, verdict, pairSymbol: pair.pair };
+}
+
+// --- refresh known pools by address --------------------------------------
+
+export type PoolsByAddressResult = { requested: number; returned: number; tallies: Record<string, number> };
+
+// Re-fetch known pools of one (chain, dex) by address, GT_MULTI_MAX per call, and run each one
+// GeckoTerminal still returns through the same upsert + verdict path as the page ingest (so its
+// reserve, prices and lastChecked refresh). A pool it no longer returns is left alone: its lastChecked
+// stops moving, so the verdict's unseen rule takes it out once it has gone unseen too long, and the
+// next ingest that sees it brings it back. A GeckoTerminal feature (lookup by EVM pool address).
+export async function ingestPoolsByAddress(
+  chain: string,
+  dex: string,
+  addresses: string[],
+  opts: { now?: number; fetcher?: PoolsByAddressFetcher } = {},
+): Promise<PoolsByAddressResult> {
+  const now = opts.now ?? nowSeconds();
+  const fetcher = opts.fetcher ?? defaultPoolsByAddressFetcher;
+  const out: PoolsByAddressResult = { requested: addresses.length, returned: 0, tallies: {} };
+
+  const source = await getSource(chain, dex);
+  if (!source || addresses.length === 0) {
+    return out;
+  }
+  await ensureThreshold(chain, dex);
+  const gtNetwork = gtNetworkFor(source);
+  const gtDex = gtDexFor(source);
+
+  for (let i = 0; i < addresses.length; i += GT_MULTI_MAX) {
+    const { pools: gtPools, tokens: gtTokens } = await fetcher(gtNetwork, addresses.slice(i, i + GT_MULTI_MAX));
+    const { pools, tokens } = normaliseGtPage(chain, gtPools, gtTokens);
+    // Guard as the manual add does: only pools GeckoTerminal still tags with this DEX.
+    const own = pools.filter((p) => !p.dexId || p.dexId === gtDex);
+    if (own.length === 0) {
+      continue;
+    }
+    const facts = await gtAdapter.corroborate(chain, dex, own);
+    for (const pool of own) {
+      const key = await ingestOnePool(chain, dex, pool, tokens, now, facts);
+      if (key === null) {
+        continue;
+      }
+      out.tallies[key] = (out.tallies[key] ?? 0) + 1;
+      out.returned += 1;
+    }
+  }
+  return out;
 }

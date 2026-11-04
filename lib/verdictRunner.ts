@@ -47,6 +47,7 @@ export type PairWithTokens = {
   hooks: string | null;
   subgraphPresent: boolean | null;
   status: TokenPairStatus;
+  lastChecked: number;
   token0PriceCg: number;
   token0PriceDex: number;
   token1PriceCg: number;
@@ -174,6 +175,7 @@ export async function buildVerdictContext(
     // token-price-derived estimate, and its volume feed is unreliable — so the phantom-liquidity guard
     // must not apply (it would misfire on every deep pool). See VerdictContext.reserveTrusted.
     reserveTrusted: isCosmosRegistryChain(pair.chain),
+    lastSeenAt: pair.lastChecked,
   };
 
   const input: VerdictPairInput = {

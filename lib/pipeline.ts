@@ -7,7 +7,7 @@ import { isCosmosRegistryChain } from "./cosmosRegistry";
 import { countPairsToFactoryCheck, pairsToFactoryCheck, runFactoryCheckForPair } from "./factoryCheck";
 import { ingestableFirstParty } from "./firstParty";
 import { countTokensToIdentityCheck, runIdentityCheckForToken, tokensToIdentityCheck } from "./identityCheck";
-import { ingestPoolPage, ingestTokenPools } from "./ingest";
+import { ingestPoolPage, ingestPoolsByAddress, ingestTokenPools } from "./ingest";
 import prisma from "./prisma";
 import { ENRICH_RECHECK_TTL_S, RECHECK_TTL_S } from "./recheck";
 import { countTokensToReviewEnrich, tokensToReviewEnrich } from "./reviewEnrich";
@@ -20,9 +20,14 @@ import {
 } from "./scamCheck";
 import { runSecurityScanForToken } from "./securitySignals";
 import { getSources, gtDexFor, gtNetworkFor, isIngestableSource } from "./sourceConfig";
+import { VERIFIED_STATUSES } from "./status";
 import { nowSeconds } from "./time";
 import { demoteScamFlaggedTokens } from "./tokenStatus";
+import { VERDICT_REASON } from "./verdict";
 import { runVerdictForPair } from "./verdictRunner";
+import { TokenPairStatus } from "../types/types";
+
+import type { PoolsByAddressFetcher } from "./gtAdapter";
 
 export type Logger = (msg: string) => void;
 const noop: Logger = () => {};
@@ -76,10 +81,11 @@ async function drainBatches(
 // each page makes one keyed call through cgKeyedFetch, which spaces calls under
 // the Demo key's per-minute window. No separate page delay needed here.
 
-export type IngestSummary = { pairs: number; tallies: Record<string, number> };
+export type IngestSummary = { pairs: number; tallies: Record<string, number>; refresh: RefreshSummary };
 
 export async function ingestAll(opts: { log?: Logger } = {}): Promise<IngestSummary> {
   const log = opts.log ?? noop;
+  const startedAt = nowSeconds();
   const tallies: Record<string, number> = {};
   let pairs = 0;
 
@@ -115,7 +121,70 @@ export async function ingestAll(opts: { log?: Logger } = {}): Promise<IngestSumm
   }
   pairs += fp.pools;
 
-  return { pairs, tallies };
+  // Re-fetch by address what the page ingest didn't see this run, so OoO's pairs stay fresh.
+  const refresh = await refreshUnseenPass({ since: startedAt, log });
+  for (const [k, v] of Object.entries(refresh.tallies)) {
+    tallies[k] = (tallies[k] ?? 0) + v;
+  }
+
+  return { pairs, tallies, refresh };
+}
+
+// How long a pair taken out for going unseen keeps being re-fetched by address. Past this only the
+// page ingest can bring it back, so a pool that is gone for good stops costing calls.
+const UNSEEN_REFRESH_HORIZON_S = 120 * 86_400;
+
+export type RefreshSummary = { requested: number; returned: number; tallies: Record<string, number> };
+
+// The page ingest only reads each DEX's top pools by 24h transactions, so a verified pair that has a
+// quiet day drops out of its window and would never be refreshed (its stored reserve and prices go
+// stale). This re-fetches by address every EVM pair the page ingest didn't return since `since` that is
+// verified, or was taken out for going unseen within the horizon (so a pool that comes back to life is
+// re-verified). Cosmos sources need none: their ingest fetches the whole pool set every run.
+export async function refreshUnseenPass(
+  opts: { since: number; now?: number; log?: Logger; fetcher?: PoolsByAddressFetcher },
+): Promise<RefreshSummary> {
+  const log = opts.log ?? noop;
+  const now = opts.now ?? nowSeconds();
+  const summary: RefreshSummary = { requested: 0, returned: 0, tallies: {} };
+
+  const pairs = await prisma.pair.findMany({
+    where: {
+      lastChecked: { lt: opts.since },
+      OR: [
+        { status: { in: [...VERIFIED_STATUSES] } },
+        {
+          status: TokenPairStatus.AutoRejected,
+          lastChecked: { gt: now - UNSEEN_REFRESH_HORIZON_S },
+          verdictEvidence: { path: ["reasonCode"], equals: VERDICT_REASON.unseenTooLong },
+        },
+      ],
+    },
+    select: { chain: true, dex: true, contractAddress: true },
+  });
+
+  const ingestable = new Set((await getSources()).filter(isIngestableSource).map((s) => `${s.chain}/${s.dex}`));
+  const bySource = new Map<string, { chain: string; dex: string; addresses: string[] }>();
+  for (const p of pairs) {
+    const key = `${p.chain}/${p.dex}`;
+    if (isCosmosRegistryChain(p.chain) || !ingestable.has(key)) {
+      continue;
+    }
+    const group = bySource.get(key) ?? { chain: p.chain, dex: p.dex, addresses: [] };
+    group.addresses.push(p.contractAddress);
+    bySource.set(key, group);
+  }
+
+  for (const [key, g] of Array.from(bySource.entries())) {
+    const res = await ingestPoolsByAddress(g.chain, g.dex, g.addresses, { now, fetcher: opts.fetcher });
+    summary.requested += res.requested;
+    summary.returned += res.returned;
+    for (const [k, v] of Object.entries(res.tallies)) {
+      summary.tallies[k] = (summary.tallies[k] ?? 0) + v;
+    }
+    log(`[refresh] ${key}: ${res.returned}/${res.requested} unseen pools returned`);
+  }
+  return summary;
 }
 
 export type FirstPartySummary = { pools: number; tallies: Record<string, number> };

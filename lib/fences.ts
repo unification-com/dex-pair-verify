@@ -18,6 +18,7 @@
 // UI can explain a verdict without importing the prisma-backed engine).
 
 import { phantomLiquidityApplies } from "./phantomLiquidity";
+import { unseenDays } from "./unseen";
 
 export type FenceGroup = "Identity" | "Provenance" | "Liquidity & Activity" | "Price";
 
@@ -58,6 +59,7 @@ export type FenceConfig = {
   maxDecimals: number;
   hardMinLiquidityUsd: number;
   autoVerifyConfidence: number;
+  maxUnseenDays: number;
 };
 
 export const FENCE_WEIGHTS: Record<string, number> = {
@@ -91,6 +93,7 @@ export function deriveFences(args: {
   config: FenceConfig;
   firstParty?: boolean; // OUR token — liquidity floors + phantom guard waived (mirrors verdict.ts)
   reserveTrusted?: boolean; // authoritative on-chain reserve (Cosmos SQS) — phantom guard waived (mirrors verdict.ts)
+  lastSeenAt?: number; // when an ingest last returned the pair (Pair.lastChecked); 0/absent = unknown
   now?: number; // unix seconds, defaults to Date.now()/1000
 }): UiFence[] {
   const { token0: t0, token1: t1, config: c } = args;
@@ -145,6 +148,19 @@ export function deriveFences(args: {
   }
 
   // Liquidity & Activity
+  {
+    // Not part of the confidence score (weight 0): a gate, like the verdict's step 0.
+    const days = unseenDays(args.lastSeenAt ?? 0, now);
+    const ok = days === null ? null : days <= c.maxUnseenDays;
+    F.push({
+      key: "seen", group: "Liquidity & Activity", label: "Seen by its source recently",
+      ok, observed: days === null ? "unknown" : days < 1 ? "today" : `${Math.floor(days)}d ago`,
+      threshold: `≤ ${c.maxUnseenDays}d`, weight: 0, hard: true,
+      note: ok === null ? "never stamped by an ingest — skipped"
+        : ok ? "returned by its source within the window"
+        : "not returned by its source lately → out of OoO pricing until an ingest sees it again",
+    });
+  }
   F.push({
     key: "liquidity", group: "Liquidity & Activity", label: "Liquidity meets floor",
     ok: effectiveReserve >= c.minLiquidityUsd, observed: usd(args.reserveUsd), threshold: "floor " + usd(c.minLiquidityUsd),
