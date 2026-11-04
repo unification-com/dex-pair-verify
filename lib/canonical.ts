@@ -1,0 +1,190 @@
+// Canonical pair identification — the core of the verdict engine (A.2).
+//
+// Two pairs are the SAME logical pair when their two tokens resolve to the
+// same CoinGecko coin ids, regardless of chain or DEX. The canonical key is
+// `min(cgId0, cgId1):max(cgId0, cgId1)` — order-independent so WETH-USDC and
+// USDC-WETH (and the same pair on another DEX/chain) collapse to one key. That
+// is how the cross-DEX / cross-chain sibling problem gets solved: a novel pair
+// that shares a key with an already-verified sibling is very likely real.
+//
+// `coingeckoCoinId` is populated from GeckoTerminal's
+// `/networks/{chain}/tokens/...` response (see lib/ingest.ts). A token with no
+// coin id (empty string) cannot be keyed — canonicalKey returns null, and such
+// pairs route to NeedsReview rather than auto-anything.
+
+import { utils as web3Utils } from "web3";
+
+import { cgKeyedFetch } from "./coingecko";
+import prisma from "./prisma";
+import { nowSeconds } from "./time";
+
+// Minimal structural input — deliberately not PairProps/Prisma-shaped so the
+// function stays pure and testable from any caller (ingest, cron, UI rescan).
+export type TokenCgId = { coingeckoCoinId?: string | null };
+export type PairCgIds = { token0?: TokenCgId | null; token1?: TokenCgId | null };
+
+// Normalise a raw coin id to its comparison form: trimmed + lower-cased.
+// CoinGecko ids are already lower-case hyphenated slugs (e.g. "usd-coin"),
+// but defend against stray casing/whitespace from upstream.
+const normaliseCgId = (id: string | null | undefined): string =>
+  (id ?? "").trim().toLowerCase();
+
+// The colon separator is safe: CoinGecko ids contain [a-z0-9-] but never ":".
+const KEY_SEPARATOR = ":";
+
+// Returns the order-independent canonical key for a pair, or null when either
+// token lacks a CoinGecko coin id (so the pair cannot be canonically keyed).
+export function canonicalKey(pair: PairCgIds): string | null {
+  const a = normaliseCgId(pair.token0?.coingeckoCoinId);
+  const b = normaliseCgId(pair.token1?.coingeckoCoinId);
+  if (!a || !b) {
+    return null;
+  }
+  return a <= b ? `${a}${KEY_SEPARATOR}${b}` : `${b}${KEY_SEPARATOR}${a}`;
+}
+
+// --- Canonical contract resolution (impostor tie-break, A.2) -------------
+//
+// When two tokens on the same chain share a CoinGecko coin id but have
+// different contract addresses, the verdict engine must decide which is the
+// real one. CoinGecko's /coins/{id} endpoint returns a `platforms` map
+// (CG-asset-platform-id -> contract address); the token whose address matches
+// CG's entry for that chain is canonical. Results are cached in the
+// CanonicalAddress table (A.1) with a 30-day TTL so the rare conflict path
+// doesn't hammer CoinGecko's free-tier rate limit.
+
+// CoinGecko asset-platform id per GeckoTerminal-style chain key (the `chain`
+// field stored on Pair/Token). null = the chain isn't indexed by CoinGecko
+// (e.g. qom), so no canonical lookup is possible and the fence is skipped.
+const CG_PLATFORM_BY_CHAIN: Record<string, string | null> = {
+  eth: "ethereum",
+  polygon_pos: "polygon-pos",
+  bsc: "binance-smart-chain",
+  xdai: "xdai",
+  arbitrum: "arbitrum-one",
+  base: "base",
+  optimism: "optimistic-ethereum",
+  avax: "avalanche",
+  qom: null,
+};
+
+export const cgPlatformForChain = (chain: string): string | null =>
+  CG_PLATFORM_BY_CHAIN[chain] ?? null;
+
+// Chains CoinGecko can resolve a canonical contract on — scopes the
+// canonical-check batch query (T3).
+export const CG_SUPPORTED_CHAINS: string[] = Object.keys(CG_PLATFORM_BY_CHAIN).filter(
+  (chain) => CG_PLATFORM_BY_CHAIN[chain] !== null,
+);
+
+const THIRTY_DAYS_SECONDS = 30 * 24 * 60 * 60;
+
+// The platforms map from CoinGecko, keyed by CG asset-platform id. Injectable
+// so the cache logic can be tested without a live CoinGecko call.
+export type PlatformsFetcher = (cgId: string) => Promise<Record<string, string> | null>;
+
+const defaultPlatformsFetcher: PlatformsFetcher = async (cgId) => {
+  const url =
+    `https://api.coingecko.com/api/v3/coins/${encodeURIComponent(cgId)}` +
+    `?localization=false&tickers=false&market_data=false` +
+    `&community_data=false&developer_data=false&sparkline=false`;
+  // Rate-paced through the shared CoinGecko gate (keyed limit when a Demo key
+  // is set) so the canonical pass can't overrun the per-minute window.
+  const res = await cgKeyedFetch(url, `canonical ${cgId}`);
+  if (!res) {
+    return null;
+  }
+  const json = await res.json();
+  return (json?.platforms as Record<string, string>) ?? null;
+};
+
+// Read-only cached canonical address (T3). Returns the cached contract address
+// for (cgId, chain), or null when there's no cache entry or it's a negative
+// ("") entry. No network — the canonical-check pass keeps the cache warm so the
+// impostor fence can run on EVERY pair, not just intra-chain conflicts. Stale
+// entries are still returned (a slightly-stale canonical beats none; the batch
+// pass refreshes on its 30-day TTL).
+export async function getCachedCanonicalAddress(cgId: string, chain: string): Promise<string | null> {
+  if (!cgId || !cgPlatformForChain(chain)) {
+    return null;
+  }
+  const cached = await prisma.canonicalAddress.findUnique({
+    where: { coingeckoCoinId_chain: { coingeckoCoinId: cgId, chain } },
+  });
+  return cached?.contractAddress || null;
+}
+
+// Resolve the canonical (CoinGecko-blessed) contract address for a coin on a
+// chain, or null when the chain isn't on CoinGecko / the coin has no contract
+// there. Reads/refreshes the 30-day CanonicalAddress cache. A confirmed
+// "no address" answer is cached as "" so repeated misses don't re-hit CG.
+export async function fetchCanonicalContract(
+  cgId: string,
+  chain: string,
+  opts: { now?: number; fetcher?: PlatformsFetcher } = {},
+): Promise<string | null> {
+  const platform = cgPlatformForChain(chain);
+  if (!cgId || !platform) {
+    return null;
+  }
+
+  const now = opts.now ?? nowSeconds();
+  const fetcher = opts.fetcher ?? defaultPlatformsFetcher;
+
+  const cached = await prisma.canonicalAddress.findUnique({
+    where: { coingeckoCoinId_chain: { coingeckoCoinId: cgId, chain } },
+  });
+  if (cached && now - cached.lastChecked < THIRTY_DAYS_SECONDS) {
+    return cached.contractAddress || null;
+  }
+
+  const platforms = await fetcher(cgId);
+  // A null platforms map means the fetch failed transiently (non-200 — rate
+  // limit / network / 404). Do NOT cache that: caching "" here would poison the
+  // 30-day cache on a CoinGecko 429 and make every batch revalidation skip the
+  // impostor fence. Return null so the next run retries.
+  if (platforms === null) {
+    return null;
+  }
+
+  // A definitive answer (200): the address for this chain, or "" when the coin
+  // exists but has no contract here — the latter is safe to negative-cache.
+  const raw = platforms[platform];
+  const address = raw && web3Utils.isAddress(raw) ? web3Utils.toChecksumAddress(raw) : "";
+
+  await prisma.canonicalAddress.upsert({
+    where: { coingeckoCoinId_chain: { coingeckoCoinId: cgId, chain } },
+    update: { contractAddress: address, lastChecked: now },
+    create: { coingeckoCoinId: cgId, chain, contractAddress: address, lastChecked: now },
+  });
+
+  return address || null;
+}
+
+// Resolve a CoinGecko coin's contract address on every chain we map (via the
+// platforms map), checksummed to match stored token addresses. Used by the
+// manual-add spider to find the same token on other supported chains. Returns
+// { chain: address } only for chains where the coin has a contract; {} on a
+// failed/empty fetch.
+export async function tokenContractsByChain(
+  cgId: string,
+  opts: { fetcher?: PlatformsFetcher } = {},
+): Promise<Record<string, string>> {
+  if (!cgId) {
+    return {};
+  }
+  const fetcher = opts.fetcher ?? defaultPlatformsFetcher;
+  const platforms = await fetcher(cgId);
+  if (!platforms) {
+    return {};
+  }
+  const out: Record<string, string> = {};
+  for (const chain of CG_SUPPORTED_CHAINS) {
+    const platform = cgPlatformForChain(chain);
+    const raw = platform ? platforms[platform] : null;
+    if (raw && web3Utils.isAddress(raw)) {
+      out[chain] = web3Utils.toChecksumAddress(raw);
+    }
+  }
+  return out;
+}

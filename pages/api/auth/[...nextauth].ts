@@ -1,7 +1,9 @@
+import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import { NextApiHandler } from 'next';
 import NextAuth from 'next-auth';
-import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import GitHubProvider from 'next-auth/providers/github';
+
+import { isAllowedOperator } from '../../../lib/adminAllow';
 import prisma from '../../../lib/prisma';
 
 const authHandler: NextApiHandler = (req, res) => NextAuth(req, res, authOptions);
@@ -12,20 +14,31 @@ export const authOptions = {
         GitHubProvider({
             clientId: process.env.GITHUB_ID,
             clientSecret: process.env.GITHUB_SECRET,
+            // GitHub's OAuth callback has carried an RFC 9207 `iss` parameter since April 2026, and
+            // openid-client rejects it unless the provider declares that issuer. next-auth 4.24.14
+            // sets this default; until we're on it, sign-in fails without it.
+            issuer: "https://github.com/login/oauth",
         }),
     ],
     adapter: PrismaAdapter(prisma),
     secret: process.env.SECRET,
     callbacks: {
-        async session({ session, token, user }) {
-            // ToDo - migrate to DB
-            let isAuthorised = false
-            const allowedUsers = process.env.ALLOWED_USERS.split(",")
-            if(allowedUsers.includes(user.email)) {
-                isAuthorised = true
-            }
-            session.user.isAuthotised = isAuthorised
+        // Deny sign-in for non-allow-listed GitHub users — they never establish a
+        // session and simply browse as the public. Keyed on the immutable GitHub id
+        // (account.providerAccountId).
+        async signIn({ account, profile }: { account?: { providerAccountId?: string | null } | null; profile?: { email?: string | null } | null }) {
+            return isAllowedOperator({ githubId: account?.providerAccountId, email: profile?.email })
+        },
+        async session({ session, user }) {
+            // Re-validate on every session read (so removing an id from the allow-list
+            // locks the user out on their next request). The GitHub id lives on the
+            // linked Account row — the DB `user` here carries no provider id.
+            const account = await prisma.account.findFirst({
+                where: { userId: user.id, provider: "github" },
+                select: { providerAccountId: true },
+            })
+            session.user.isAuthorised = isAllowedOperator({ githubId: account?.providerAccountId, email: user.email })
             return session
-        }
-    }
+        },
+    },
 };

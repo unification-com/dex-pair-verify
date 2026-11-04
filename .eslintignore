@@ -1,0 +1,10 @@
+# ESLint ignore — same shape as the runtime ignorePatterns in .eslintrc.js
+# (kept here as a fallback for tooling that doesn't read the rc-level ignores).
+
+node_modules/
+.next/
+out/
+dist/
+build/
+tmp/
+next-env.d.ts

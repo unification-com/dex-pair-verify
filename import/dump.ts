@@ -1,0 +1,210 @@
+// Maintenance CLI for destructive / bulk DB operations. Named-subcommand CLI
+// with a yes/no confirmation on every destructive op; each confirmation prints
+// the target database so you can't truncate the wrong one. Run with:
+//   yarn dump <command> [args]
+//
+// Commands:
+//   truncate-all                 Truncate EVERY table. Irreversible.
+//   truncate-dex                 Truncate the DEX + cache tables (pairs, tokens,
+//                                thresholds, duplicates, staging, canonical
+//                                addresses) but NOT the auth tables — a clean
+//                                reset for re-ingest without losing your login.
+//   truncate-staging             Truncate only the PairStaging table.
+//   delete-pairs <chain> <dex>   Delete pairs (+ duplicate links + staging) for one (chain, dex).
+//   delete-tokens <chain>        Delete tokens (+ duplicate-symbol links) for one chain.
+//   set-created-at               Backfill createdAt for legacy rows where it is 0.
+//   set-status-changed-at        Backfill statusChangedAt from createdAt where it is 0.
+
+import * as readline from "readline";
+
+import { PrismaClient } from "@prisma/client";
+
+import { nowSeconds } from "../lib/time";
+
+const prisma = new PrismaClient();
+
+const targetDb = (): string => {
+  const url = process.env.POSTGRES_PRISMA_URL || "";
+  const match = url.match(/\/([^/?]+)(\?|$)/);
+  return match ? match[1] : "(unknown)";
+};
+
+const confirm = (question: string): Promise<boolean> =>
+  new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(`${question} (type "yes" to proceed) `, (answer) => {
+      rl.close();
+      resolve(answer.trim().toLowerCase() === "yes");
+    });
+  });
+
+const truncateAll = async (): Promise<void> => {
+  const tablenames = await prisma.$queryRaw<{ tablename: string }[]>`SELECT tablename FROM pg_tables WHERE schemaname='public'`;
+
+  const tables = tablenames
+    .map(({ tablename }) => tablename)
+    .filter((name) => name !== "_prisma_migrations")
+    .map((name) => `"public"."${name}"`)
+    .join(", ");
+
+  console.log("Truncating", tables);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${tables} CASCADE;`);
+};
+
+// DEX + cache tables — everything except the next-auth tables.
+const DEX_TABLES = [
+  "DuplicatePairs",
+  "DuplicateTokenSymbols",
+  "Pair",
+  "PairStaging",
+  "Token",
+  "Threshold",
+  "CanonicalAddress",
+];
+
+const truncateDex = async (): Promise<void> => {
+  const tables = DEX_TABLES.map((name) => `"public"."${name}"`).join(", ");
+  console.log("Truncating", tables);
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${tables} RESTART IDENTITY CASCADE;`);
+};
+
+const truncateStaging = async (): Promise<void> => {
+  console.log("Truncating PairStaging");
+  await prisma.$executeRawUnsafe(`TRUNCATE TABLE "public"."PairStaging" CASCADE;`);
+};
+
+const deleteFromPairs = async (chain: string, dex: string): Promise<void> => {
+  const pairsToDel = await prisma.pair.findMany({ where: { chain, dex } });
+
+  for (const p of pairsToDel) {
+    console.log("delete pair", p.id);
+    await prisma.duplicatePairs.deleteMany({
+      where: { OR: [{ originalPairId: p.id }, { duplicatePairId: p.id }] },
+    });
+    await prisma.pair.delete({ where: { id: p.id } });
+  }
+
+  await prisma.pairStaging.deleteMany({ where: { chain, dex } });
+};
+
+const deleteTokens = async (chain: string): Promise<void> => {
+  const tokensToDel = await prisma.token.findMany({ where: { chain } });
+
+  for (const t of tokensToDel) {
+    console.log("delete token", t.id);
+    await prisma.duplicateTokenSymbols.deleteMany({
+      where: { OR: [{ originalTokenId: t.id }, { duplicateTokenId: t.id }] },
+    });
+    await prisma.token.delete({ where: { id: t.id } });
+  }
+};
+
+const setCreatedAt = async (): Promise<void> => {
+  const now = nowSeconds();
+  const tokens = await prisma.token.updateMany({ where: { createdAt: 0 }, data: { createdAt: now } });
+  const pairs = await prisma.pair.updateMany({ where: { createdAt: 0 }, data: { createdAt: now } });
+  console.log(`Backfilled createdAt on ${tokens.count} tokens, ${pairs.count} pairs`);
+};
+
+// Rows from before statusChangedAt existed: their last known status change is their creation.
+const setStatusChangedAt = async (): Promise<void> => {
+  const tokens = await prisma.$executeRaw`UPDATE "Token" SET "statusChangedAt" = "createdAt" WHERE "statusChangedAt" = 0`;
+  const pairs = await prisma.$executeRaw`UPDATE "Pair" SET "statusChangedAt" = "createdAt" WHERE "statusChangedAt" = 0`;
+  console.log(`Backfilled statusChangedAt on ${tokens} tokens, ${pairs} pairs`);
+};
+
+const usage = (): void => {
+  console.log(`Usage: yarn dump <command> [args]
+
+Commands:
+  truncate-all                 Truncate EVERY table. Irreversible.
+  truncate-dex                 Truncate DEX + cache tables (keeps auth/login).
+  truncate-staging             Truncate only PairStaging.
+  delete-pairs <chain> <dex>   Delete pairs for one (chain, dex).
+  delete-tokens <chain>        Delete tokens for one chain.
+  set-created-at               Backfill createdAt for legacy rows (createdAt = 0).
+  set-status-changed-at        Backfill statusChangedAt from createdAt (statusChangedAt = 0).`);
+};
+
+const main = async (): Promise<void> => {
+  const [cmd, ...args] = process.argv.slice(2);
+  const db = targetDb();
+
+  switch (cmd) {
+    case "truncate-all": {
+      if (!(await confirm(`Truncate ALL tables in "${db}"? This is irreversible.`))) {
+        console.log("Aborted.");
+        return;
+      }
+      await truncateAll();
+      console.log("Done.");
+      break;
+    }
+    case "truncate-dex": {
+      if (!(await confirm(`Truncate the DEX + cache tables in "${db}" (keeps auth/login)?`))) {
+        console.log("Aborted.");
+        return;
+      }
+      await truncateDex();
+      console.log("Done.");
+      break;
+    }
+    case "truncate-staging": {
+      if (!(await confirm(`Truncate PairStaging in "${db}"?`))) {
+        console.log("Aborted.");
+        return;
+      }
+      await truncateStaging();
+      console.log("Done.");
+      break;
+    }
+    case "delete-pairs": {
+      const [chain, dex] = args;
+      if (!chain || !dex) {
+        console.error("delete-pairs requires <chain> <dex>");
+        process.exitCode = 1;
+        return;
+      }
+      if (!(await confirm(`Delete all ${chain}/${dex} pairs in "${db}"?`))) {
+        console.log("Aborted.");
+        return;
+      }
+      await deleteFromPairs(chain, dex);
+      console.log("Done.");
+      break;
+    }
+    case "delete-tokens": {
+      const [chain] = args;
+      if (!chain) {
+        console.error("delete-tokens requires <chain>");
+        process.exitCode = 1;
+        return;
+      }
+      if (!(await confirm(`Delete all ${chain} tokens in "${db}"?`))) {
+        console.log("Aborted.");
+        return;
+      }
+      await deleteTokens(chain);
+      console.log("Done.");
+      break;
+    }
+    case "set-created-at": {
+      await setCreatedAt();
+      break;
+    }
+    case "set-status-changed-at": {
+      await setStatusChangedAt();
+      break;
+    }
+    default:
+      usage();
+      break;
+  }
+};
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exitCode = 1;
+  })
+  .finally(() => prisma.$disconnect());

@@ -1,0 +1,22 @@
+[Unit]
+Description=dex-pair-verify OoO fulfilment watcher (enqueues receipts for the BEACON writer)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=500
+StartLimitBurst=5
+
+[Service]
+Type=simple
+# EDIT: the user that owns the checkout and the nvm install.
+User=youruser
+# EDIT: absolute path to deploy/fulfilment-watcher.sh inside your checkout.
+# Launched via bash so nvm can be sourced (see beacon-writer.service for the rationale).
+# Read-only — holds no signing key.
+ExecStart=/bin/bash /home/youruser/dex-pair-verify/deploy/fulfilment-watcher.sh
+Restart=on-failure
+RestartSec=15s
+KillSignal=SIGINT
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

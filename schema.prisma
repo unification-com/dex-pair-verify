@@ -12,14 +12,14 @@ datasource db {
 // Authentication (next-auth) tables
 
 model User {
-  id                  String          @id @default(cuid())
-  name                String?
-  email               String?         @unique
-  emailVerified       DateTime?
-  image               String?
-  accounts            Account[]
-  sessions            Session[]
-  Authenticator       Authenticator[]
+  id            String          @id @default(cuid())
+  name          String?
+  email         String?         @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  Authenticator Authenticator[]
 }
 
 model Account {
@@ -78,14 +78,47 @@ model Authenticator {
 
 // DEX Tool tables
 
+// Verdict / verification status for Pairs and Tokens.
+//
+// Mirrored as a string enum in types/types.ts so client components can use it
+// without importing @prisma/client (which would pull the query engine into the
+// browser bundle). The member names here MUST match that mirror exactly.
+enum TokenPairStatus {
+  Unverified
+  AutoVerified
+  AutoRejected
+  ManualVerified
+  ManualRejected
+  NeedsReview
+  Duplicate
+  NotCurrentlyUsable
+}
+
+// How a Pair/Token reached its current status. Mirrored in types/types.ts.
+enum VerificationMethod {
+  Import // set at ingest, awaiting a verdict
+  Manual // operator set the status directly
+  Cascade // inherited from a token-status change on a sibling
+  Auto // assigned by the verdict engine
+}
+
+// Lifecycle of an auto-discovered (or operator-pasted) DEX/network candidate
+// before it is promoted into SupportedSource (Phase 4, 4.A). Mirrored in
+// types/types.ts.
+enum CandidateStatus {
+  Pending // surfaced by discovery / paste, awaiting operator review
+  Enabled // promoted to a SupportedSource row
+  Rejected // operator dismissed; discovery stops re-surfacing it
+}
+
 model Pair {
-  id                       String           @id @default(cuid())
+  id                       String             @id @default(cuid())
   chain                    String
   dex                      String
   contractAddress          String
-  token0                   Token            @relation("Token0", fields: [token0Id], references: [id])
+  token0                   Token              @relation("Token0", fields: [token0Id], references: [id])
   token0Id                 String
-  token1                   Token            @relation("Token1", fields: [token1Id], references: [id])
+  token1                   Token              @relation("Token1", fields: [token1Id], references: [id])
   token1Id                 String
   pair                     String
   reserve0                 Float
@@ -101,17 +134,52 @@ model Pair {
   sellers24h               Int
   volumeUsd24h             Float
   txCount                  Int
-  token0PriceCg            Float @default(0)
-  token0PriceDex           Float @default(0)
-  token1PriceCg            Float @default(0)
-  token1PriceDex           Float @default(0)
-  status                   Int
-  verificationMethod       String
-  verificationComment      String @default("")
-  lastChecked              Int @default(0)
-  createdAt                Int @default(0)
-  duplicatePairs           DuplicatePairs[] @relation("OriginalPair")
-  dp2                      DuplicatePairs[] @relation("DuplicatePair")
+  token0PriceCg            Float              @default(0)
+  token0PriceDex           Float              @default(0)
+  token1PriceCg            Float              @default(0)
+  token1PriceDex           Float              @default(0)
+  status                   TokenPairStatus    @default(Unverified)
+  verificationMethod       VerificationMethod @default(Import)
+  verificationComment      String             @default("")
+  lastChecked              Int                @default(0)
+  createdAt                Int                @default(0)
+  // Last real status transition (unix seconds): set at creation and whenever a write
+  // moves the status to a different value, never by a re-write of the same one. Drives
+  // /latest's "status changed" view; writes go through lib/status.ts (statusData) or
+  // lib/statusWrite.ts (setStatusWhere).
+  statusChangedAt          Int                @default(0)
+  // Verdict-engine fields (A.2). canonicalKey caches min/max of the two
+  // tokens' CoinGecko coin IDs for fast cross-DEX/cross-chain sibling lookup;
+  // confidence is the weighted fence score; verdictAt is the last engine run.
+  canonicalKey             String?
+  confidence               Float?
+  verdictAt                Int                @default(0)
+  // The verdict engine's per-fence evidence (observed values vs thresholds),
+  // surfaced on the pair detail page so the operator can audit a verdict.
+  verdictEvidence          Json?
+  // On-chain factory address read from the pool contract's factory() (T2),
+  // compared against the canonical factory for the (chain, dex) to catch pools
+  // not deployed by the real DEX. Immutable per pool, so read once; nullable
+  // until the factory-check pass reads it. factoryCheckedAt records the attempt.
+  factoryAddress           String?
+  factoryCheckedAt         Int                @default(0)
+  // Uniswap-v4 hooks contract (subgraph Pool.hooks), captured at ingest for univ4
+  // sources. The zero address = a plain no-hook pool; any other value is a hooked
+  // pool, which the verdict routes to NeedsReview (its price can be non-canonical /
+  // manipulable). null = not a v4 pool / not yet resolved.
+  hooks                    String?
+  // Subgraph corroboration (drop GT-phantom pools): at ingest the GT-sourced pool
+  // is looked up in the same pricing subgraph go-ooo queries. true = found (real),
+  // false = absent (a GeckoTerminal-only phantom that go-ooo can never price → the
+  // verdict routes it out of the export), null = unchecked / read failed / id format
+  // didn't align for this source (fail-open — never flagged on that evidence alone).
+  subgraphPresent          Boolean?
+  // Review-queue triage (T9): for a NeedsReview pair, "spam" (clear-bad —
+  // impostor / scam-flagged / exact-symbol spoof → bulk-rejectable) or "review"
+  // (genuine-but-uncertain → manual look). null when not in NeedsReview.
+  reviewTier               String?
+  duplicatePairs           DuplicatePairs[]   @relation("OriginalPair")
+  dp2                      DuplicatePairs[]   @relation("DuplicatePair")
 
   @@index([contractAddress(sort: Desc), chain, dex])
   @@index([dex, chain])
@@ -119,6 +187,9 @@ model Pair {
   @@index([dex])
   @@index([token0Id])
   @@index([token1Id])
+  @@index([canonicalKey])
+  @@index([createdAt])
+  @@index([statusChangedAt])
 }
 
 model Token {
@@ -127,17 +198,68 @@ model Token {
   contractAddress       String
   symbol                String
   name                  String
-  status                Int
-  verificationMethod    String
+  status                TokenPairStatus         @default(Unverified)
+  verificationMethod    VerificationMethod      @default(Import)
   txCount               Int
   coingeckoCoinId       String
+  // CoinMarketCap slug, backfilled when the CMC reverse contract lookup (B1d)
+  // confirms a token's identity — powers a CMC link/id on the token page,
+  // symmetric to coingeckoCoinId. "" = not (yet) resolved on CMC.
+  coinmarketcapSlug     String                  @default("")
   totalSupply           Float
   volume24hUsd          Float
   marketCapUsd          Float
   decimals              Int
-  lastChecked           Int @default(0)
-  verificationComment   String @default("")
-  createdAt             Int @default(0)
+  lastChecked           Int                     @default(0)
+  verificationComment   String                  @default("")
+  createdAt             Int                     @default(0)
+  // Last real status transition, as Pair.statusChangedAt.
+  statusChangedAt       Int                     @default(0)
+  // Cheap-proxy token age for the verdict engine's meetsAge fence (A.2/D7):
+  // unix seconds, seeded from the oldest pool's pool_created_at. Nullable
+  // until first populated.
+  deploymentTimestamp   Int?
+  // Scam-list metadata from GoPlus (A.7), stored alongside the other token
+  // metadata. goPlusData is the raw security response (auditable); the derived
+  // fields drive the verdict-engine scam fence + UI. A flagged token demotes
+  // AutoVerified pairs to NeedsReview (never auto-rejected).
+  goPlusData            Json?
+  // Honeypot.is buy/sell simulation cached alongside goPlusData (B2): it covers
+  // tokens GoPlus doesn't index (the BGPT case), so a simulated honeypot ALSO sets
+  // isScamFlagged. Cached so the rescore pass re-derives the combined flag without
+  // re-fetching — and so a GoPlus-only rescore can't clear a honeypot-set flag.
+  honeypotData          Json?
+  isScamFlagged         Boolean                 @default(false)
+  scamReason            String                  @default("")
+  scamCheckedAt         Int                     @default(0)
+  // Multi-source token identity (Phase 5, T1). identityData is the raw per-source
+  // evidence (which lists/signals confirmed the token); identityConfirmed is the
+  // derived "≥2 independent sources agree this is a real token" flag that lets a
+  // non-CoinGecko-listed token still take the auto-verify path. Mirrors the
+  // goPlusData/isScamFlagged/scamCheckedAt shape above.
+  identityData          Json?
+  identityConfirmed     Boolean                 @default(false)
+  identityCheckedAt     Int                     @default(0)
+  // When the pipeline's identity pass next looks at this token (unix seconds; 0 =
+  // due). Unconfirmed tokens back off (7, 14, 28, 56, then 90 days) since a token
+  // nobody lists this week rarely is next week; confirmed ones are re-checked
+  // monthly. See nextIdentityCheckAt in lib/identityCheck.ts.
+  identityNextCheckAt   Int                     @default(0)
+  // Tracks the proactive canonical-address resolution pass (T3): when this
+  // token's (coingeckoCoinId, chain) canonical contract was last resolved into
+  // the CanonicalAddress cache, so the impostor fence can run on every pair.
+  canonicalCheckedAt    Int                     @default(0)
+  // Decision-support web presence (GeckoTerminal website/socials/description +
+  // Blockscout holder count), write-through-cached on the token row when a detail
+  // page is viewed (lib/tokenWebPresence.ts). NOT a trust gate — AV-5 proved these
+  // signals are gameable, so they inform the operator's manual call, never auto-verify.
+  webPresence           Json?
+  webPresenceCheckedAt  Int                     @default(0)
+  // On-demand security signals (Honeypot.is buy/sell simulation + Etherscan
+  // source-verified), populated by the operator "Run security scan" button. Like
+  // webPresence: decision-support, never an auto-verify gate.
+  securitySignals       Json?
+  securityCheckedAt     Int                     @default(0)
   pairsToken0           Pair[]                  @relation("Token0")
   pairsToken1           Pair[]                  @relation("Token1")
   duplicateTokenSymbols DuplicateTokenSymbols[] @relation("OriginalToken")
@@ -147,6 +269,8 @@ model Token {
   @@index([chain])
   @@index([symbol])
   @@index([chain, symbol])
+  @@index([createdAt])
+  @@index([statusChangedAt])
 }
 
 model PairStaging {
@@ -192,9 +316,279 @@ model DuplicatePairs {
 }
 
 model Threshold {
+  id                       String  @id @default(cuid())
+  chain                    String
+  dex                      String
+  minLiquidityUsd          Int
+  minTxCount               Int
+  // Verdict-engine knobs (A.3), per (chain, dex). Defaults mirror
+  // DEFAULT_VERDICT_CONFIG in lib/verdict.ts so existing rows behave unchanged.
+  minAgeHours              Int     @default(24)
+  maxPriceDeviationPercent Float   @default(5)
+  minDecimals              Int     @default(0)
+  maxDecimals              Int     @default(36)
+  requireCgListed          Boolean @default(false)
+  // Below this reserve a pair is auto-REJECTED (bypasses review).
+  hardMinLiquidityUsd      Int     @default(500)
+  // Confidence a pair must clear (with core gates) to auto-VERIFY.
+  autoVerifyConfidence     Float   @default(0.85)
+  // Minimum 24h turnover (volumeUsd / reserveUsd) for the T7 activity fence —
+  // catches deep-but-dormant pools whose price is stale. 0 = off (opt-in lever).
+  minTurnoverRatio         Float   @default(0)
+}
+
+// Canonical token contract address per (CoinGecko coin id, chain), resolved
+// from CoinGecko's /coins/<id>/contract/<chain> lookup. Populated lazily by
+// the verdict engine on first sight of a (cgId, chain) tuple and refreshed on
+// a 30d TTL (lastChecked, unix seconds). The verdict engine compares a pair's
+// token contract addresses against this to catch impostor tokens that spoof a
+// known symbol. See A.2.
+model CanonicalAddress {
   id              String @id @default(cuid())
+  coingeckoCoinId String
   chain           String
-  dex             String
-  minLiquidityUsd Int
-  minTxCount      Int
+  contractAddress String
+  lastChecked     Int    @default(0)
+
+  @@unique([coingeckoCoinId, chain])
+}
+
+// Modular DEX/network management (Phase 4, 4.A). Two tables that together
+// retire lib/sources.js (D1): CandidateDexNetwork is the review inbox for
+// newly-discovered (or operator-pasted) sources; SupportedSource is the
+// DB-backed source of truth that drives ingest + the v3 export manifest (4.C).
+
+// A DEX/network surfaced by auto-discovery (GeckoTerminal) or operator paste,
+// pending review before promotion to SupportedSource. Operational fields are
+// auto-filled where possible and confirmed by the operator at promotion —
+// GeckoTerminal exposes only id+name (Q1), so the subgraph template, factory
+// and RPC typically arrive at the operator-paste step (Q6).
+model CandidateDexNetwork {
+  id                   String          @id @default(cuid())
+  chain                String
+  dex                  String
+  status               CandidateStatus @default(Pending)
+  // Provenance: "geckoterminal-discovery" | "operator-paste" | "introspection".
+  source               String
+  // {API_KEY}-placeholder template (lib/subgraphVerify.ts toUrlTemplate) — never
+  // the literal key-bearing URL, per 4.A.subgraph-verification. Null until the
+  // operator pastes + verifies a URL (discovery can't supply it — Q1).
+  subgraphUrlTemplate  String?
+  // "univ2" | "univ3" | "custom" (lib/subgraphVerify.ts SchemaFamily); free-text
+  // so the taxonomy can grow (e.g. solidly) without a schema migration.
+  subgraphSchemaFamily String?
+  factoryAddress       String?
+  rpcUrl               String?
+  blocksPerMin         Int?
+  firstSeen            Int             @default(0)
+  notes                String          @default("")
+
+  @@unique([chain, dex])
+  @@index([status])
+}
+
+// The DB-backed source of truth for supported (chain, dex) sources — the
+// eventual replacement for lib/sources.js (D1). Populated by promoting a
+// CandidateDexNetwork row or by direct operator entry. Drives ingest and the
+// v3 export manifest (4.C) that go-ooo consumes.
+model SupportedSource {
+  id                   String  @id @default(cuid())
+  chain                String
+  dex                  String
+  // {API_KEY}-placeholder template — never the literal key-bearing URL. The
+  // export manifest emits this verbatim; each consumer substitutes its own key
+  // (4.A.subgraph-verification).
+  subgraphUrlTemplate  String
+  // Drives the field-map + go-ooo template family (Option β): "univ2" | "univ3"
+  // | "custom" (+ future families). Free-text — see CandidateDexNetwork.
+  subgraphSchemaFamily String
+  // The source's transport (#128): "subgraph" (the EVM/GraphQL default) or "rest-sqs"
+  // (a Cosmos Osmosis SQS source — subgraphUrlTemplate then holds the SQS base URL).
+  // Emitted in the export manifest so go-ooo builds the right kind of price source.
+  sourceType           String  @default("subgraph")
+  // "graph-decentralized" | "graph-studio" | "graph-hosted" | "self-hosted"
+  // (lib/subgraphVerify.ts SubgraphProvider). Picks the API-key env var at
+  // substitution time; emitted in the manifest for go-ooo.
+  subgraphProvider     String
+  // Per-source override for the API-key env var (D9). Null = derive from
+  // subgraphProvider via keyEnvVarFor (the normal path).
+  apiKeyEnvVar         String?
+  // Additional (free-tier) subgraph endpoints beyond the primary above — an array
+  // of { provider, urlTemplate } (Studio free-tier / self-hosted-public / DEX-run,
+  // per availability). The v3 export manifest emits the primary + these as an
+  // ordered endpoint list so go-ooo can pick paid-vs-free by its own keys (T6.6).
+  additionalEndpoints  Json?
+  factoryAddress       String
+  // GeckoTerminal slugs for the verification pipeline's ingest (null = same as
+  // chain/dex). Rows are stored under the internal chain/dex above; GT is queried
+  // by these. Carried over from lib/sources.js gtNetwork/gtDex (T6.5).
+  gtNetwork            String?
+  gtDex                String?
+  // Pipeline ingest controls (from lib/sources.js): onCoinGeckoTerminal=false skips
+  // GT ingest (e.g. qomswap, self-hosted only); lastPage caps GT pagination.
+  onCoinGeckoTerminal  Boolean @default(true)
+  lastPage             Int     @default(10)
+  // Last successful liveness re-probe (D8); 0 = never. Stale (>30d) sources are
+  // flagged in the UI + manifest, never auto-demoted.
+  lastVerifiedAt       Int     @default(0)
+  enabledAt            Int     @default(0)
+  // Subgraph health (lib/sourceHealth.ts): when it was last checked, how many checks in a row have
+  // failed (UNHEALTHY_AFTER of them pause the source: it leaves the go-ooo manifest and the priceable
+  // flag until a check passes), and the last failure's message. A passing check stamps lastVerifiedAt.
+  healthCheckedAt      Int     @default(0)
+  healthFailures       Int     @default(0)
+  healthError          String  @default("")
+
+  @@unique([chain, dex])
+}
+
+// Cached OoO price-test results for the PUBLIC simulator (operator runs are always
+// live). Keyed by (chain, dex, sorted pool addresses); served for up to 7 days so
+// anonymous traffic never hits the paid subgraph. `data` holds the getprices
+// `prices` array verbatim.
+model PriceCache {
+  id        String @id @default(cuid())
+  cacheKey  String @unique
+  data      Json
+  fetchedAt Int    @default(0)
+
+  @@index([fetchedAt])
+}
+
+// BEACON anchoring (#130): one row per successful on-chain heartbeat — the dpv beacon-writer recorded
+// `root` (the verified-set Merkle root) to mainchain beacon `beaconId` as timestamp `timestampId` in tx
+// `txHash` at `submitTime`. `metadata` is the local descriptor (schema/pairs/changed); `leafCount` is the
+// committed pair count. Powers the per-pair "Notarised on Mainchain" badge (latest anchor whose root the
+// pair's proof verifies against) + the liveness view. Append-only mirror of on-chain state.
+model BeaconAnchor {
+  id          Int    @id @default(autoincrement())
+  beaconId    Int
+  timestampId Int
+  tree        String @default("pairs") // which Merkle tree this root is over: "pairs" | "tokens"
+  txHash      String
+  root        String
+  leafCount   Int    @default(0)
+  metadata    String @default("")
+  submitTime  Int    @default(0)
+  createdAt   Int    @default(0)
+
+  @@unique([beaconId, timestampId])
+  @@index([root])
+  @@index([tree, submitTime])
+}
+
+// BEACON anchor-drip queue (#130): the backlog of individual hashes to record one tx per block, so every
+// item gets a DIRECT on-chain timestamp. Generic over the STREAM — a pair/token leaf (so each pair/token is
+// notarised directly, not only via a Merkle proof) or an OoO fulfilment receipt (path ii). Unique on
+// (stream, hash) so each distinct hash is anchored exactly once — a changed verdict yields a new leaf hash →
+// a new row → re-anchored. `metadata` is the off-chain descriptor (becomes the on-chain #129 metadata field
+// when that lands). `anchoredAt` null = pending; the worker drips the oldest pending.
+model BeaconQueue {
+  id          Int     @id @default(autoincrement())
+  stream      String // "pair-leaf" | "token-leaf" | "fulfilment"
+  refKey      String // context key: pair/token key, or chain/router/requestId for a fulfilment
+  hash        String // the 64-char hash recorded on-chain
+  metadata    String  @default("") // off-chain descriptor (type/tree/root or net/router/req)
+  timestampId Int? // set when anchored
+  txHash      String? // set when anchored
+  anchoredAt  Int? // unix seconds when anchored; null = pending
+  createdAt   Int     @default(0)
+
+  @@unique([stream, hash])
+  @@index([anchoredAt, id])
+}
+
+// Per-chain block cursor for the fulfilment watcher (#130 path ii): the last EVM block scanned for a
+// Router's RequestFulfilled events, so a restart resumes without rescanning or missing logs.
+model BeaconWatchCursor {
+  chainId   Int @id
+  lastBlock Int @default(0)
+  updatedAt Int @default(0)
+}
+
+// Singleton (id = 1) tracking the #129 metadata roll-out. Pre-vaxildan the writer records hashes WITHOUT
+// metadata (wire-identical to a v0.2.0 client, so the old chain accepts them). The writer probes the chain
+// each heartbeat (BeaconTimestampsByHash served ⇒ upgrade applied); once detected, `metadataLive` latches on
+// so all NEW records carry their descriptor, and a one-time `reanchor` backlog is seeded (`reanchorSeeded`)
+// to re-record every pre-upgrade anchor WITH metadata — the hash index is forward-only, so re-recording is
+// the only way pre-upgrade anchors become BeaconTimestampsByHash-discoverable.
+model BeaconChainState {
+  id             Int     @id @default(1)
+  metadataLive   Boolean @default(false) // vaxildan upgrade detected; records now carry on-chain metadata
+  reanchorSeeded Boolean @default(false) // the one-time re-anchor backlog has been queued
+  detectedAt     Int     @default(0) // unix seconds the upgrade was first detected
+}
+
+// Provider auth (T8): the one-time, address+chain-bound challenge a go-ooo provider signs to prove it
+// controls a wallet registered on the OoO Router. Single-use (consumedAt set on verify), short TTL.
+model ProviderChallenge {
+  id         String @id @default(cuid())
+  address    String // lowercased provider wallet
+  chainId    Int
+  nonce      String @unique
+  message    String // the exact EIP-191 text the provider signs
+  expiresAt  Int // unix seconds
+  consumedAt Int    @default(0) // 0 = unused; set on successful verify (single-use)
+  createdAt  Int    @default(0)
+
+  @@index([address])
+}
+
+// Provider auth (T8): an issued bearer token. Only sha256(token) is stored (like a password hash — a DB
+// read can't recover a live bearer); opaque + DB-backed for revocability. Short TTL; go-ooo re-auths on
+// expiry/401. `address` is the audit trail + the hook for future per-provider feed customisation.
+model ProviderToken {
+  id         String @id @default(cuid())
+  tokenHash  String @unique // sha256(bearer); the raw token is shown once on issue
+  address    String // lowercased provider wallet
+  chainId    Int
+  issuedAt   Int
+  expiresAt  Int
+  lastUsedAt Int    @default(0)
+  revokedAt  Int    @default(0) // 0 = live; operator break-glass revoke
+
+  @@index([address])
+  @@index([expiresAt])
+}
+
+// OoO fulfilment history (admin dashboard #1). One row per OoO request, populated by the fulfilment-watcher
+// as it scans each Router's events: the request side (DataRequested → pair + fee) and the fulfil side
+// (RequestFulfilled → provider + result) are upserted independently and keyed by (chainId, router, requestId),
+// so either event can arrive first / in a different batch. The BEACON anchor is NOT denormalised here — it's
+// joined at read time via refKey (`chain/router/requestId`) against BeaconQueue, so it stays consistent.
+model Fulfilment {
+  id            Int     @id @default(autoincrement())
+  chainId       Int
+  chain         String
+  router        String // lowercased
+  consumer      String? // lowercased; from DataRequested
+  provider      String? // lowercased; from RequestFulfilled
+  requestId     String // 0x… (32-byte hex)
+  pair          String? // decoded DataRequested endpoint, e.g. "WETH.SHIB.AD"
+  result        String? // delivered uint256 (the price), stringified; from RequestFulfilled
+  feePaid       String? // xFUND base units (uint256 string); from DataRequested
+  requestTxHash String?
+  fulfilTxHash  String?
+  requestBlock  Int?
+  fulfilBlock   Int?
+  requestedAt   Int? // request block time (unix s)
+  fulfilledAt   Int? // fulfil block time (unix s)
+  createdAt     Int     @default(0)
+  updatedAt     Int     @default(0)
+
+  @@unique([chainId, router, requestId])
+  @@index([provider])
+  @@index([chainId])
+  @@index([fulfilledAt])
+  @@index([pair])
+}
+
+// Self-tracked outbound The Graph query count (admin #3, Part B). The Graph exposes usage only in the Studio
+// UI (no API), so dpv counts its own gateway queries — keyed by calendar billing month ("YYYY-MM", UTC) — to
+// project consumption against the 100k/month free tier. firstAt anchors the "tracked since" caveat + the rate.
+model GraphQueryUsage {
+  period    String @id // "YYYY-MM" UTC calendar billing month
+  count     Int    @default(0)
+  firstAt   Int    @default(0) // unix s of the first query tracked this period
+  updatedAt Int    @default(0)
 }

@@ -5,12 +5,17 @@ const NativeToken: React.FC<{ chain: string }> = ({ chain}) => {
     const nativeTokens = {
         eth: "ETH",
         bsc: "BNB",
-        polygon_pos: "MATIC",
+        polygon_pos: "POL",
         gnosis: "xDAI",
         xdai: "xDAI",
+        arbitrum: "ETH",
+        base: "ETH",
+        optimism: "ETH",
+        avax: "AVAX",
+        osmosis: "OSMO",
     }
 
-    const token = nativeTokens[chain]
+    const token = nativeTokens[chain] ?? chain
 
     return (
         <>

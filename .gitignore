@@ -2,6 +2,10 @@ node_modules/
 .next/
 .DS_STORE
 .env
+.env.test
 tmp/
 .idea/
 yarn-error.log
+
+# TypeScript incremental-build cache (created by `yarn typecheck`)
+tsconfig.tsbuildinfo

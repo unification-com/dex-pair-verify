@@ -1,0 +1,69 @@
+// Per-chain metadata. Single source of truth shared across the app:
+//  - chainInfo: RPC endpoint + blocks/min (used by the price-test path, and the
+//    T2 on-chain factory read to come).
+//  - EVM chain id: shared by GoPlus (scam + identity checks) and token-list
+//    membership (T1).
+// (Converted from chains.js — the TS-only directive — keeping the chainInfo
+//  export intact for its existing consumers.)
+
+export type ChainInfo = { rpc: string; blocksPerMin: number };
+
+export const chainInfo: Record<string, ChainInfo> = {
+  eth: {
+    // publicnode — reliable public read RPC (mevblocker is a tx relay that
+    // rate-limits eth_call, polygon-rpc.com's free tenant is disabled).
+    rpc: "https://ethereum-rpc.publicnode.com",
+    blocksPerMin: 5,
+  },
+  polygon_pos: {
+    rpc: "https://polygon-bor-rpc.publicnode.com",
+    blocksPerMin: 12,
+  },
+  bsc: {
+    rpc: "https://bsc-dataseed.binance.org",
+    blocksPerMin: 20,
+  },
+  xdai: {
+    rpc: "https://rpc.gnosischain.com",
+    blocksPerMin: 12,
+  },
+  // 4.D expansion chains (verified live 2026-06-05 via eth_chainId).
+  arbitrum: {
+    rpc: "https://arbitrum-one-rpc.publicnode.com",
+    blocksPerMin: 240, // ~0.25s blocks
+  },
+  base: {
+    rpc: "https://base-rpc.publicnode.com",
+    blocksPerMin: 30, // ~2s blocks
+  },
+  optimism: {
+    rpc: "https://optimism-rpc.publicnode.com",
+    blocksPerMin: 30, // ~2s blocks
+  },
+  // Avalanche C-Chain (2026-11-03: eth_chainId 0xa86a; 600 blocks in 583s, so ~1s blocks).
+  avax: {
+    rpc: "https://avalanche-c-chain-rpc.publicnode.com",
+    blocksPerMin: 60,
+  },
+};
+
+// EVM numeric chain id per our internal chain key. null = not an EVM chain we
+// map (e.g. qom), so EVM-keyed lookups are skipped for it.
+export const EVM_CHAIN_ID: Record<string, number | null> = {
+  eth: 1,
+  bsc: 56,
+  polygon_pos: 137,
+  xdai: 100,
+  arbitrum: 42161,
+  base: 8453,
+  optimism: 10,
+  avax: 43114,
+  qom: null,
+};
+
+export const evmChainId = (chain: string): number | null => EVM_CHAIN_ID[chain] ?? null;
+
+// The chains we have an EVM id for — used to scope batch queries.
+export const EVM_SUPPORTED_CHAINS: string[] = Object.keys(EVM_CHAIN_ID).filter(
+  (chain) => EVM_CHAIN_ID[chain] !== null,
+);

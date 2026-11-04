@@ -1,0 +1,139 @@
+// lib/aliasGroups.ts
+// Asset-class alias groups (T13 → go-ooo S7 / XR4). An alias group names a canonical asset class (USD,
+// ETH, BTC) whose members are CoinGecko coin ids that are GENUINELY FUNGIBLE for pricing — wrapped /
+// bridged / chain-native forms of the same unit of value, all trading ~1:1. go-ooo's robust aggregator
+// expands an alias query (e.g. `ETH.USD`) to every member pool and prices them as one deep, robust
+// estimate; the median+MAD smooths minor variance and rejects a depegged member as an outlier.
+//
+// SAFETY — this curation IS the trust boundary. go-ooo TRUSTS these groups; it does not curate them.
+// Members must be fungible-for-pricing ONLY. Deliberately EXCLUDED, even though they look related:
+//   - staked / restaked / yield-bearing derivatives: wstETH, cbETH, rETH, weETH, ezETH, frxETH, sUSDe,
+//     LBTC — they trade at a premium/discount, so they are a DIFFERENT asset, not a fungible form.
+//   - algorithmic / synthetic / riskier stables: USDe, USD0, alUSD, eUSD, FRAX (fractional-algo) —
+//     higher depeg risk; keep the USD class to the rock-solid + fully-backed bridged forms.
+//   - dead / depegged: terrausd (USTC).
+//   - false friends: tether-gold (XAUt — that's GOLD), ethena / ethereum-name-service / etc.
+// When in doubt, LEAVE IT OUT — a missing member just means that pool isn't in the class aggregate; a
+// wrong member poisons every class price that uses it.
+//
+// Discovery aid: the verified-token cg-id families (run a one-off group-by on `coingeckoCoinId`) surface
+// candidates, but every addition is a hand judgement against the fungibility test above.
+
+// alias symbol → member CoinGecko coin ids (fungible-only). Operator-curated; extend conservatively.
+export const ALIAS_GROUPS: Record<string, string[]> = {
+  // The US-dollar class: USDC + USDT + DAI + the fully-backed majors, plus their chain/bridge variants
+  // that CoinGecko gives a DISTINCT coin id (same-id variants like USDC.e→usd-coin already collapse via
+  // the canonical key, so they need no listing here).
+  USD: [
+    "usd-coin", "tether", "dai", "paypal-usd", "liquity-usd", "usds",
+    // USDC bridged/chain variants with their own cg id:
+    "usd-coin-ethereum-bridged", "bridged-usd-coin-base", "bridged-usd-coin-optimism",
+    "bridged-usdc-polygon-pos-bridge", "binance-bridged-usdc-bnb-smart-chain",
+    "gnosis-xdai-bridged-usdc-gnosis", "axlusdc",
+    // USDT bridged/chain variants with their own cg id:
+    "binance-bridged-usdt-bnb-smart-chain", "bridged-usdt", "l2-standard-bridged-usdt-base", "usdt0",
+    // Avalanche Bridge forms (USDC.e / USDT.e / DAI.e); native USDC and USDt share usd-coin / tether:
+    "usd-coin-avalanche-bridged-usdc-e", "tether-avalanche-bridged-usdt-e", "avalanche-bridged-dai-avalanche",
+  ],
+  // The ether class: native ETH + WETH + its 1:1 bridged forms. NO staked/restaked derivatives.
+  ETH: [
+    "ethereum", "weth", "axlweth", "binance-peg-weth",
+    "arbitrum-bridged-weth-arbitrum-one", "l2-standard-bridged-weth-base",
+    "l2-standard-bridged-weth-optimism", "polygon-pos-bridged-weth-polygon-pos",
+    "gnosis-xdai-bridged-weth-gnosis-chain", "avalanche-bridged-weth-avalanche",
+  ],
+  // The bitcoin class: BTC + its 1:1 wrapped/bridged forms. NO staked derivatives (e.g. LBTC).
+  BTC: [
+    "bitcoin", "wrapped-bitcoin", "coinbase-wrapped-btc", "binance-bitcoin", "kraken-wrapped-btc",
+    "tbtc", "avalanche-bridged-btc-arbitrum-one",
+    "arbitrum-bridged-wbtc-arbitrum-one", "polygon-bridged-wbtc-polygon-pos",
+    "gnosis-xdai-bridged-wbtc-gnosis-chain",
+    "bitcoin-avalanche-bridged-btc-b", "avalanche-old-bridged-wbtc-avalanche",
+    // NB: renBTC deliberately OMITTED — Ren Protocol is defunct (no reliable mint/redeem), so it is no
+    // longer a trustworthy 1:1 BTC form.
+  ],
+};
+
+// Reverse index: cg id → its alias symbol. Built once; also enforces the invariant that no cg id is a
+// member of two groups (that would make a pair's class ambiguous) — a config error throws at load.
+const CG_ID_TO_ALIAS: Map<string, string> = (() => {
+  const m = new Map<string, string>();
+  for (const [alias, cgIds] of Object.entries(ALIAS_GROUPS)) {
+    for (const raw of cgIds) {
+      const cg = raw.trim().toLowerCase();
+      const existing = m.get(cg);
+      if (existing && existing !== alias) {
+        throw new Error(`aliasGroups: cg id "${cg}" is in two groups (${existing} + ${alias}) — a cg id may belong to at most one alias class`);
+      }
+      m.set(cg, alias);
+    }
+  }
+  return m;
+})();
+
+// The set of alias symbols (USD, ETH, BTC, …), upper-cased as queried.
+export const ALIAS_SYMBOLS: ReadonlySet<string> = new Set(Object.keys(ALIAS_GROUPS));
+
+// Is `symbol` a queryable alias class? (Case-insensitive.)
+export const isAliasSymbol = (symbol: string): boolean => ALIAS_SYMBOLS.has(symbol.trim().toUpperCase());
+
+// The alias class a cg id belongs to, or null if it's not a curated member.
+export const aliasForCgId = (cgId: string | null | undefined): string | null =>
+  CG_ID_TO_ALIAS.get((cgId ?? "").trim().toLowerCase()) ?? null;
+
+// The member cg ids of an alias class, or [] for a non-alias symbol.
+export const membersOfAlias = (symbol: string): string[] => ALIAS_GROUPS[symbol.trim().toUpperCase()] ?? [];
+
+// Given a pair's canonicalKey (`cgA:cgB`, the order-independent CoinGecko-id pair from lib/canonical.ts),
+// return the sorted alias-pair it backs (e.g. `ETH.USD`), or null when it is NOT a cross-class alias
+// pair — one side isn't a curated member, or both sides are in the same class (e.g. a USDC/USDT pool is
+// USD↔USD, not a queryable alias pair). Used to derive the active alias-pairs for the export.
+export function aliasPairForCanonicalKey(canonicalKey: string): string | null {
+  const parts = canonicalKey.split(":");
+  if (parts.length !== 2) {
+    return null;
+  }
+  const a = aliasForCgId(parts[0]);
+  const b = aliasForCgId(parts[1]);
+  if (!a || !b || a === b) {
+    return null;
+  }
+  return [a, b].sort().join(".");
+}
+
+// The (base, target) counterpart to aliasPairForCanonicalKey: the sorted alias-pair label
+// (e.g. "ETH.USD") for two QUERY symbols when BOTH are curated alias classes, else null. Order- and
+// case-independent — ("ETH","USD"), ("USD","ETH") and ("usd","eth") all give "ETH.USD". This decides
+// whether a price-test query is an asset-class query at all (it mirrors go-ooo S7's IsAliasPair gate,
+// which likewise requires both sides to be alias symbols).
+export function aliasPairLabel(base: string, target: string): string | null {
+  if (!isAliasSymbol(base) || !isAliasSymbol(target)) {
+    return null;
+  }
+  return [base.trim().toUpperCase(), target.trim().toUpperCase()].sort().join(".");
+}
+
+// The symbol of a pool's TARGET side, used to orient its price for the simulator. For a NORMAL query
+// the target side is just the target symbol itself (unchanged behaviour). For an ALIAS query the
+// target ("USD") never equals a pool's real token symbol ("USDC"/"USDT"/…), so the side is chosen by
+// which token's coingecko id is in the target class — exactly how go-ooo S7 orients via t0_cg/t1_cg.
+// Without this a pool whose dollar token is token0 would be priced upside-down (the reciprocal),
+// poisoning the class aggregate.
+type AliasOrientToken = { symbol: string; coingeckoCoinId: string | null } | null | undefined;
+export function targetSideSymbol(
+  tokens: { token0: AliasOrientToken; token1: AliasOrientToken },
+  target: string,
+  isAlias: boolean,
+): string {
+  if (!isAlias) {
+    return target;
+  }
+  const cls = target.trim().toUpperCase();
+  if (tokens.token0 && aliasForCgId(tokens.token0.coingeckoCoinId) === cls) {
+    return tokens.token0.symbol;
+  }
+  if (tokens.token1 && aliasForCgId(tokens.token1.coingeckoCoinId) === cls) {
+    return tokens.token1.symbol;
+  }
+  return target;
+}

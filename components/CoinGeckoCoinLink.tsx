@@ -1,12 +1,12 @@
-import React from "react";
 import Link from "next/link";
+import React from "react";
 
 const CoinGeckoCoinLink: React.FC<{ coingeckoId: string }> = ({ coingeckoId }) => {
 
     if(coingeckoId !== "") {
         return (
             <>
-                <Link href={`https://www.coingecko.com/en/coins/${coingeckoId}`}>
+                <Link href={`https://www.coingecko.com/en/coins/${encodeURIComponent(coingeckoId)}`}>
                     <a target="_blank">{coingeckoId}</a>
                 </Link>
             </>

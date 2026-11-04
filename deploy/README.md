@@ -1,0 +1,176 @@
+# Deployment
+
+Run dex-pair-verify on a single Linux host: the Next.js web server under systemd,
+and the twice-weekly data pipeline under cron.
+
+Distro-agnostic — needs only `bash`, `systemd`, `cron` and `flock` (util-linux),
+plus a user-space Node toolchain via [nvm](https://github.com/nvm-sh/nvm) and `yarn`,
+and a reachable PostgreSQL. No distro packages and no hard-coded paths beyond two
+lines you set in the unit file; the scripts auto-detect the repo location.
+
+## Files
+
+- `dex-pair-verify.env` — shared config (Node version, host, port, log root), sourced by the scripts.
+- `nvm-init.sh` — shared nvm bootstrap (`nvm use "$NODE_VERSION"`); sourced by every script below.
+- `run.sh` — starts the web server (`next start`); the systemd `ExecStart` target.
+- `pipeline.sh`: runs `yarn pipeline`, logging to `$LOG_ROOT/YYYY-MM/`; the pipeline's cron target.
+- `yarn-job.sh`: runs any yarn script the same way (log + lock); the health check's cron target.
+- `beacon-writer.sh` / `fulfilment-watcher.sh` — start the two BEACON anchoring workers; systemd `ExecStart` targets.
+- `dex-pair-verify.service` — systemd unit template for the web server.
+- `dex-pair-verify-beacon-writer.service` / `dex-pair-verify-fulfilment-watcher.service` — units for the BEACON workers.
+- `crontab.example`: the pipeline cron line.
+
+## 1. Configure
+
+Edit `dex-pair-verify.env` if the defaults don't suit:
+
+- `NODE_VERSION` — nvm Node version to run (`nvm use <this>`). Default `v20.19`.
+- `HOST` / `PORT` — bind interface and port. Default `127.0.0.1:6973` (loopback).
+- `LOG_ROOT` — base dir for pipeline logs. Default `$HOME/logs`.
+
+## 2. Database
+
+The schema is at the repo root (`schema.prisma`, PostgreSQL). Set `POSTGRES_PRISMA_URL`
+in `.env`, then apply it (there are no migration files — the project uses `db push`):
+
+    npx prisma db push
+
+The first push that adds `statusChangedAt` (the `/latest` page's "status changed" order) leaves
+existing pairs and tokens at 0, so run this once afterwards to date them from their creation:
+
+    yarn dump set-status-changed-at
+
+To reset data: `yarn dump truncate-dex` (keeps auth/login) or `yarn dump truncate-all`.
+
+## 3. Build
+
+As the app user, from the repo root:
+
+    nvm use <NODE_VERSION>
+    yarn install --frozen-lockfile
+    npx prisma generate
+    yarn build
+
+## 4. Web service (systemd)
+
+1. In `dex-pair-verify.service` set `User=` and the absolute `ExecStart=` path to your
+   checkout's `deploy/run.sh`.
+2. Install and start:
+
+       sudo cp deploy/dex-pair-verify.service /etc/systemd/system/
+       sudo systemctl daemon-reload
+       sudo systemctl enable --now dex-pair-verify
+
+3. Verify:
+
+       systemctl status dex-pair-verify
+       ss -ltnp | grep "$PORT"      # should show 127.0.0.1:PORT, not 0.0.0.0
+       journalctl -u dex-pair-verify -f
+
+`run.sh` `exec`s Node, so systemd supervises the server process directly — `systemctl
+stop` sends `SIGINT` straight to Next.js for a clean shutdown.
+
+## 5. Pipeline (cron)
+
+As the app user (`crontab -e`), add the lines from `crontab.example`, pointing at your
+checkout:
+
+    0 3 * * 1,4 /bin/bash /path/to/dex-pair-verify/deploy/pipeline.sh
+    15 */6 * * * /bin/bash /path/to/dex-pair-verify/deploy/yarn-job.sh source-health
+
+Runs Mondays and Thursdays at 03:00 (a run takes about 3 hours; the per-token re-check windows
+keep the API quotas in hand at this cadence). Logs: `$LOG_ROOT/YYYY-MM/dex-pair-verify-YYYY-MM-DD.log`.
+A `flock` guard skips a run if the previous one is still going.
+
+The health check (`yarn source-health`, about 60 Graph queries a run) probes every subgraph source,
+plus each Cosmos source (Osmosis SQS, Astroport on Neutron) by pricing its 5 deepest verified pairs the
+way go-ooo does (one fully priced pair passes).
+After 2 failed checks in a row a source is paused: left out of the go-ooo manifest and the priceable
+flag until a check passes again. The `/sources` page shows each source's state. It refuses to run
+without `THEGRAPH_API_KEY`, and records nothing when more than half the sources fail at once (that
+points at our side, not the subgraphs). Logs: `$LOG_ROOT/YYYY-MM/source-health-YYYY-MM-DD.log`.
+
+## 6. BEACON anchoring workers (optional)
+
+Two extra long-running processes anchor dpv's verified set to a Unification Mainchain
+BEACON — separate from the web server. Skip this whole section if you're not anchoring.
+
+- **`beacon-writer`** — holds a FUNDED `und` signing key; records the pair+token Merkle
+  roots each minute and (with drip on) every leaf + OoO fulfilment receipt, one tx per
+  block. Run **one** instance only (single account ⇒ serial nonce).
+- **`fulfilment-watcher`** — read-only (no key); watches each OoO Router's `DataRequested` +
+  `RequestFulfilled` events, populates the `Fulfilment` history table (the `/ooo-fulfilments`
+  admin dashboard) and queues receipts for the writer to anchor.
+
+1. **Config.** Copy the `BEACON_*` / `OOO_ROUTER_*` block from `.env.example` into your
+   `.env` and fill it in. Put the signer mnemonic in a file (not inline), owned by the
+   **service user** — the `User=` set in the unit (e.g. `centos`). The DIR *and* the file must
+   be owned by it, else the service can't traverse `/etc/dpv` to read the file (`EACCES`):
+
+       SVC=centos    # match User= in the .service unit
+       sudo install -d -m 700 -o "$SVC" -g "$SVC" /etc/dpv
+       printf '%s\n' "<24-word mnemonic>" | sudo tee /etc/dpv/beacon-writer.mnemonic >/dev/null
+       sudo chown "$SVC":"$SVC" /etc/dpv/beacon-writer.mnemonic && sudo chmod 600 /etc/dpv/beacon-writer.mnemonic
+
+   **Per-chain RPCs.** The default public RPCs for some networks time out on `eth_getLogs`
+   (polygon) or are unreachable (shibarium/qom/puppynet). Override them with the SAME endpoints
+   go-ooo uses — `OOO_ROUTER_RPC_<chainId>=<url>` — and scope the watch set to the chains you
+   actually anchor with `BEACON_WATCH_CHAINS=1,137,109,766,11155111`. Polygon especially wants
+   an archive/paid RPC.
+
+   `BEACON_DRIP_ENABLED=true` is **required** — without it only the root heartbeat runs and
+   leaves / fulfilments / the re-anchor backlog never reach the chain.
+
+2. **Schema.** `npx prisma db push` (from §2) creates the `BeaconChainState` + `Fulfilment`
+   tables the workers need — re-run it if you haven't since adding/upgrading the workers.
+
+3. **Register the beacon** (one-off; funds ~1000 FUND for the register fee):
+
+       nvm use <NODE_VERSION>
+       yarn beacon-writer register      # prints BEACON_ID=<n> — paste it into .env
+
+4. **Install + enable** (set `User=` and the absolute `ExecStart=` path in each unit):
+
+       sudo cp deploy/dex-pair-verify-beacon-writer.service /etc/systemd/system/
+       sudo cp deploy/dex-pair-verify-fulfilment-watcher.service /etc/systemd/system/
+       sudo systemctl daemon-reload
+       sudo systemctl enable --now dex-pair-verify-beacon-writer dex-pair-verify-fulfilment-watcher
+       journalctl -u dex-pair-verify-beacon-writer -f      # watch it heartbeat + drip
+
+The writer self-detects the vaxildan `x/beacon` upgrade (a `BeaconTimestampsByHash` probe):
+before it, records carry no metadata; after, it switches over and re-anchors the backlog
+WITH metadata automatically (`BEACON_REANCHOR_ENABLED`, default on). No restart needed.
+
+**Backfill (optional).** The watcher only records events from when it starts. To populate the
+`Fulfilment` history table with PAST requests over a block range (e.g. from each Router's deploy
+block), run the one-off backfill — cursor-free + idempotent, safe to run alongside the live watcher:
+
+    yarn fulfilment-watcher backfill <chainId> <fromBlock> [toBlock]
+    # add BACKFILL_ANCHOR=1 to ALSO anchor the historical receipts on BEACON (eFUND spend)
+
+For very old ranges, point `OOO_ROUTER_RPC_<chainId>` at an archive endpoint (public RPCs cap/throttle
+large `getLogs`). A failing range is logged + skipped, not fatal — re-run to fill gaps.
+
+## 7. Update / redeploy
+
+    git pull
+    nvm use <NODE_VERSION>
+    yarn install --frozen-lockfile
+    npx prisma generate
+    yarn build
+    sudo systemctl restart dex-pair-verify
+    # if running the anchoring workers:
+    sudo systemctl restart dex-pair-verify-beacon-writer dex-pair-verify-fulfilment-watcher
+
+## Notes
+
+- **Reverse proxy:** the server binds to loopback by default; terminate TLS and expose
+  it with nginx, Caddy or similar.
+- **Rootless alternative:** instead of a system unit, place the unit in
+  `~/.config/systemd/user/`, run `systemctl --user enable --now dex-pair-verify`, and
+  `loginctl enable-linger <user>` so it survives logout — no root required.
+- **`status=203/EXEC`:** systemd couldn't execute the script. The unit and cron line
+  launch the scripts via `/bin/bash …` precisely so this can't happen from a lost `+x`
+  bit, a CRLF shebang, or an SELinux exec-label on a script under `/home`. If you invoke
+  a script directly instead, ensure `chmod +x deploy/*.sh`, LF line-endings, and (under
+  SELinux `Enforcing`) check `ausearch -m avc -ts recent` for an exec denial.
