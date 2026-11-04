@@ -1,5 +1,3 @@
-import { remove_outliers } from "peirce-criterion";
-
 export type Stats = {
   n: number;
   sum: number;
@@ -8,13 +6,70 @@ export type Stats = {
   stdDev: number;
 };
 
+// Complementary error function, erfc(x) = 1 - erf(x) (Numerical Recipes' erfcc: fractional error
+// below 1.2e-7 everywhere, ample for an outlier threshold).
+export const erfc = (x: number): number => {
+  const z = Math.abs(x);
+  const t = 1 / (1 + 0.5 * z);
+  const r =
+    t *
+    Math.exp(
+      -z * z - 1.26551223 +
+        t * (1.00002368 + t * (0.37409196 + t * (0.09678418 + t * (-0.18628806 +
+        t * (0.27886807 + t * (-1.13520398 + t * (1.48851587 + t * (-0.82215223 + t * 0.17087277)))))))),
+    );
+  return x >= 0 ? r : 2 - r;
+};
+
+// Peirce's criterion (Gould's method, as on Wikipedia's "Peirce's criterion"): the squared maximum
+// deviation, in standard deviations, allowed for N observations with k suspected outliers and m model
+// unknowns. Ported from the peirce-criterion npm package (dropped for its vulnerable dependency
+// chain), with an iteration cap so a non-converging input can't hang.
+export const peirceDev = (N: number, k = 1, m = 1): number => {
+  if (N < 2) {
+    return 0;
+  }
+  const Q = (k ** (k / N) * (N - k) ** ((N - k) / N)) / N;
+  let rOld = 0;
+  let rNew = 1;
+  let x2 = 0;
+  for (let i = 0; i < 1000 && Math.abs(rNew - rOld) > N * 2e-16; i += 1) {
+    const ldiv = rNew ** k || 1e-6;
+    const lambda = (Q ** N / ldiv) ** (1 / (N - k));
+    x2 = 1 + ((N - m - k) / k) * (1 - lambda * lambda);
+    rOld = rNew;
+    if (x2 < 0) {
+      x2 = 0;
+    } else {
+      rNew = Math.exp((x2 - 1) / 2) * erfc(Math.sqrt(x2) / Math.SQRT2);
+    }
+  }
+  return x2;
+};
+
+// Drop outliers by Peirce's criterion: reject values further from the mean than the allowed deviation
+// for k suspected outliers, re-running with k = the number rejected until it stops growing.
 export const removeOutliersPeirceCriterion = (dataSet: number[]): number[] => {
-  // Too few points to judge → keep all (mirrors the other methods and guards the
-  // npm package against degenerate input). Pass a COPY so it can't mutate ours.
+  // Too few points to judge → keep all (mirrors the other methods).
   if (dataSet.length < 3) {
     return [...dataSet];
   }
-  return remove_outliers([...dataSet]);
+  const { n, mean, stdDev } = getStats(dataSet);
+  // All values identical: nothing is an outlier (as removeOutliersChauvenet). The npm package
+  // rejected every value here, since every deviation fails the strict test against a zero threshold.
+  if (stdDev === 0) {
+    return [...dataSet];
+  }
+  let kept: number[];
+  let removed = 0;
+  let k: number;
+  do {
+    k = removed + 1;
+    const maxDev = Math.sqrt(peirceDev(n, k)) * stdDev;
+    kept = dataSet.filter((x) => Math.abs(x - mean) < maxDev);
+    removed = n - kept.length;
+  } while (removed > k);
+  return kept;
 };
 
 export const getQuartile = (arr: number[], q: number): number => {

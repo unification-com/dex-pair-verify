@@ -4,6 +4,11 @@
 // bookmarks + the go-ooo docs from 404ing. Order matters — first match wins, so the
 // renamed routes precede the single-segment catch-all.
 module.exports = {
+  // dpv serves no next/image (the brand tile is a plain <img>), so switch the built-in image
+  // optimiser off: with a non-default loader Next 12 answers /_next/image with a 404 before doing
+  // any work, closing that endpoint's known RCE, DoS and cache-poisoning issues until the Next
+  // upgrade (Dependabot, 2026-11).
+  images: { loader: "custom" },
   async redirects() {
     return [
       { source: "/admin/list-pairs", destination: "/pairs", permanent: false },
