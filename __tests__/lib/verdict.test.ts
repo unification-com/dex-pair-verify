@@ -16,6 +16,7 @@ import {
   meetsTurnover,
   meetsTxCount,
   tokenAddressesMatchCanonical,
+  UNSEEN_WOULD_BE,
   VERDICT_REASON,
   VerdictContext,
   VerdictPairInput,
@@ -254,12 +255,28 @@ const makeCtx = (over: Partial<VerdictContext> = {}): VerdictContext => ({
 });
 
 describe("evaluatePair", () => {
-  it("auto-rejects a pair no ingest has returned for longer than maxUnseenDays, recording why", () => {
-    const days = DEFAULT_VERDICT_CONFIG.maxUnseenDays;
-    const r = evaluatePair(makePair(), makeCtx({ lastSeenAt: NOW - (days + 1) * 86_400 }));
+  const STALE = NOW - (DEFAULT_VERDICT_CONFIG.maxUnseenDays + 1) * 86_400;
+
+  it("auto-rejects an otherwise-verified pair no ingest has returned for longer than maxUnseenDays, recording why", () => {
+    const r = evaluatePair(makePair(), makeCtx({ lastSeenAt: STALE }));
     expect(r.verdict).toBe(TokenPairStatus.AutoRejected);
     expect(r.reasonCode).toBe(VERDICT_REASON.unseenTooLong);
     expect(r.evidence.reasonCode).toBe(VERDICT_REASON.unseenTooLong);
+    expect(r.evidence[UNSEEN_WOULD_BE]).toBe(TokenPairStatus.AutoVerified);
+  });
+
+  it("takes a stale would-be-review pair out of the queue too, recording that it was only in review", () => {
+    const r = evaluatePair(makePair(), makeCtx({ lastSeenAt: STALE, tokenScamFlagged: true }));
+    expect(r.verdict).toBe(TokenPairStatus.AutoRejected);
+    expect(r.reasonCode).toBe(VERDICT_REASON.unseenTooLong);
+    expect(r.evidence[UNSEEN_WOULD_BE]).toBe(TokenPairStatus.NeedsReview);
+  });
+
+  it("leaves a stale pair rejected on its own merits with its own reason", () => {
+    const r = evaluatePair(makePair({ reserveUsd: 100 }), makeCtx({ lastSeenAt: STALE }));
+    expect(r.verdict).toBe(TokenPairStatus.AutoRejected);
+    expect(r.reasonCode).toBe(VERDICT_REASON.liquidityBelowHardFloor);
+    expect(r.evidence[UNSEEN_WOULD_BE]).toBeUndefined();
   });
 
   it("judges a pair seen within the window, or never stamped, on its other fences", () => {
@@ -290,6 +307,14 @@ describe("evaluatePair", () => {
 
   it("auto-rejects a Uniswap v4 pool whose hook acts on swaps, even when otherwise clean (no review: go-ooo won't price it)", () => {
     const r = evaluatePair(makePair(), makeCtx({ hookedPool: true }));
+    expect(r.verdict).toBe(TokenPairStatus.AutoRejected);
+    expect(r.reasonCode).toBe(VERDICT_REASON.hookedPool);
+  });
+
+  it("rejects a swap-hooked pool before any review routing, e.g. an unidentified token", () => {
+    const pair = makePair({ token0: makeToken({ coingeckoCoinId: null, identityConfirmed: false, canonicalAddress: null }) });
+    expect(evaluatePair(pair, makeCtx()).reasonCode).toBe(VERDICT_REASON.notIdentified);
+    const r = evaluatePair(pair, makeCtx({ hookedPool: true }));
     expect(r.verdict).toBe(TokenPairStatus.AutoRejected);
     expect(r.reasonCode).toBe(VERDICT_REASON.hookedPool);
   });

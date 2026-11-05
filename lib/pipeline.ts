@@ -23,7 +23,7 @@ import { getSources, gtDexFor, gtNetworkFor, isIngestableSource } from "./source
 import { VERIFIED_STATUSES } from "./status";
 import { nowSeconds } from "./time";
 import { demoteScamFlaggedTokens } from "./tokenStatus";
-import { VERDICT_REASON } from "./verdict";
+import { UNSEEN_WOULD_BE, VERDICT_REASON } from "./verdict";
 import { runVerdictForPair } from "./verdictRunner";
 import { TokenPairStatus } from "../types/types";
 
@@ -139,8 +139,9 @@ export type RefreshSummary = { requested: number; returned: number; tallies: Rec
 // The page ingest only reads each DEX's top pools by 24h transactions, so a verified pair that has a
 // quiet day drops out of its window and would never be refreshed (its stored reserve and prices go
 // stale). This re-fetches by address every EVM pair the page ingest didn't return since `since` that is
-// verified, or was taken out for going unseen within the horizon (so a pool that comes back to life is
-// re-verified). Cosmos sources need none: their ingest fetches the whole pool set every run.
+// verified, or was verified until taken out for going unseen within the horizon (so a pool that comes
+// back to life is re-verified). Pairs that were only in review or rejected when they went unseen are
+// not re-fetched: the page ingest brings those back if they become active again. Cosmos sources need none: their ingest fetches the whole pool set every run.
 export async function refreshUnseenPass(
   opts: { since: number; now?: number; log?: Logger; fetcher?: PoolsByAddressFetcher },
 ): Promise<RefreshSummary> {
@@ -156,7 +157,10 @@ export async function refreshUnseenPass(
         {
           status: TokenPairStatus.AutoRejected,
           lastChecked: { gt: now - UNSEEN_REFRESH_HORIZON_S },
-          verdictEvidence: { path: ["reasonCode"], equals: VERDICT_REASON.unseenTooLong },
+          AND: [
+            { verdictEvidence: { path: ["reasonCode"], equals: VERDICT_REASON.unseenTooLong } },
+            { verdictEvidence: { path: [UNSEEN_WOULD_BE], equals: TokenPairStatus.AutoVerified } },
+          ],
         },
       ],
     },

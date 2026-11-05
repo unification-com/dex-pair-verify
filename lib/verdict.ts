@@ -439,10 +439,35 @@ const computeConfidence = (fences: Fence[]): number => {
   return total === 0 ? 0 : passed / total;
 };
 
+// Evidence key recording what a pair taken out for going unseen would otherwise have been
+// (AutoVerified or NeedsReview). The pipeline's refresh re-fetches only the would-be-verified ones.
+export const UNSEEN_WOULD_BE = "unseenWouldBe";
+
 // Run every fence against a pair and adjudicate a verdict. Pure: all external
 // data arrives via ctx. The verdict-engine's single implementation, reused by
 // ingest / cron / UI-rescan.
+//
+// Unseen too long: no ingest has returned the pair for over maxUnseenDays, so its data is stale and the
+// pool may be gone. A pair that would otherwise be verified or in review is taken out of OoO pricing
+// and the review queue (first-party included: a pool its source no longer returns can't be priced); a
+// pair rejected on its own merits keeps that reason. Fully automatic both ways: the next ingest that
+// sees the pair re-judges it on fresh data.
 export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): VerdictResult {
+  const r = adjudicatePair(pair, ctx);
+  const stillUsable = r.verdict === TokenPairStatus.AutoVerified || r.verdict === TokenPairStatus.NeedsReview;
+  if (!stillUsable || !unseenTooLong(ctx.lastSeenAt, ctx.now, ctx.config.maxUnseenDays)) {
+    return r;
+  }
+  return {
+    ...r,
+    verdict: TokenPairStatus.AutoRejected,
+    reasonCode: VERDICT_REASON.unseenTooLong,
+    reason: `not returned by its source for over ${ctx.config.maxUnseenDays} days: out of OoO pricing until an ingest sees it again`,
+    evidence: { ...r.evidence, reasonCode: VERDICT_REASON.unseenTooLong, [UNSEEN_WOULD_BE]: r.verdict },
+  };
+}
+
+function adjudicatePair(pair: VerdictPairInput, ctx: VerdictContext): VerdictResult {
   const { config, now } = ctx;
 
   // Phantom liquidity: a deep-looking pool (reserve ≥ floor) whose 24h turnover is
@@ -521,18 +546,6 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
     confidence,
   });
 
-  // 0. Unseen too long: no ingest has returned this pair for over maxUnseenDays, so its data is stale
-  //    and the pool may be gone. Out of OoO pricing (first-party included: a pool its source no longer
-  //    returns can't be priced); fully automatic both ways, since the next ingest that sees it
-  //    re-judges it on fresh data.
-  if (unseenTooLong(ctx.lastSeenAt, now, config.maxUnseenDays)) {
-    return result(
-      TokenPairStatus.AutoRejected,
-      VERDICT_REASON.unseenTooLong,
-      `not returned by its source for over ${config.maxUnseenDays} days: out of OoO pricing until an ingest sees it again`,
-    );
-  }
-
   // 1. Intra-(chain, dex) impostor conflict loser → NotCurrentlyUsable. Checked
   //    BEFORE the hard impostor fence: a loser definitionally doesn't match the
   //    canonical addresses, but because a *competing* canonical pair is present
@@ -561,6 +574,18 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
     return result(TokenPairStatus.AutoRejected, VERDICT_REASON.decimalsBogus, "token decimals look bogus");
   }
 
+  // 2b. A Uniswap-v4 pool whose hook can act on swaps: the hook can make the reported price
+  //     non-canonical or manipulable, and anyone can spin one up, so go-ooo won't price it. Checked
+  //     before the review-routing steps below, since no review decision changes that; re-judged
+  //     every run, so a future hooks allow-list brings it back by itself.
+  if (ctx.hookedPool) {
+    return result(
+      TokenPairStatus.AutoRejected,
+      VERDICT_REASON.hookedPool,
+      "a Uniswap v4 pool whose hook can act on swaps: not priceable by go-ooo (hooks not allow-listed)",
+    );
+  }
+
   // 3. A token that is neither CoinGecko-listed NOR independently identity-
   //    confirmed (T1). AV-2: if the pool is ALSO below the soft liquidity floor,
   //    it is neither cross-referenceable nor deep enough to price reliably — it
@@ -585,18 +610,6 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
   //     sibling can't vouch past it; the operator decides.
   if (ctx.tokenScamFlagged) {
     return result(TokenPairStatus.NeedsReview, VERDICT_REASON.scamFlagged, "a token is flagged by the scam-list");
-  }
-
-  // 3b-ii. A Uniswap-v4 pool whose hook can act on swaps: the hook can make the reported price
-  //        non-canonical or manipulable, and anyone can spin one up, so go-ooo won't price it.
-  //        Auto-rejected rather than queued for review, since no review decision changes that; it is
-  //        re-judged every run, so a future hooks allow-list brings it back by itself.
-  if (ctx.hookedPool) {
-    return result(
-      TokenPairStatus.AutoRejected,
-      VERDICT_REASON.hookedPool,
-      "a Uniswap v4 pool whose hook can act on swaps: not priceable by go-ooo (hooks not allow-listed)",
-    );
   }
 
   // 3b-iii. Subgraph corroboration: the GT-sourced pool is ABSENT from the pricing subgraph go-ooo
