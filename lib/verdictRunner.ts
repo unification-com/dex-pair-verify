@@ -15,7 +15,7 @@ import { getCanonicalFactoryAddress } from "./sourceConfig";
 import { isVerifiedStatus, statusData, VERIFIED_STATUSES } from "./status";
 import { nowSeconds } from "./time";
 import { promoteTokensToVerified } from "./tokenStatus";
-import { isHookedPool } from "./univ4";
+import { hookActsOnSwaps } from "./univ4";
 import {
   DEFAULT_VERDICT_CONFIG,
   evaluatePair,
@@ -163,7 +163,7 @@ export async function buildVerdictContext(
     hasVerifiedSibling,
     intraChainImpostorLoser,
     tokenScamFlagged: pair.token0.isScamFlagged || pair.token1.isScamFlagged,
-    hookedPool: isHookedPool(pair.hooks),
+    hookedPool: hookActsOnSwaps(pair.hooks),
     // Persisted at ingest by the subgraph-corroboration read: false = the pool is absent from the
     // pricing subgraph (a GT-only phantom) → route out of the export. null/true → no claim.
     subgraphAbsent: pair.subgraphPresent === false,

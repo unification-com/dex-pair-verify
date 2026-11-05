@@ -11,7 +11,7 @@ import { chainInfo } from "./chains";
 import { sqrtPriceToToken1PerToken0, uniswapPrices } from "./poolPrice";
 import { FAMILY_COLLECTION } from "./schemaFamilies";
 import { getSource, resolveSubgraphUrl } from "./sourceConfig";
-import { isHookedPool, normaliseV4Symbol } from "./univ4";
+import { hookActsOnSwaps, normaliseV4Symbol } from "./univ4";
 
 export type PoolPriceRow = {
   chain: string;
@@ -37,7 +37,7 @@ const getCurrentBlockNumber = async (rpc: string): Promise<number> => {
 // The per-pool fields per schema family (collection: lib/schemaFamilies.ts). univ2/univ3/univ4
 // expose token0Price/token1Price directly; the Messari dex-amm schema exposes per-token
 // lastPriceUSD on inputTokens and univ3sqrt exposes sqrtPrice + token decimals, from which the
-// pair prices are derived (see the result mapping below). univ4 also selects hooks so hooked
+// pair prices are derived (see the result mapping below). univ4 also selects hooks so pools whose hook
 // pools (non-canonical price) can be skipped.
 const UNI_PRICE_FIELDS = `token0 { id symbol } token1 { id symbol } token0Price token1Price`;
 const FAMILY_FIELDS: Record<string, string> = {
@@ -168,8 +168,8 @@ export function toPoolPriceRow(chain: string, dex: string, family: string, d: Su
   }
   const { token0, token1 } = d;
   if (!token0 || !token1) return null;
-  if (family === "univ4" && isHookedPool(d.hooks)) {
-    return null; // hooked pools are not priceable for the oracle (non-canonical price)
+  if (family === "univ4" && hookActsOnSwaps(d.hooks)) {
+    return null; // a hook that acts on swaps makes the price untrustworthy for the oracle
   }
   let pairPrices = { token0Price: d.token0Price ?? "", token1Price: d.token1Price ?? "" };
   if (family === "univ3sqrt") {

@@ -43,9 +43,10 @@ describe("toPoolPriceRow", () => {
     expect(toPoolPriceRow("avax", "pharaoh_v3", "univ3sqrt", { id: "0xs", token0: { ...weth, ...t }, token1: { ...usdc, ...t }, sqrtPrice: "0" })).toBeNull();
   });
 
-  it("skips a hooked univ4 pool and normalises native ETH to WETH on an unhooked one", () => {
+  it("skips a univ4 pool whose hook acts on swaps, prices one whose hook doesn't, and normalises native ETH to WETH", () => {
     const pool = { id: "0x4", token0: { id: ZERO, symbol: "ETH" }, token1: usdc, token0Price: "0.0005", token1Price: "2000" };
-    expect(toPoolPriceRow("eth", "uniswap_v4", "univ4", { ...pool, hooks: "0x1234" })).toBeNull();
+    expect(toPoolPriceRow("eth", "uniswap_v4", "univ4", { ...pool, hooks: "0xd53006d1e3110fd319a79aeec4c527a0d265e080" })).toBeNull();
+    expect(toPoolPriceRow("eth", "uniswap_v4", "univ4", { ...pool, hooks: "0x23ab2e6d4ab0c5f872567098671f1ffb46fd2500" })).not.toBeNull();
     expect(toPoolPriceRow("eth", "uniswap_v4", "univ4", { ...pool, hooks: ZERO })?.token0Symbol).toBe("WETH");
   });
 });

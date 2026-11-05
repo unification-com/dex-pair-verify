@@ -359,8 +359,8 @@ export type VerdictContext = {
   intraChainImpostorLoser: boolean;
   // Either token is flagged by the scam-list (GoPlus, A.7) — route to review.
   tokenScamFlagged: boolean;
-  // A Uniswap-v4 pool with a non-zero hooks contract — its price can be non-canonical /
-  // manipulable, so it never auto-verifies; route to review until hooks are allow-listed.
+  // A Uniswap-v4 pool whose hook can act on swaps (lib/univ4.ts hookActsOnSwaps): its price can be
+  // non-canonical or manipulable, so go-ooo won't price it. A hook without swap permissions is fine.
   hookedPool: boolean;
   // The GT-sourced pool is ABSENT from the pricing subgraph go-ooo queries (corroborated at ingest):
   // a GeckoTerminal-only phantom the oracle can never price. Routed out of the export. False when
@@ -587,11 +587,16 @@ export function evaluatePair(pair: VerdictPairInput, ctx: VerdictContext): Verdi
     return result(TokenPairStatus.NeedsReview, VERDICT_REASON.scamFlagged, "a token is flagged by the scam-list");
   }
 
-  // 3b-ii. A Uniswap-v4 hooked pool (non-zero hooks contract) never auto-verifies — its hooks can
-  //        make the reported price non-canonical or manipulable, and anyone can spin one up. Route
-  //        to review until the hooks address is allow-listed (the oracle hooks-safety policy).
+  // 3b-ii. A Uniswap-v4 pool whose hook can act on swaps: the hook can make the reported price
+  //        non-canonical or manipulable, and anyone can spin one up, so go-ooo won't price it.
+  //        Auto-rejected rather than queued for review, since no review decision changes that; it is
+  //        re-judged every run, so a future hooks allow-list brings it back by itself.
   if (ctx.hookedPool) {
-    return result(TokenPairStatus.NeedsReview, VERDICT_REASON.hookedPool, "a Uniswap v4 hooked pool — price not yet trusted (hooks not allow-listed)");
+    return result(
+      TokenPairStatus.AutoRejected,
+      VERDICT_REASON.hookedPool,
+      "a Uniswap v4 pool whose hook can act on swaps: not priceable by go-ooo (hooks not allow-listed)",
+    );
   }
 
   // 3b-iii. Subgraph corroboration: the GT-sourced pool is ABSENT from the pricing subgraph go-ooo

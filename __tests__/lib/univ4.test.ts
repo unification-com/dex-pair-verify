@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  isHookedPool,
+  hookActsOnSwaps,
   isNativeCurrency,
   normaliseV4Symbol,
   poolAddressFromGt,
@@ -33,13 +33,24 @@ describe("poolAddressFromGt", () => {
   });
 });
 
-describe("isHookedPool", () => {
-  it("zero address (or empty) is no-hook; anything else is hooked", () => {
-    expect(isHookedPool(ZERO_ADDRESS)).toBe(false);
-    expect(isHookedPool("0x0000000000000000000000000000000000000000")).toBe(false);
-    expect(isHookedPool("")).toBe(false);
-    expect(isHookedPool(null)).toBe(false);
-    expect(isHookedPool("0x13ba8523f62decaee6489464935fbd8c3f505080")).toBe(true);
+describe("hookActsOnSwaps", () => {
+  it("no hook (zero address, empty, null) is a plain pool", () => {
+    expect(hookActsOnSwaps(ZERO_ADDRESS)).toBe(false);
+    expect(hookActsOnSwaps("")).toBe(false);
+    expect(hookActsOnSwaps(null)).toBe(false);
+  });
+  it("a hook with no swap permissions in its address bits prices like a plain pool", () => {
+    // Live Base TEL-WETH hook: beforeInitialize + afterAddLiquidity + afterRemoveLiquidity only.
+    expect(hookActsOnSwaps("0x23ab2e6d4ab0c5f872567098671f1ffb46fd2500")).toBe(false);
+  });
+  it("a hook with any swap permission does not", () => {
+    expect(hookActsOnSwaps("0xd53006d1e3110fd319a79aeec4c527a0d265e080")).toBe(true); // beforeSwap
+    expect(hookActsOnSwaps("0x6b70fef40d3925881251c018164dbcec6bc94040")).toBe(true); // afterSwap
+    expect(hookActsOnSwaps("0xbdf938149ac6a781f94faa0ed45e6a0e984c6544")).toBe(true); // afterSwap + afterSwapReturnDelta
+    expect(hookActsOnSwaps("0x0000000000000000000000000000000000000008")).toBe(true); // beforeSwapReturnDelta alone
+  });
+  it("treats an unreadable address as unsafe", () => {
+    expect(hookActsOnSwaps("0xnot-hex")).toBe(true);
   });
 });
 

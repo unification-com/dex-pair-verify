@@ -288,9 +288,9 @@ describe("evaluatePair", () => {
     expect(r.evidence.fenceConfidence).toBe(1); // the fences still pass — the floor is the scam overlay
   });
 
-  it("routes a Uniswap v4 hooked pool to review (never auto-verifies, even when otherwise clean)", () => {
+  it("auto-rejects a Uniswap v4 pool whose hook acts on swaps, even when otherwise clean (no review: go-ooo won't price it)", () => {
     const r = evaluatePair(makePair(), makeCtx({ hookedPool: true }));
-    expect(r.verdict).toBe(TokenPairStatus.NeedsReview);
+    expect(r.verdict).toBe(TokenPairStatus.AutoRejected);
     expect(r.reasonCode).toBe(VERDICT_REASON.hookedPool);
   });
 
