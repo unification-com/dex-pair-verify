@@ -340,7 +340,7 @@ model Threshold {
 // Canonical token contract address per (CoinGecko coin id, chain), resolved
 // from CoinGecko's /coins/<id>/contract/<chain> lookup. Populated lazily by
 // the verdict engine on first sight of a (cgId, chain) tuple and refreshed on
-// a 30d TTL (lastChecked, unix seconds). The verdict engine compares a pair's
+// a 90d TTL (lastChecked, unix seconds). The verdict engine compares a pair's
 // token contract addresses against this to catch impostor tokens that spoof a
 // known symbol. See A.2.
 model CanonicalAddress {
