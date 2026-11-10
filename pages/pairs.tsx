@@ -379,11 +379,7 @@ const OperatorPairs: React.FC<OperatorProps> = (props) => {
             {/* Status tabs */}
             <div className="tabs">
                 {PAIR_TABS.map((t) => (
-                    <Link key={t.status} href={hrefWith({ status: t.status })}>
-                        <a className={`tab${props.status === t.status ? " active" : ""}`}>
-                            {t.label}<span className="tab-count">{props.statusCounts[t.status] ?? 0}</span>
-                        </a>
-                    </Link>
+                    <Link key={t.status} href={hrefWith({ status: t.status })} className={`tab${props.status === t.status ? " active" : ""}`}>{t.label}<span className="tab-count">{props.statusCounts[t.status] ?? 0}</span></Link>
                 ))}
             </div>
 
@@ -397,9 +393,9 @@ const OperatorPairs: React.FC<OperatorProps> = (props) => {
             {props.status === TokenPairStatus.NeedsReview && (
                 <div className="triage">
                     <span className="eyebrow">Triage</span>
-                    <Link href={hrefWith({ tier: "" })}><a className={`chip${props.tier === "" ? " on" : ""}`}>All {(props.tierCounts.spam ?? 0) + (props.tierCounts.review ?? 0)}</a></Link>
-                    <Link href={hrefWith({ tier: "spam" })}><a className={`chip chip-fail${props.tier === "spam" ? " on" : ""}`}>Likely spam {props.tierCounts.spam ?? 0}</a></Link>
-                    <Link href={hrefWith({ tier: "review" })}><a className={`chip chip-warn${props.tier === "review" ? " on" : ""}`}>Worth a look {props.tierCounts.review ?? 0}</a></Link>
+                    <Link href={hrefWith({ tier: "" })} className={`chip${props.tier === "" ? " on" : ""}`}>All {(props.tierCounts.spam ?? 0) + (props.tierCounts.review ?? 0)}</Link>
+                    <Link href={hrefWith({ tier: "spam" })} className={`chip chip-fail${props.tier === "spam" ? " on" : ""}`}>Likely spam {props.tierCounts.spam ?? 0}</Link>
+                    <Link href={hrefWith({ tier: "review" })} className={`chip chip-warn${props.tier === "review" ? " on" : ""}`}>Worth a look {props.tierCounts.review ?? 0}</Link>
                     <span className="muted" style={{ fontSize: "var(--fs-xs)" }}>— filter to spam, select all, Reject to clear junk in bulk.</span>
                 </div>
             )}

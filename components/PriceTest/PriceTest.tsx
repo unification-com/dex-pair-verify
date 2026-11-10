@@ -41,7 +41,7 @@ const PriceTest: React.FC<{
             <PageHeader
                 title={<>OoO price-test <span className="mono">{base}→{target}</span></>}
                 sub={<>Simulates the oracle price across every verified pool for this pair.</>}
-                actions={<Link href={`/price-test/${target}/${base}`}><a className="btn btn-ghost btn-sm">Reverse → {target}→{base}</a></Link>}
+                actions={<Link href={`/price-test/${target}/${base}`} className="btn btn-ghost btn-sm">Reverse → {target}→{base}</Link>}
             />
 
             {usable.length > 0 && (

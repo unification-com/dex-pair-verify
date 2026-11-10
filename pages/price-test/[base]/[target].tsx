@@ -56,8 +56,8 @@ const PairNotSupported: React.FC<{ base: string; target: string }> = ({ base, ta
         pools passes verification.
       </p>
       <div style={{ display: "flex", gap: "var(--sp-3)", marginTop: "var(--sp-4)", flexWrap: "wrap" }}>
-        <Link href="/price-test"><a className="btn btn-ghost btn-sm">← Try another pair</a></Link>
-        <Link href="/pairs"><a className="btn btn-ghost btn-sm">Browse verified pairs</a></Link>
+        <Link href="/price-test" className="btn btn-ghost btn-sm">← Try another pair</Link>
+        <Link href="/pairs" className="btn btn-ghost btn-sm">Browse verified pairs</Link>
       </div>
     </div>
   </>

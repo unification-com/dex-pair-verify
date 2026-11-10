@@ -9,11 +9,6 @@
 //     a separate workstream)
 //   - import-order for predictable import grouping
 //
-// Pragmatic exceptions:
-//   - jsx-a11y/anchor-is-valid is DOWNGRADED for `pages/` because Next 12's
-//     `<Link><a>X</a></Link>` pattern is the official idiom on this version.
-//     A future Next 13+ upgrade will let us re-enable the rule strictly.
-//
 // Run: `yarn lint` (errors fail CI) / `yarn lint:fix` (auto-fix safe issues).
 
 module.exports = {
@@ -44,10 +39,6 @@ module.exports = {
     },
   },
   rules: {
-    // --- Pragma for Next 12 era patterns ---
-    // Next 12 idiom is <Link><a>X</a></Link>; the <a> has no href until the
-    // Next 13 API change. Disable the rule that flags this for /pages.
-    "jsx-a11y/anchor-is-valid": "off",
     // styled-jsx's <style jsx> / <style jsx global> are first-class on this
     // codebase. Tell react/no-unknown-property to allow them.
     "react/no-unknown-property": ["error", { ignore: ["jsx", "global"] }],
