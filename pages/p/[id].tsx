@@ -236,7 +236,7 @@ const toMini = (p: { id: string; chain: string; dex: string; pair: string; reser
 // with the operator view) + the same pair traded on other DEXs. No verdict /
 // confidence / fences / trust internals, no actions.
 const PublicPair: React.FC<PublicProps> = ({ pair, similar }) => (
-  <Layout crumb={<Link href="/pairs"><a>‹ Verified pairs</a></Link>}>
+  <Layout crumb={<Link href="/pairs">‹ Verified pairs</Link>}>
     <PageHeader
       title={pair.pair}
       badge={<StatusBadge status={pair.status} method={pair.verificationMethod} />}
@@ -260,7 +260,7 @@ const PublicPair: React.FC<PublicProps> = ({ pair, similar }) => (
             <KV k="Address" v={<ExplorerUrl chain={pair.chain} contractAddress={t.contractAddress} linkType={"token"} symbol={t.symbol} />} />
             <KV k="CoinGecko" v={<CoinGeckoCoinLink coingeckoId={t.coingeckoCoinId} />} />
             <KV k="Tx count" v={num(t.txCount)} />
-            <Link href={`/t/${t.id}`}><a className="btn btn-ghost btn-sm" style={{ marginTop: "var(--sp-4)" }}>View token →</a></Link>
+            <Link href={`/t/${t.id}`} className="btn btn-ghost btn-sm" style={{ marginTop: "var(--sp-4)" }}>View token →</Link>
           </div>
         ))}
       </div>
@@ -394,7 +394,7 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
   const verifyOptDisabled = !bothTokensVerified;
 
   return (
-    <Layout crumb={<Link href={q ? `/pairs?${q.filterQs}` : "/pairs"}><a>‹ Review queue</a></Link>}>
+    <Layout crumb={<Link href={q ? `/pairs?${q.filterQs}` : "/pairs"}>‹ Review queue</Link>}>
       <PageHeader
         title={props.pair.pair}
         badge={<StatusBadge status={currentStatus} method={props.pair.verificationMethod} />}
@@ -405,7 +405,7 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
           <ExplorerUrl chain={props.pair.chain} contractAddress={props.pair.contractAddress} linkType={"address"} />
         </span>}
         actions={isVerifiedStatus(props.pair.status)
-          ? <Link href={`/price-test/pair/${props.pair.id}`}><a className="btn btn-ghost btn-sm" target="_blank"><Icon name="price" size={14} />Price test</a></Link>
+          ? <Link href={`/price-test/pair/${props.pair.id}`} className="btn btn-ghost btn-sm" target="_blank"><Icon name="price" size={14} />Price test</Link>
           : null}
       />
 
@@ -426,7 +426,7 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
                 <KV k="Address" v={<ExplorerUrl chain={props.pair.chain} contractAddress={t.contractAddress} linkType={"token"} symbol={t.symbol} />} />
                 <KV k="CoinGecko" v={<CoinGeckoCoinLink coingeckoId={t.coingeckoCoinId} />} />
                 <KV k="Tx count" v={num(t.txCount)} />
-                <Link href={`/t/${t.id}`}><a className="btn btn-ghost btn-sm" style={{ marginTop: "var(--sp-4)" }}>View token →</a></Link>
+                <Link href={`/t/${t.id}`} className="btn btn-ghost btn-sm" style={{ marginTop: "var(--sp-4)" }}>View token →</Link>
               </div>
             ))}
           </div>
@@ -468,7 +468,7 @@ const OperatorPair: React.FC<OperatorProps> = (props) => {
               <p className="cb-note muted">
                 Each fence carries a weight; confidence is the share of <em>scored</em> weight that passed.
                 {skippedN > 0 ? ` ${skippedN} skipped (unknown input).` : ""} A scam-list flag floors it to 0%. An operator “Verify” sets it to 100%.{" "}
-                <Link href="/help"><a>Scoring guide →</a></Link>
+                <Link href="/help">Scoring guide →</Link>
               </p>
               <div className="cb-list">
                 {scored.map((f) => (

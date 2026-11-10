@@ -1,4 +1,3 @@
-import Link from "next/link";
 import React from "react";
 
 import { explorerUrl } from "../lib/externalLinks";
@@ -16,9 +15,9 @@ const ExplorerUrl: React.FC<{ chain: string, contractAddress: string, linkType: 
     }
 
     return (
-        <Link href={url}>
-            <a target="_blank">{contractAddress}</a>
-        </Link>
+        <a href={url} target="_blank" rel="noopener noreferrer">
+            {contractAddress}
+        </a>
     )
 
 }

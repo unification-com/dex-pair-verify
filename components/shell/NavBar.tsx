@@ -35,11 +35,11 @@ const NavBar: React.FC<{ needsReviewCount?: number; onNavigate?: () => void }> =
   const Item = ({ href, icon, label, pill, active: a, star }: {
     href: string; icon?: string; label: string; pill?: number | null; active?: boolean; star?: boolean;
   }) => (
-    <Link href={href}><a className={`sb-link${a ? " active" : ""}`} onClick={onNavigate}>
+    <Link href={href} className={`sb-link${a ? " active" : ""}`} onClick={onNavigate}>
       {icon ? <Icon name={icon} /> : null}
       <span className="lbl">{label}{star ? <span style={{ color: "var(--accent)", marginLeft: 4 }}>★</span> : null}</span>
       {pill != null ? <span className="pill">{pill}</span> : null}
-    </a></Link>
+    </Link>
   );
 
   return (
@@ -66,9 +66,9 @@ const NavBar: React.FC<{ needsReviewCount?: number; onNavigate?: () => void }> =
         {isOperator && <>
           <div className="sb-group-label">Pipeline</div>
           {PASSES.map((p) => (
-            <Link key={p.id} href={p.href}><a className={`sb-link${active(p.href) ? " active" : ""}`} onClick={onNavigate}>
+            <Link key={p.id} href={p.href} className={`sb-link${active(p.href) ? " active" : ""}`} onClick={onNavigate}>
               <span className="sb-step-no">{p.step}</span><span className="lbl">{p.name}</span>
-            </a></Link>
+            </Link>
           ))}
 
           <div className="sb-group-label">OoO</div>

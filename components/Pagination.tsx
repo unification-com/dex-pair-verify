@@ -17,9 +17,7 @@ const Pagination: React.FC<{
   return (
     <div className="pagination">
       {page > 1 ? (
-        <Link href={makeHref(page - 1)}>
-          <a>&larr; Prev</a>
-        </Link>
+        <Link href={makeHref(page - 1)}>&larr; Prev</Link>
       ) : (
         <span className="disabled">&larr; Prev</span>
       )}
@@ -27,9 +25,7 @@ const Pagination: React.FC<{
         &nbsp;Page {page} of {totalPages}&nbsp;
       </span>
       {page < totalPages ? (
-        <Link href={makeHref(page + 1)}>
-          <a>Next &rarr;</a>
-        </Link>
+        <Link href={makeHref(page + 1)}>Next &rarr;</Link>
       ) : (
         <span className="disabled">Next &rarr;</span>
       )}

@@ -112,7 +112,7 @@ const AdminHome: React.FC<OperatorProps> = (props) => {
         <div className="card card-pad">
           <div className="row spread items-center" style={{ marginBottom: "var(--sp-4)" }}>
             <span className="eyebrow">Top of the review queue</span>
-            <Link href="/pairs?status=NeedsReview"><a className="btn btn-ghost btn-sm">Open queue <Icon name="arrowR" size={14} /></a></Link>
+            <Link href="/pairs?status=NeedsReview" className="btn btn-ghost btn-sm">Open queue <Icon name="arrowR" size={14} /></Link>
           </div>
           {props.topReview.length === 0
             ? <p className="muted">Nothing awaiting review 🎉</p>
@@ -136,9 +136,9 @@ const AdminHome: React.FC<OperatorProps> = (props) => {
                 <span className="sr-name"><ChainName chain={s.chain} /> · <DexName dex={s.dex} /></span>
                 <span className="muted mono">{s.count}</span>
                 <span className="grow" />
-                <Link href={`/pairs?chain=${encodeURIComponent(s.chain)}&dex=${encodeURIComponent(s.dex)}&status=NeedsReview`}><a className="link-sm">Pairs</a></Link>
-                <Link href={`/tokens?chain=${encodeURIComponent(s.chain)}`}><a className="link-sm">Tokens</a></Link>
-                <Link href={`/api/ooo/v1/export?chain=${encodeURIComponent(s.chain)}&dex=${encodeURIComponent(s.dex)}&download=1`}><a className="link-sm">Export</a></Link>
+                <Link href={`/pairs?chain=${encodeURIComponent(s.chain)}&dex=${encodeURIComponent(s.dex)}&status=NeedsReview`} className="link-sm">Pairs</Link>
+                <Link href={`/tokens?chain=${encodeURIComponent(s.chain)}`} className="link-sm">Tokens</Link>
+                <Link href={`/api/ooo/v1/export?chain=${encodeURIComponent(s.chain)}&dex=${encodeURIComponent(s.dex)}&download=1`} className="link-sm">Export</Link>
               </div>
             ))}
           </div>
@@ -149,11 +149,9 @@ const AdminHome: React.FC<OperatorProps> = (props) => {
       <div className="flow">
         {PIPELINE.map((s, i) => (
           <React.Fragment key={s.href}>
-            <Link href={s.href}>
-              <a className="card card-pad step">
-                <div className="step-head"><span className="step-no">{s.step}</span><span className="step-label">{s.label}</span></div>
-                <p className="step-what muted">{s.what}</p>
-              </a>
+            <Link href={s.href} className="card card-pad step">
+              <div className="step-head"><span className="step-no">{s.step}</span><span className="step-label">{s.label}</span></div>
+              <p className="step-what muted">{s.what}</p>
             </Link>
             {i < PIPELINE.length - 1 ? <span className="flow-arrow"><Icon name="arrowR" size={16} /></span> : null}
           </React.Fragment>
@@ -163,11 +161,9 @@ const AdminHome: React.FC<OperatorProps> = (props) => {
       <span className="eyebrow" style={{ marginTop: "var(--sp-6)", display: "block" }}>Tuning &amp; maintenance</span>
       <div className="maint">
         {MAINTENANCE.map((s) => (
-          <Link key={s.href} href={s.href}>
-            <a className="card card-pad step">
-              <div className="step-head"><span className="step-label">{s.label}</span></div>
-              <p className="step-what muted">{s.what}</p>
-            </a>
+          <Link key={s.href} href={s.href} className="card card-pad step">
+            <div className="step-head"><span className="step-label">{s.label}</span></div>
+            <p className="step-what muted">{s.what}</p>
           </Link>
         ))}
       </div>

@@ -43,7 +43,7 @@ const PassRunnerLayout: React.FC<{
   stale?: boolean;
 }> = ({ step, title, description, pace, running, done, onRun, progressPct, stats = [], lastRun, lastResult, stale }) => (
   <div className="content">
-    <Link href="/"><a className="btn btn-ghost btn-sm" style={{ marginBottom: "var(--sp-5)" }}><Icon name="chevL" size={14} />Back to pipeline</a></Link>
+    <Link href="/" className="btn btn-ghost btn-sm" style={{ marginBottom: "var(--sp-5)" }}><Icon name="chevL" size={14} />Back to pipeline</Link>
     <div className="row gap-5 items-baseline" style={{ marginBottom: "var(--sp-2)" }}>
       <span className="pass-step">{step}</span><h1>{title}</h1>
     </div>
@@ -91,10 +91,10 @@ const PassRunnerLayout: React.FC<{
         <div className="card card-pad col gap-4">
           <span className="panel-title">Run order</span>
           {PASSES.map((p) => (
-            <Link key={p.step} href={p.href}><a className={`fresh-row${p.step === step ? " is-current" : ""}`}>
+            <Link key={p.step} href={p.href} className={`fresh-row${p.step === step ? " is-current" : ""}`}>
               <span className="pass-step" style={{ width: 20, height: 20, fontSize: 10 }}>{p.step}</span>
               <span style={{ fontWeight: p.step === step ? 600 : 500, color: p.step === step ? "var(--accent-text)" : "var(--text-1)" }}>{p.name}</span>
-            </a></Link>
+            </Link>
           ))}
         </div>
       </div>

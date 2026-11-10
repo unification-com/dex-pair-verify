@@ -1,4 +1,3 @@
-import Link from "next/link";
 import React from "react";
 
 const PoolUrl: React.FC<{ chain: string, dex: string, contractAddress: string }> = ({ chain, dex, contractAddress }) => {
@@ -24,9 +23,9 @@ const PoolUrl: React.FC<{ chain: string, dex: string, contractAddress: string }>
     }
 
     return (
-        <Link href={`${pool}${contractAddress}`}>
-            <a target="_blank">{contractAddress}</a>
-        </Link>
+        <a href={`${pool}${contractAddress}`} target="_blank" rel="noopener noreferrer">
+            {contractAddress}
+        </a>
     )
 
 }

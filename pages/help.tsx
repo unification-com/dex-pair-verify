@@ -82,7 +82,7 @@ const Help: React.FC<Props> = ({ config }) => {
               (<span className="mono">{Math.round(config.autoVerifyConfidence * 100)}%</span> by default).</li>
             <li>An operator <strong>Verify</strong> sets confidence to <span className="mono">100%</span> regardless.</li>
             <li>Canonical-confirmed deep pairs can auto-verify just below the bar (AV-1), carrying their real (sub-100%) score.</li>
-            <li>Thresholds are per-(chain, dex) and tunable on <Link href="/thresholds"><a>Thresholds</a></Link> — then <Link href="/revalidate"><a>Re-validate</a></Link>.</li>
+            <li>Thresholds are per-(chain, dex) and tunable on <Link href="/thresholds">Thresholds</Link> — then <Link href="/revalidate">Re-validate</Link>.</li>
           </ul>
         </section>
 
