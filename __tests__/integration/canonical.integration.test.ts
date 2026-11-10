@@ -1,16 +1,17 @@
 // Integration tests for fetchCanonicalContract — the CoinGecko canonical
-// contract lookup + 30-day CanonicalAddress cache (A.2). The CoinGecko HTTP
+// contract lookup + CanonicalAddress cache (A.2). The CoinGecko HTTP
 // call is stubbed via the injectable `fetcher` so these exercise the cache
 // logic against the real test DB without a live network call.
 
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { resetDb, testPrisma } from "./helpers";
-import { fetchCanonicalContract } from "../../lib/canonical";
+import { CANONICAL_CACHE_TTL_S, fetchCanonicalContract } from "../../lib/canonical";
 
 const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"; // checksummed
 const USDC_LOWER = USDC.toLowerCase();
 const NOW = 1_700_000_000;
+const DAY = 86_400;
 
 beforeEach(async () => {
   await resetDb();
@@ -39,9 +40,9 @@ describe("fetchCanonicalContract", () => {
     const fetcher = vi.fn(async () => ({ ethereum: USDC_LOWER }));
     await fetchCanonicalContract("usd-coin", "eth", { now: NOW, fetcher });
 
-    // 29 days later — still inside the 30d TTL.
+    // A day before the TTL runs out.
     const addr = await fetchCanonicalContract("usd-coin", "eth", {
-      now: NOW + 29 * 24 * 60 * 60,
+      now: NOW + CANONICAL_CACHE_TTL_S - DAY,
       fetcher,
     });
 
@@ -49,12 +50,12 @@ describe("fetchCanonicalContract", () => {
     expect(fetcher).toHaveBeenCalledTimes(1); // not re-fetched
   });
 
-  it("re-fetches once the 30-day TTL has expired", async () => {
+  it("re-fetches once the TTL has expired", async () => {
     const fetcher = vi.fn(async () => ({ ethereum: USDC_LOWER }));
     await fetchCanonicalContract("usd-coin", "eth", { now: NOW, fetcher });
 
     const addr = await fetchCanonicalContract("usd-coin", "eth", {
-      now: NOW + 31 * 24 * 60 * 60,
+      now: NOW + CANONICAL_CACHE_TTL_S + DAY,
       fetcher,
     });
 

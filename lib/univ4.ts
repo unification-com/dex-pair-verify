@@ -3,9 +3,9 @@
 // price-test simulator (priceFetch) and pool ingest. v4 differs from v3 in two ways dpv must
 // handle the same way everywhere (and the same way the go-ooo univ4 family does):
 //
-//   - Hooks. A v4 pool can attach arbitrary hook logic (custom curves, dynamic fees) that can
-//     make its reported price non-canonical or manipulable. For an oracle only no-hook pools
-//     (hooks == the zero address) are priceable; a hooked pool is skipped.
+//   - Hooks. A v4 pool can attach hook logic that acts on swaps (custom curves, dynamic fees,
+//     taxes) and can make its reported price non-canonical or manipulable. For an oracle a pool is
+//     priceable when it has no hook, or a hook without swap permissions (hookActsOnSwaps).
 //   - Native currency. v4 pools can hold native ETH as currency address 0x0; the subgraph
 //     reports it with id 0x0000...0000 and symbol "ETH". dpv tracks the native side as the
 //     chain's wrapped token (WETH) so identity, canonical lookup and pricing line up - and so a
@@ -57,9 +57,22 @@ const WRAPPED_NATIVE: Record<string, string> = {
 export const wrappedNativeSymbol = (chain: string): string | null =>
   WRAPPED_NATIVE[chain.toLowerCase()] ?? null;
 
-// True when a v4 pool carries a non-zero hooks contract (and so must not be priced).
-export const isHookedPool = (hooks: string | null | undefined): boolean =>
-  !!hooks && hooks.toLowerCase() !== ZERO_ADDRESS;
+// A v4 hook's permissions are the lowest 14 bits of its address (Uniswap v4 Hooks.sol). These are
+// the swap ones: beforeSwap (1 << 7), afterSwap (1 << 6), beforeSwapReturnDelta (1 << 3) and
+// afterSwapReturnDelta (1 << 2). A hook with none of them can only act when the pool is created, on
+// liquidity changes or on donations, none of which changes what a swap does or the pool's price.
+const SWAP_PERMISSION_BITS = (1 << 7) | (1 << 6) | (1 << 3) | (1 << 2);
+
+// True when a v4 pool's hook can act on swaps, so its price can't be trusted and it is not priced
+// (mirrors go-ooo's univ4 family). No hook, or a hook without swap permissions, prices like a plain
+// pool; an address that can't be read is treated as unsafe.
+export const hookActsOnSwaps = (hooks: string | null | undefined): boolean => {
+  if (!hooks || hooks.toLowerCase() === ZERO_ADDRESS) {
+    return false;
+  }
+  const lowBits = parseInt(hooks.slice(-4), 16);
+  return Number.isNaN(lowBits) || (lowBits & SWAP_PERMISSION_BITS) !== 0;
+};
 
 // True when a token id is the native currency (address 0x0).
 export const isNativeCurrency = (tokenId: string | null | undefined): boolean =>

@@ -1,4 +1,4 @@
-import formidable from "formidable";
+import { formidable } from "formidable";
 
 import {requireAdminApi} from "../../../lib/apiAuth";
 import prisma from '../../../lib/prisma';

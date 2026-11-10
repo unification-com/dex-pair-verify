@@ -1,4 +1,3 @@
-import Link from "next/link";
 import React from "react";
 
 const CoinGeckoCoinLink: React.FC<{ coingeckoId: string }> = ({ coingeckoId }) => {
@@ -6,9 +5,9 @@ const CoinGeckoCoinLink: React.FC<{ coingeckoId: string }> = ({ coingeckoId }) =
     if(coingeckoId !== "") {
         return (
             <>
-                <Link href={`https://www.coingecko.com/en/coins/${encodeURIComponent(coingeckoId)}`}>
-                    <a target="_blank">{coingeckoId}</a>
-                </Link>
+                <a href={`https://www.coingecko.com/en/coins/${encodeURIComponent(coingeckoId)}`} target="_blank" rel="noopener noreferrer">
+                    {coingeckoId}
+                </a>
             </>
         )
     }

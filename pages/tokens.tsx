@@ -276,11 +276,7 @@ const OperatorTokens: React.FC<OperatorProps> = (props) => {
 
             <div className="tabs">
                 {TOKEN_TABS.map((t) => (
-                    <Link key={t.status} href={hrefWith({ status: t.status })}>
-                        <a className={`tab${props.status === t.status ? " active" : ""}`}>
-                            {t.label}<span className="tab-count">{props.statusCounts[t.status] ?? 0}</span>
-                        </a>
-                    </Link>
+                    <Link key={t.status} href={hrefWith({ status: t.status })} className={`tab${props.status === t.status ? " active" : ""}`}>{t.label}<span className="tab-count">{props.statusCounts[t.status] ?? 0}</span></Link>
                 ))}
             </div>
 

@@ -50,8 +50,8 @@ export function canonicalKey(pair: PairCgIds): string | null {
 // real one. CoinGecko's /coins/{id} endpoint returns a `platforms` map
 // (CG-asset-platform-id -> contract address); the token whose address matches
 // CG's entry for that chain is canonical. Results are cached in the
-// CanonicalAddress table (A.1) with a 30-day TTL so the rare conflict path
-// doesn't hammer CoinGecko's free-tier rate limit.
+// CanonicalAddress table (A.1) for CANONICAL_CACHE_TTL_S so the rare conflict
+// path doesn't hammer CoinGecko's free-tier rate limit.
 
 // CoinGecko asset-platform id per GeckoTerminal-style chain key (the `chain`
 // field stored on Pair/Token). null = the chain isn't indexed by CoinGecko
@@ -77,7 +77,11 @@ export const CG_SUPPORTED_CHAINS: string[] = Object.keys(CG_PLATFORM_BY_CHAIN).f
   (chain) => CG_PLATFORM_BY_CHAIN[chain] !== null,
 );
 
-const THIRTY_DAYS_SECONDS = 30 * 24 * 60 * 60;
+// How long a cached canonical answer is trusted before CoinGecko is asked again.
+// 90 days: a coin's contract on a chain almost never moves, and each refresh is
+// one keyed call per (coin, chain), so a shorter TTL mostly spends the monthly
+// CoinGecko quota on unchanged answers.
+export const CANONICAL_CACHE_TTL_S = 90 * 86_400;
 
 // The platforms map from CoinGecko, keyed by CG asset-platform id. Injectable
 // so the cache logic can be tested without a live CoinGecko call.
@@ -103,7 +107,7 @@ const defaultPlatformsFetcher: PlatformsFetcher = async (cgId) => {
 // ("") entry. No network — the canonical-check pass keeps the cache warm so the
 // impostor fence can run on EVERY pair, not just intra-chain conflicts. Stale
 // entries are still returned (a slightly-stale canonical beats none; the batch
-// pass refreshes on its 30-day TTL).
+// pass refreshes it once the cache TTL expires).
 export async function getCachedCanonicalAddress(cgId: string, chain: string): Promise<string | null> {
   if (!cgId || !cgPlatformForChain(chain)) {
     return null;
@@ -116,7 +120,7 @@ export async function getCachedCanonicalAddress(cgId: string, chain: string): Pr
 
 // Resolve the canonical (CoinGecko-blessed) contract address for a coin on a
 // chain, or null when the chain isn't on CoinGecko / the coin has no contract
-// there. Reads/refreshes the 30-day CanonicalAddress cache. A confirmed
+// there. Reads/refreshes the CanonicalAddress cache. A confirmed
 // "no address" answer is cached as "" so repeated misses don't re-hit CG.
 export async function fetchCanonicalContract(
   cgId: string,
@@ -134,14 +138,14 @@ export async function fetchCanonicalContract(
   const cached = await prisma.canonicalAddress.findUnique({
     where: { coingeckoCoinId_chain: { coingeckoCoinId: cgId, chain } },
   });
-  if (cached && now - cached.lastChecked < THIRTY_DAYS_SECONDS) {
+  if (cached && now - cached.lastChecked < CANONICAL_CACHE_TTL_S) {
     return cached.contractAddress || null;
   }
 
   const platforms = await fetcher(cgId);
   // A null platforms map means the fetch failed transiently (non-200 — rate
   // limit / network / 404). Do NOT cache that: caching "" here would poison the
-  // 30-day cache on a CoinGecko 429 and make every batch revalidation skip the
+  // cache on a CoinGecko 429 and make every batch revalidation skip the
   // impostor fence. Return null so the next run retries.
   if (platforms === null) {
     return null;

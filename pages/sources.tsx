@@ -209,7 +209,7 @@ const PublicSources: React.FC<PublicProps> = (props) => (
               <span className="mono truncate" title={s.factoryAddress}>{s.factoryAddress}</span>
               <span><SourceHealthBadge healthCheckedAt={s.healthCheckedAt} healthFailures={s.healthFailures} /></span>
               <span>
-                <Link href={`/pairs?chain=${encodeURIComponent(s.chain)}&dex=${encodeURIComponent(s.dex)}`}><a className="mono">{s.pairCount}</a></Link>
+                <Link href={`/pairs?chain=${encodeURIComponent(s.chain)}&dex=${encodeURIComponent(s.dex)}`} className="mono">{s.pairCount}</Link>
               </span>
             </div>
           ))}

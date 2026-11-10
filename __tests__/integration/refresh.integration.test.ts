@@ -8,7 +8,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { resetDb, seedPair, seedSource, seedToken, testPrisma } from "./helpers";
 import { ingestPoolPage, ingestPoolsByAddress } from "../../lib/ingest";
 import { refreshUnseenPass } from "../../lib/pipeline";
-import { VERDICT_REASON } from "../../lib/verdict";
+import { UNSEEN_WOULD_BE, VERDICT_REASON } from "../../lib/verdict";
 import { runVerdictForPair } from "../../lib/verdictRunner";
 import { TokenPairStatus } from "../../types/types";
 
@@ -105,16 +105,17 @@ describe("unseen pairs", () => {
     expect(await pairRow()).toMatchObject({ lastChecked: NOW + DAY, status: TokenPairStatus.AutoVerified });
   });
 
-  it("asks only for unseen verified pairs and recently unseen-rejected ones on EVM sources", async () => {
+  it("asks only for unseen verified pairs and recently unseen-rejected once-verified ones on EVM sources", async () => {
     const t0 = await seedToken();
     const t1 = await seedToken();
-    const reasoned = (reasonCode: string) => ({ verdictEvidence: { reasonCode } });
+    const reasoned = (reasonCode: string, wouldBe?: string) => ({ verdictEvidence: { reasonCode, ...(wouldBe ? { [UNSEEN_WOULD_BE]: wouldBe } : {}) } });
     const seed = (contractAddress: string, over: Parameters<typeof seedPair>[2]) =>
       seedPair(t0.id, t1.id, { contractAddress, ...over });
     await seed("0xSEEN", { status: TokenPairStatus.AutoVerified, lastChecked: NOW + 10 }); // seen this run
     await seed("0xTHIN", { status: TokenPairStatus.AutoRejected, lastChecked: NOW - 20 * DAY, ...reasoned(VERDICT_REASON.liquidityBelowHardFloor) });
-    await seed("0xRECENT", { status: TokenPairStatus.AutoRejected, lastChecked: NOW - 100 * DAY, ...reasoned(VERDICT_REASON.unseenTooLong) });
-    await seed("0xLONGGONE", { status: TokenPairStatus.AutoRejected, lastChecked: NOW - 130 * DAY, ...reasoned(VERDICT_REASON.unseenTooLong) });
+    await seed("0xRECENT", { status: TokenPairStatus.AutoRejected, lastChecked: NOW - 100 * DAY, ...reasoned(VERDICT_REASON.unseenTooLong, TokenPairStatus.AutoVerified) });
+    await seed("0xWASREVIEW", { status: TokenPairStatus.AutoRejected, lastChecked: NOW - 20 * DAY, ...reasoned(VERDICT_REASON.unseenTooLong, TokenPairStatus.NeedsReview) });
+    await seed("0xLONGGONE", { status: TokenPairStatus.AutoRejected, lastChecked: NOW - 130 * DAY, ...reasoned(VERDICT_REASON.unseenTooLong, TokenPairStatus.AutoVerified) });
     await seedSource({ chain: "osmosis", dex: "osmosis_sqs", sourceType: "rest-sqs", subgraphUrlTemplate: "https://sqs.test" });
     await seedPair(t0.id, t1.id, { chain: "osmosis", dex: "osmosis_sqs", contractAddress: "1", status: TokenPairStatus.AutoVerified, lastChecked: NOW - 20 * DAY });
 

@@ -147,7 +147,7 @@ const PublicToken: React.FC<PublicProps> = ({ token: t, pools, web, organicity }
     const vol24h = pools.reduce((s, p) => s + (p.volumeUsd24h || 0), 0)
 
     return (
-        <Layout crumb={<Link href="/tokens"><a>‹ Verified tokens</a></Link>}>
+        <Layout crumb={<Link href="/tokens">‹ Verified tokens</Link>}>
             <PageHeader
                 title={t.symbol}
                 badge={<StatusBadge status={t.status} method={t.verificationMethod} />}
@@ -313,7 +313,7 @@ const OperatorToken: React.FC<OperatorProps> = (props) => {
                     <div className="card card-pad">
                         <div className="row spread items-center" style={{ marginBottom: "var(--sp-3)" }}>
                             <span className="eyebrow">Identity &amp; trust</span>
-                            <Link href="/help"><a className="muted" style={{ fontSize: "var(--fs-xs)" }}>What do these mean? →</a></Link>
+                            <Link href="/help" className="muted" style={{ fontSize: "var(--fs-xs)" }}>What do these mean? →</Link>
                         </div>
                         <div className="trust-list">
                             <TrustRow label="CoinGecko" tone={cgId ? "pass" : "skip"} value={cgId ? "listed" : "not listed"} detail={cgId || undefined} />
